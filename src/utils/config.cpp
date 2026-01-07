@@ -76,7 +76,9 @@ static const QHash<Config::ConfigKey, ConfigDirective> configStrings = {
         {Config::showTrayIcon, {QS("showTrayIcon"), true}},
         {Config::minimizeToTray, {QS("minimizeToTray"), false}},
         {Config::disableWebsocket, {QS("disableWebsocket"), false}},
+        {Config::disableAutoRefresh, {QS("disableAutoRefresh"), false}},
         {Config::offlineMode, {QS("offlineMode"), false}},
+        {Config::syncPaused, {QS("syncPaused"), false}},
 
         // Transactions
         {Config::multiBroadcast, {QS("multiBroadcast"), true}},
@@ -242,7 +244,9 @@ QDir Config::defaultConfigDir() {
 #elif defined(Q_OS_MACOS)
     return QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation));
 #else
-    return QDir(QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + "/feather");
+    QDir path(QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + "/feather");
+    qDebug() << "Config path resolved to: " << path.absolutePath();
+    return path;
 #endif
 }
 

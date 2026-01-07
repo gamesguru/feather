@@ -185,7 +185,7 @@ target_include_directories(feather PUBLIC
         ${BCUR_INCLUDE_DIR}
 )
 
-target_compile_definitions(feather PRIVATE FEATHER_VERSION="${PROJECT_VERSION}")
+target_compile_definitions(feather PRIVATE FEATHER_VERSION="${DETECTED_FEATHER_VERSION}")
 target_compile_definitions(feather PRIVATE FEATHER_TARGET_TRIPLET="${FEATHER_TARGET_TRIPLET}")
 target_compile_definitions(feather PRIVATE TOR_VERSION="${TOR_VERSION}")
 
@@ -289,7 +289,6 @@ target_link_libraries(feather PRIVATE
         ${ICU_LIBRARIES}
         ${LIBZIP_LIBRARIES}
         ${ZLIB_LIBRARIES}
-        ${BCUR_LIBRARY}
 )
 
 if(CHECK_UPDATES)

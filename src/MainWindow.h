@@ -209,6 +209,7 @@ private:
     void unlockWallet(const QString &password);
     void closeQDialogChildren(QObject *object);
     int findTab(const QString &title);
+    void setPausedSyncStatus();
 
     QIcon hardwareDevicePairedIcon();
     QIcon hardwareDeviceUnpairedIcon();

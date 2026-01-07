@@ -14,6 +14,7 @@
 #include "WalletManager.h"
 #include "WalletListenerImpl.h"
 
+#include "utils/config.h"
 #include "config.h"
 #include "constants.h"
 
@@ -25,6 +26,8 @@
 #include "model/CoinsModel.h"
 
 #include "utils/ScopeGuard.h"
+#include "utils/RestoreHeightLookup.h"
+#include "utils/Utils.h"
 
 #include "wallet/wallet2.h"
 
@@ -83,6 +86,15 @@ Wallet::Wallet(Monero::Wallet *wallet, QObject *parent)
     connect(m_subaddress, &Subaddress::corrupted, [this]{
        emit keysCorrupted();
     });
+
+    // Store original creation height if not already present
+    // This protects the restore height from being overwritten by "Skip Sync" or range syncs
+    if (!cacheAttributeExists("feather.creation_height")) {
+        quint64 height = m_wallet2->get_refresh_from_block_height();
+        if (height > 0) {
+            setCacheAttribute("feather.creation_height", QString::number(height));
+        }
+    }
 }
 
 // #################### Status ####################
@@ -502,13 +514,26 @@ void Wallet::onHeightsRefreshed(bool success, quint64 daemonHeight, quint64 targ
     m_daemonBlockChainHeight = daemonHeight;
     m_daemonBlockChainTargetHeight = targetHeight;
 
+    if (conf()->get(Config::syncPaused).toBool()) {
+        if (success) {
+            quint64 walletHeight = blockChainHeight();
+            if (walletHeight < (targetHeight - 1)) {
+                setConnectionStatus(ConnectionStatus_Synchronizing);
+            } else {
+                setConnectionStatus(ConnectionStatus_Synchronized);
+            }
+        } else {
+             setConnectionStatus(ConnectionStatus_Disconnected);
+        }
+        return;
+    }
+
     if (success) {
         quint64 walletHeight = blockChainHeight();
 
         if (daemonHeight < targetHeight) {
             emit syncStatus(daemonHeight, targetHeight, true);
-        }
-        else {
+        } else {
             this->syncStatusUpdated(walletHeight, daemonHeight);
         }
 
@@ -544,7 +569,120 @@ void Wallet::syncStatusUpdated(quint64 height, quint64 target) {
     emit syncStatus(height, target, false);
 }
 
+void Wallet::skipToTip() {
+    if (!m_wallet2)
+        return;
+    uint64_t tip = m_wallet2->get_blockchain_current_height();
+    if (tip > 0) {
+        // Log previous height for debugging
+        uint64_t prevHeight = m_wallet2->get_refresh_from_block_height();
+        qInfo() << "Skip Sync triggered. Head moving from" << prevHeight << "to:" << tip;
+
+        m_wallet2->set_refresh_from_block_height(tip);
+        pauseRefresh();
+        startRefresh();
+    }
+}
+
+void Wallet::syncDateRange(const QDate &start, const QDate &end) {
+    if (!m_wallet2)
+        return;
+
+    // Convert dates to heights with internal table lookup
+    cryptonote::network_type nettype = m_wallet2->nettype();
+    QString filename = Utils::getRestoreHeightFilename(static_cast<NetworkType::Type>(nettype));
+
+    auto lookup = RestoreHeightLookup::fromFile(filename, static_cast<NetworkType::Type>(nettype));
+    uint64_t startHeight = lookup->dateToHeight(start.startOfDay().toSecsSinceEpoch());
+    uint64_t endHeight = lookup->dateToHeight(end.startOfDay().toSecsSinceEpoch());
+    delete lookup;
+
+    if (startHeight >= endHeight)
+        return;
+
+    m_stopHeight = endHeight;
+    m_rangeSyncActive = true;
+
+    m_wallet2->set_refresh_from_block_height(startHeight);
+    pauseRefresh();
+    startRefresh();
+}
+
+void Wallet::fullSync() {
+    if (!m_wallet2)
+        return;
+
+    // Reset range sync just in case
+    m_rangeSyncActive = false;
+
+    // Retrieve original creation height from persistent storage
+    uint64_t originalHeight = 0;
+    QString storedHeight = this->getCacheAttribute("feather.creation_height");
+    if (!storedHeight.isEmpty()) {
+        originalHeight = storedHeight.toULongLong();
+    } else {
+        // Fallback (dangerous if skipped, but better than 0)
+        originalHeight = m_wallet2->get_refresh_from_block_height();
+>>>>>>> 43ee0e4e (Implement Skip Sync and Data Saving features)
+    }
+
+    m_wallet2->set_refresh_from_block_height(originalHeight);
+    // Trigger rescan
+    pauseRefresh();
+
+    // Optional: Clear transaction cache to ensure fresh view
+    // m_wallet2->clearCache();
+
+    startRefresh();
+
+    qInfo() << "Full Sync triggered. Rescanning from original restore height:" << originalHeight;
+}
+
+void Wallet::syncStatusUpdated(quint64 height, quint64 targetHeight) {
+    if (m_rangeSyncActive && height >= m_stopHeight) {
+        // At end of requested date range, jump to tip
+        m_rangeSyncActive = false;
+        this->skipToTip();
+        return;
+    }
+
+    if (height >= (targetHeight - 1)) {
+        this->updateBalance();
+    }
+    emit syncStatus(height, targetHeight, false);
+}
+
+bool Wallet::importTransaction(const QString &txid) {
+    if (!m_wallet2 || txid.isEmpty())
+        return false;
+
+    // If scanning a specific TX, we shouldn't be constrained by range sync
+    if (m_rangeSyncActive) {
+        m_rangeSyncActive = false;
+    }
+
+    try {
+        std::unordered_set<crypto::hash> txids;
+        crypto::hash txid_hash;
+        if (!epee::string_tools::hex_to_pod(txid.toStdString(), txid_hash)) {
+            qWarning() << "Invalid transaction id: " << txid;
+            return false;
+        }
+        txids.insert(txid_hash);
+        m_wallet2->scan_tx(txids);
+        qInfo() << "Successfully imported transaction:" << txid;
+        this->updateBalance();
+        return true;
+    } catch (const std::exception &e) {
+        qWarning() << "Failed to import transaction: " << txid << ", error: " << e.what();
+    }
+    return false;
+}
+
 void Wallet::onNewBlock(uint64_t walletHeight) {
+    if (conf()->get(Config::syncPaused).toBool()) {
+        return;
+    }
     // Called whenever a new block gets scanned by the wallet
     quint64 daemonHeight = m_daemonBlockChainTargetHeight;
 
@@ -691,11 +829,6 @@ bool Wallet::importOutputs(const QString& path) {
 
 bool Wallet::importOutputsFromStr(const std::string &outputs) {
     return m_walletImpl->importOutputsFromStr(outputs);
-}
-
-bool Wallet::importTransaction(const QString& txid) {
-    std::vector<std::string> txids = {txid.toStdString()};
-    return m_walletImpl->scanTransactions(txids);
 }
 
 // #################### Wallet cache ####################

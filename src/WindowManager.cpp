@@ -71,9 +71,13 @@ void WindowManager::setEventFilter(EventFilter *ef) {
 
 WindowManager::~WindowManager() {
     qDebug() << "~WindowManager";
-    m_cleanupThread->quit();
-    m_cleanupThread->wait();
-    qDebug() << "WindowManager: cleanup thread done" << QThread::currentThreadId();
+    if (m_cleanupThread && m_cleanupThread->isRunning()) {
+        m_cleanupThread->quit();
+        m_cleanupThread->wait();
+        qDebug() << "WindowManager: cleanup thread done" << QThread::currentThreadId();
+    } else {
+        qDebug() << "WindowManager: cleanup thread already stopped";
+    }
 }
 
 // ######################## APPLICATION LIFECYCLE ########################
@@ -89,6 +93,20 @@ void WindowManager::quitAfterLastWindow() {
 
 void WindowManager::close() {
     qDebug() << Q_FUNC_INFO << QThread::currentThreadId();
+
+    // Stop all threads before application shutdown to avoid QThreadStorage warnings
+    if (m_cleanupThread && m_cleanupThread->isRunning()) {
+        m_cleanupThread->quit();
+        m_cleanupThread->wait();
+        qDebug() << "WindowManager: cleanup thread stopped in close()";
+    }
+
+    // Stop Tor manager threads
+    torManager()->stop();
+
+    // Wait for all threads in the global thread pool
+    QThreadPool::globalInstance()->waitForDone();
+
     for (const auto &window: m_windows) {
         window->close();
     }
@@ -105,8 +123,6 @@ void WindowManager::close() {
     if (m_docsDialog) {
         m_docsDialog->deleteLater();
     }
-
-    torManager()->stop();
 
     deleteLater();
 

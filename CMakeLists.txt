@@ -1,7 +1,34 @@
-cmake_minimum_required(VERSION 3.18)
+cmake_minimum_required(VERSION 3.16)
+
+# Configurable options
+option(FEATHER_VERSION_DEBUG_BUILD "Enable git describe version string" OFF)
+
+if(FEATHER_VERSION_DEBUG_BUILD AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
+    find_package(Git)
+    if(GIT_FOUND)
+        execute_process(
+            COMMAND ${GIT_EXECUTABLE} describe --tags --dirty --always
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+            OUTPUT_VARIABLE GIT_DESCRIBE_VERSION
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+        )
+        message(STATUS "Feather DEBUG BUILD version (git): ${GIT_DESCRIBE_VERSION}")
+        set(DETECTED_FEATHER_VERSION ${GIT_DESCRIBE_VERSION})
+    endif()
+endif()
+
+if(NOT DETECTED_FEATHER_VERSION)
+    set(DETECTED_FEATHER_VERSION "2.8.1")
+endif()
+
+# Extract standard version format for project()
+string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" PROJECT_VERSION_CLEAN "${DETECTED_FEATHER_VERSION}")
+if(NOT PROJECT_VERSION_CLEAN)
+    set(PROJECT_VERSION_CLEAN "2.8.1")
+endif()
 
 project(feather
-  VERSION "2.8.1"
+  VERSION ${PROJECT_VERSION_CLEAN}
   DESCRIPTION "A free Monero desktop wallet"
   LANGUAGES CXX C ASM
 )

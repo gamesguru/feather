@@ -8,6 +8,10 @@
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QCheckBox>
+#include <QFormLayout>
+#include <QSpinBox>
+#include <QDateEdit>
+#include <QDialogButtonBox>
 
 #include "constants.h"
 #include "dialog/AddressCheckerIndexDialog.h"
@@ -30,10 +34,12 @@
 #include "libwalletqt/TransactionHistory.h"
 #include "model/AddressBookModel.h"
 #include "plugins/PluginRegistry.h"
+#include "plugins/Plugin.h"
 #include "utils/AppData.h"
 #include "utils/AsyncTask.h"
 #include "utils/ColorScheme.h"
 #include "utils/Icons.h"
+#include "utils/RestoreHeightLookup.h"
 #include "utils/TorManager.h"
 #include "utils/WebsocketNotifier.h"
 
@@ -80,7 +86,7 @@ MainWindow::MainWindow(WindowManager *windowManager, Wallet *wallet, QWidget *pa
 
     this->onOfflineMode(conf()->get(Config::offlineMode).toBool());
     conf()->set(Config::restartRequired, false);
-    
+
     // Websocket notifier
 #ifdef CHECK_UPDATES
     connect(websocketNotifier(), &WebsocketNotifier::UpdatesReceived, m_updater.data(), &Updater::wsUpdatesReceived);
@@ -135,7 +141,7 @@ void MainWindow::initStatusBar() {
     this->statusBar()->setFixedHeight(30);
 
     m_statusLabelStatus = new QLabel("Idle", this);
-    m_statusLabelStatus->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    m_statusLabelStatus->setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::LinksAccessibleByMouse);
     this->statusBar()->addWidget(m_statusLabelStatus);
 
     m_statusLabelNetStats = new QLabel("", this);
@@ -188,6 +194,221 @@ void MainWindow::initStatusBar() {
     connect(m_statusBtnHwDevice, &StatusBarButton::clicked, this, &MainWindow::menuHwDeviceClicked);
     this->statusBar()->addPermanentWidget(m_statusBtnHwDevice);
     m_statusBtnHwDevice->hide();
+
+    m_statusLabelStatus->setContextMenuPolicy(Qt::ActionsContextMenu);
+
+    QAction *pauseSyncAction = new QAction(tr("Pause Sync"), this);
+    pauseSyncAction->setCheckable(true);
+    pauseSyncAction->setChecked(conf()->get(Config::syncPaused).toBool());
+    m_statusLabelStatus->addAction(pauseSyncAction);
+
+    QAction *skipSyncAction = new QAction(tr("Skip Sync"), this);
+    m_statusLabelStatus->addAction(skipSyncAction);
+
+    QAction *syncRangeAction = new QAction(tr("Sync Date Range..."), this);
+    m_statusLabelStatus->addAction(syncRangeAction);
+
+    QAction *fullSyncAction = new QAction(tr("Full Sync"), this);
+    m_statusLabelStatus->addAction(fullSyncAction);
+
+    QAction *scanTxAction = new QAction(tr("Scan Transaction"), this);
+    m_statusLabelStatus->addAction(scanTxAction);
+    ui->menuTools->addAction(scanTxAction);
+
+    connect(pauseSyncAction, &QAction::toggled, this, [this](bool checked) {
+        conf()->set(Config::syncPaused, checked);
+        if (m_wallet) {
+            if (checked) {
+                m_wallet->pauseRefresh();
+                
+                this->setPausedSyncStatus();
+            } else {
+                m_wallet->startRefresh();
+                this->setStatusText(tr("Resuming sync..."));
+            }
+        }
+    });
+
+    connect(skipSyncAction, &QAction::triggered, this, [this](){
+        if (!m_wallet) return;
+
+        QString msg = tr("Skip sync will set your wallet's restore height to the current network height.\n\n"
+                          "Use this if you know you haven't received any transactions since your last sync.\n"
+                          "You can always use 'Full Sync' to rescan from the beginning.\n\n"
+                          "Continue?");
+
+        if (QMessageBox::question(this, tr("Skip Sync"), msg) == QMessageBox::Yes) {
+            m_wallet->skipToTip();
+            this->setStatusText(tr("Skipped sync to tip."));
+        }
+    });
+
+    connect(syncRangeAction, &QAction::triggered, this, [this](){
+        if (!m_wallet) return;
+
+        QDialog dialog(this);
+        dialog.setWindowTitle(tr("Sync Date Range"));
+        dialog.setWindowIcon(QIcon(":/assets/images/appicons/64x64.png"));
+        dialog.setWindowFlags(dialog.windowFlags() & ~Qt::WindowContextHelpButtonHint);
+        dialog.setWindowFlags(dialog.windowFlags() | Qt::MSWindowsFixedSizeDialogHint);
+
+        auto *layout = new QVBoxLayout(&dialog);
+
+        auto *formLayout = new QFormLayout;
+        formLayout->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+
+        auto *toDateEdit = new QDateEdit(QDate::currentDate());
+        toDateEdit->setCalendarPopup(true);
+        toDateEdit->setDisplayFormat("yyyy-MM-dd");
+
+        // Load lookup for accurate block calculations
+        NetworkType::Type nettype = m_wallet->nettype();
+        QString filename = Utils::getRestoreHeightFilename(nettype);
+
+        std::unique_ptr<RestoreHeightLookup> lookup(RestoreHeightLookup::fromFile(filename, nettype));
+
+        int defaultDays = 7;
+
+        auto *daysSpinBox = new QSpinBox;
+        daysSpinBox->setRange(1, 3650); // 10 years
+        daysSpinBox->setValue(defaultDays);
+        daysSpinBox->setSuffix(tr(" days"));
+
+        auto *fromDateEdit = new QDateEdit(QDate::currentDate().addDays(-defaultDays));
+        fromDateEdit->setCalendarPopup(true);
+        fromDateEdit->setDisplayFormat("yyyy-MM-dd");
+        fromDateEdit->setCalendarPopup(true);
+        fromDateEdit->setDisplayFormat("yyyy-MM-dd");
+        fromDateEdit->setToolTip(tr("Calculated from 'End date' and day span."));
+
+
+        toDateEdit->setCalendarPopup(true);
+        toDateEdit->setDisplayFormat("yyyy-MM-dd");
+
+        auto *infoLabel = new QLabel;
+        infoLabel->setWordWrap(true);
+        infoLabel->setStyleSheet("QLabel { color: #888; font-size: 11px; }");
+
+        formLayout->addRow(tr("Day span:"), daysSpinBox);
+        formLayout->addRow(tr("Start date:"), fromDateEdit);
+        formLayout->addRow(tr("End date:"), toDateEdit);
+
+        layout->addLayout(formLayout);
+        layout->addWidget(infoLabel);
+
+        auto updateInfo = [=, &lookup]() {
+            QDate start = fromDateEdit->date();
+            QDate end = toDateEdit->date();
+
+            uint64_t startHeight = lookup->dateToHeight(start.startOfDay().toSecsSinceEpoch());
+            uint64_t endHeight = lookup->dateToHeight(end.endOfDay().toSecsSinceEpoch());
+
+            if (endHeight < startHeight) endHeight = startHeight;
+            quint64 blocks = endHeight - startHeight;
+            quint64 size = Utils::estimateSyncDataSize(blocks);
+
+            infoLabel->setText(tr("Scanning ~%1 blocks\nEst. download size: %2")
+                               .arg(blocks)
+                               .arg(Utils::formatBytes(size)));
+        };
+
+        auto updateFromDate = [=]() {
+            fromDateEdit->setDate(toDateEdit->date().addDays(-daysSpinBox->value()));
+            updateInfo();
+        };
+
+        connect(fromDateEdit, &QDateEdit::dateChanged, updateInfo);
+        connect(toDateEdit, &QDateEdit::dateChanged, updateFromDate);
+        connect(daysSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), updateFromDate);
+
+        // Init label
+        updateInfo();
+
+        auto *btnBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+        connect(btnBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+        connect(btnBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+        layout->addWidget(btnBox);
+
+        dialog.resize(320, dialog.height());
+
+        if (dialog.exec() == QDialog::Accepted) {
+            m_wallet->syncDateRange(fromDateEdit->date(), toDateEdit->date());
+
+            // Re-calculate for status text
+            uint64_t startHeight = lookup->dateToHeight(fromDateEdit->date().startOfDay().toSecsSinceEpoch());
+            uint64_t endHeight = lookup->dateToHeight(toDateEdit->date().endOfDay().toSecsSinceEpoch());
+            quint64 blocks = (endHeight > startHeight) ? endHeight - startHeight : 0;
+            quint64 size = Utils::estimateSyncDataSize(blocks);
+
+            this->setStatusText(QString("Syncing range %1 - %2 (~%3)...")
+                                .arg(fromDateEdit->date().toString("yyyy-MM-dd"))
+                                .arg(toDateEdit->date().toString("yyyy-MM-dd"))
+                                .arg(Utils::formatBytes(size)));
+        }
+    });
+
+    connect(fullSyncAction, &QAction::triggered, this, [this](){
+        if (m_wallet) {
+            QString estBlocks = "Unknown (waiting for node)";
+            QString estSize = "Unknown";
+
+            quint64 walletCreationHeight = m_wallet->getWalletCreationHeight();
+            quint64 daemonHeight = m_wallet->daemonBlockChainHeight();
+            quint64 blocksBehind = 0;
+
+            if (daemonHeight > 0) {
+                blocksBehind = (daemonHeight > walletCreationHeight) ? (daemonHeight - walletCreationHeight) : 0;
+                quint64 estimatedBytes = Utils::estimateSyncDataSize(blocksBehind);
+                estBlocks = QString::number(blocksBehind);
+                estSize = QString("~%1").arg(Utils::formatBytes(estimatedBytes));
+            }
+
+            QString msg = QString("Full sync will rescan from your restore height.\n\n"
+                                  "Blocks behind: %1\n"
+                                  "Estimated data: %2\n\n"
+                                  "Note: We will not rescan blocks which have cached/hashed/checksummed, "
+                                  "and any discrepancy between block height and daemon height can be understood in these terms.\n\n"
+                                  "Continue?")
+                          .arg(estBlocks)
+                          .arg(estSize);
+
+            if (QMessageBox::question(this, "Full Sync", msg) == QMessageBox::Yes) {
+                m_wallet->fullSync();
+                this->setStatusText(QString("Full sync started (%1)...").arg(estSize));
+            }
+        }
+    });
+
+    connect(scanTxAction, &QAction::triggered, this, [this](){
+        if (m_wallet) {
+            QDialog dialog(this);
+            dialog.setWindowTitle("Scan Transaction");
+            dialog.setWindowIcon(QIcon(":/assets/images/appicons/64x64.png"));
+
+            auto *layout = new QVBoxLayout(&dialog);
+            layout->addWidget(new QLabel("Enter transaction ID:"));
+
+            auto *lineEdit = new QLineEdit;
+            lineEdit->setMinimumWidth(600);
+            layout->addWidget(lineEdit);
+
+            auto *btnBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+            connect(btnBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+            connect(btnBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+            layout->addWidget(btnBox);
+
+            // Compact vertical size, allow horizontal resize
+            dialog.layout()->setSizeConstraint(QLayout::SetFixedSize);
+
+            if (dialog.exec() == QDialog::Accepted) {
+                QString txid = lineEdit->text();
+                if (!txid.isEmpty()) {
+                    m_wallet->importTransaction(txid.trimmed());
+                    this->setStatusText("Transaction scanned: " + txid.trimmed().left(8) + "...");
+                }
+            }
+        }
+    });
 }
 
 void MainWindow::initPlugins() {
@@ -489,6 +710,17 @@ void MainWindow::initWalletContext() {
         this->onConnectionStatusChanged(status);
         m_nodes->autoConnect();
     });
+
+    connect(m_wallet, &Wallet::heightsRefreshed, this, [this](bool success, quint64 daemonHeight, quint64 targetHeight) {
+        // When paused, we might get success=false because wallet->refresh() is skipped,
+        // preventing strict cache updates. We should attempt to fallback to m_nodes info.
+        if (!success && !conf()->get(Config::syncPaused).toBool()) return;
+
+        // Update sync estimate if paused
+        if (conf()->get(Config::syncPaused).toBool()) {
+             this->setPausedSyncStatus();
+        }
+    });
     connect(m_wallet, &Wallet::currentSubaddressAccountChanged, this, &MainWindow::updateTitle);
     connect(m_wallet, &Wallet::walletPassphraseNeeded, this, &MainWindow::onWalletPassphraseNeeded);
 
@@ -509,7 +741,7 @@ void MainWindow::initWalletContext() {
     connect(m_wallet, &Wallet::deviceButtonRequest, this, &MainWindow::onDeviceButtonRequest);
     connect(m_wallet, &Wallet::deviceButtonPressed, this, &MainWindow::onDeviceButtonPressed);
     connect(m_wallet, &Wallet::deviceError,         this, &MainWindow::onDeviceError);
-    
+
     connect(m_wallet, &Wallet::multiBroadcast,      this, &MainWindow::onMultiBroadcast);
 }
 
@@ -590,7 +822,13 @@ void MainWindow::onWalletOpened() {
     this->updatePasswordIcon();
     this->updateTitle();
     m_nodes->allowConnection();
-    m_nodes->connectToNode();
+    if (!conf()->get(Config::disableAutoRefresh).toBool()) {
+        m_nodes->connectToNode();
+        if (conf()->get(Config::syncPaused).toBool()) {
+            m_wallet->pauseRefresh();
+            this->setPausedSyncStatus();
+        }
+    }
     m_updateBytes.start(250);
 
     if (conf()->get(Config::writeRecentlyOpenedWallets).toBool()) {
@@ -630,6 +868,14 @@ void MainWindow::onBalanceUpdated(quint64 balance, quint64 spendable) {
 
     m_statusLabelBalance->setToolTip("Click for details");
     m_statusLabelBalance->setText(balance_str);
+}
+
+void MainWindow::setPausedSyncStatus() {
+    QString tooltip;
+    QString status = Utils::getPausedSyncStatus(m_wallet, m_nodes, &tooltip);
+    this->setStatusText(status);
+    if (!tooltip.isEmpty())
+        m_statusLabelStatus->setToolTip(tooltip);
 }
 
 void MainWindow::setStatusText(const QString &text, bool override, int timeout) {
@@ -742,11 +988,30 @@ void MainWindow::onMultiBroadcast(const QMap<QString, QString> &txHexMap) {
 }
 
 void MainWindow::onSyncStatus(quint64 height, quint64 target, bool daemonSync) {
-    if (height >= (target - 1)) {
+    if (height >= (target - 1) && target > 0) {
         this->updateNetStats();
+        this->setStatusText(QString("Synchronized (%1)").arg(height));
+    } else {
+        // Calculate depth
+        quint64 blocksLeft = (target > height) ? (target - height) : 0;
+        // Estimate download size in MB: assuming 500 MB for full history,
+        // and we are blocksLeft behind out of (target-1) total blocks (since block 0 is genesis)
+        double approximateSizeMB = 0.0;
+        if (target > 1) {
+            approximateSizeMB = (blocksLeft * 500.0) / (target - 1);
+        }
+        QString sizeText;
+        if (approximateSizeMB < 1) {
+            sizeText = QString("%1 KB").arg(QString::number(approximateSizeMB * 1024, 'f', 0));
+        } else {
+            sizeText = QString("%1 MB").arg(QString::number(approximateSizeMB, 'f', 1));
+        }
+        QString statusMsg = Utils::formatSyncStatus(height, target, daemonSync);
+        // Shows "# blocks remaining (approx. X MB)" to sync
+        // Shows "Wallet sync: # blocks remaining (approx. X MB)"
+        this->setStatusText(QString("%1 (approx. %2)").arg(statusMsg).arg(sizeText));
     }
-    this->setStatusText(Utils::formatSyncStatus(height, target, daemonSync));
-    m_statusLabelStatus->setToolTip(QString("Wallet height: %1").arg(QString::number(height)));
+    m_statusLabelStatus->setToolTip(QString("Wallet Height: %1 | Network Tip: %2").arg(height).arg(target));
 }
 
 void MainWindow::onConnectionStatusChanged(int status)
@@ -785,6 +1050,12 @@ void MainWindow::onConnectionStatusChanged(int status)
             default:
                 icon = icons()->icon("status_disconnected.svg");
                 break;
+        }
+    }
+
+    if (conf()->get(Config::syncPaused).toBool() && !conf()->get(Config::offlineMode).toBool()) {
+        if (status == Wallet::ConnectionStatus_Synchronizing || status == Wallet::ConnectionStatus_Synchronized) {
+            this->setPausedSyncStatus();
         }
     }
 
@@ -967,7 +1238,7 @@ void MainWindow::onTransactionCreated(PendingTransaction *tx, const QVector<QStr
 #ifdef WITH_SCANNER
         OfflineTxSigningWizard wizard(this, m_wallet, tx);
         wizard.exec();
-        
+
         if (!wizard.readyToCommit()) {
             return;
         } else {
@@ -1142,7 +1413,7 @@ void MainWindow::showKeyImageSyncWizard() {
 #ifdef WITH_SCANNER
     OfflineTxSigningWizard wizard{this, m_wallet};
     wizard.exec();
-    
+
     if (wizard.readyToSign()) {
         TxConfAdvDialog dialog{m_wallet, "", this, true};
         dialog.setUnsignedTransaction(wizard.unsignedTransaction());
@@ -1533,6 +1804,11 @@ void MainWindow::updateNetStats() {
         return;
     }
 
+    if (conf()->get(Config::syncPaused).toBool()) {
+        m_statusLabelNetStats->hide();
+        return;
+    }
+
     m_statusLabelNetStats->show();
     m_statusLabelNetStats->setText(QString("(D: %1)").arg(Utils::formatBytes(m_wallet->getBytesReceived())));
 }
@@ -1544,12 +1820,12 @@ void MainWindow::rescanSpent() {
                     "Make sure you are connected to a trusted node.\n\n"
                     "Do you want to proceed?");
     warning.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
-    
+
     auto r = warning.exec();
     if (r == QMessageBox::No) {
         return;
     }
-    
+
     if (!m_wallet->rescanSpent()) {
         Utils::showError(this, "Failed to rescan spent outputs", m_wallet->errorString());
     } else {

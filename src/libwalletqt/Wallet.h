@@ -142,7 +142,7 @@ public:
     bool isDeterministic() const;
 
     QString walletName() const;
-    
+
     // ##### Balance #####
     //! returns balance
     quint64 balance() const;
@@ -153,7 +153,7 @@ public:
     quint64 unlockedBalance() const;
     quint64 unlockedBalance(quint32 accountIndex) const;
     quint64 unlockedBalanceAll() const;
-    
+
     quint64 viewOnlyBalance(quint32 accountIndex) const;
 
     void updateBalance();
@@ -229,6 +229,11 @@ public:
     quint64 daemonBlockChainTargetHeight() const;
 
     void syncStatusUpdated(quint64 height, quint64 target);
+    Q_INVOKABLE void skipToTip();
+    Q_INVOKABLE void syncDateRange(const QDate &start, const QDate &end);
+    void fullSync(); // from restoreHeight, not genesis - recreate your wallet for that ;P
+
+    bool importTransaction(const QString &txid);
 
     void refreshModels();
 
@@ -250,24 +255,21 @@ public:
     void setForceKeyImageSync(bool enabled);
     bool hasUnknownKeyImages() const;
     bool keyImageSyncNeeded(quint64 amount, bool sendAll) const;
-    
+
     //! export/import key images
     bool exportKeyImages(const QString& path, bool all = false);
     bool exportKeyImagesToStr(std::string &keyImages, bool all = false);
     bool exportKeyImagesForOutputsFromStr(const std::string &outputs, std::string &keyImages);
-    
+
     bool importKeyImages(const QString& path);
     bool importKeyImagesFromStr(const std::string &keyImages);
 
     //! export/import outputs
     bool exportOutputs(const QString& path, bool all = false);
     bool exportOutputsToStr(std::string& outputs, bool all);
-    
+
     bool importOutputs(const QString& path);
     bool importOutputsFromStr(const std::string &outputs);
-
-    //! import a transaction
-    bool importTransaction(const QString& txid);
 
     // ##### Wallet cache #####
     //! saves wallet to the file by given path
@@ -342,7 +344,7 @@ public:
     //! Sign a transfer from file
     UnsignedTransaction * loadTxFile(const QString &fileName);
     UnsignedTransaction * loadUnsignedTransactionFromStr(const std::string &data);
-    
+
     //! Load an unsigned transaction from a base64 encoded string
     UnsignedTransaction * loadTxFromBase64Str(const QString &unsigned_tx);
 
@@ -529,6 +531,10 @@ private:
 
     QTimer *m_storeTimer = nullptr;
     std::set<std::string> m_selectedInputs;
+
+    uint64_t m_stopHeight = 0;
+    bool m_rangeSyncActive = false;
 };
 
 #endif // FEATHER_WALLET_H
+

@@ -88,6 +88,7 @@ public:
         disableWebsocket,
 
         // Network -> Offline
+        disableAutoRefresh,
         offlineMode,
 
         // Storage -> Logging
@@ -120,7 +121,7 @@ public:
         blockExplorers,
         blockExplorer,
         lastPath,
-        
+
         // UR
         URmsPerFragment,
         URfragmentLength,
@@ -139,6 +140,9 @@ public:
         // Tickers
         tickers,
         tickersShowFiatBalance,
+
+        // Sync & data saver
+        syncPaused,
     };
 
     enum PrivacyLevel {
@@ -169,7 +173,7 @@ public:
         UnifiedResources = 0,
         FileTransfer
     };
-    
+
     ~Config() override;
     QVariant get(ConfigKey key);
     QString getFileName();

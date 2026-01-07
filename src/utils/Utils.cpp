@@ -26,6 +26,7 @@
 #include "utils/os/tails.h"
 #include "utils/os/whonix.h"
 #include "libwalletqt/Wallet.h"
+#include "utils/nodes.h"
 #include "WindowManager.h"
 
 namespace Utils {
@@ -712,6 +713,52 @@ QString formatSyncStatus(quint64 height, quint64 target, bool daemonSync) {
     return "Synchronized";
 }
 
+QString formatSyncTimeEstimate(quint64 blocks) {
+    quint64 minutes = blocks * 2;
+    quint64 days = minutes / (60 * 24);
+
+    QString timeStr = (days > 0) ? QString("~%1 days").arg(days) : QString("~%1 hours").arg(minutes / 60);
+    if (days == 0 && minutes < 60) timeStr = "< 1 hour";
+    return timeStr;
+}
+
+quint64 estimateSyncDataSize(quint64 blocks) {
+    // Estimate 1024 bytes per block (1KB) for wallet scanning.
+    return blocks * 1024;
+}
+
+QString formatPausedSyncStatus(quint64 blocks) {
+    quint64 size = estimateSyncDataSize(blocks);
+    return QObject::tr("[PAUSED] Sync %1 blocks / %2 upon resume").arg(blocks).arg(formatBytes(size));
+}
+
+QString getPausedSyncStatus(Wallet *wallet, Nodes *nodes, QString *tooltip) {
+    if (!wallet) return QObject::tr("[PAUSED] Sync paused");
+
+    quint64 walletHeight = wallet->blockChainHeight();
+    quint64 creationHeight = wallet->getWalletCreationHeight();
+    quint64 startHeight = (walletHeight > creationHeight) ? walletHeight : creationHeight;
+    quint64 daemonHeight = wallet->daemonBlockChainTargetHeight();
+
+    // If sync is paused or wallet just started, Wallet's internal height might be 0.
+    // If the daemon is connected, use its target_height or height to determine the latest tip.
+    if (daemonHeight == 0 && nodes) {
+        auto connection = nodes->connection();
+        if (connection.target_height > 0) daemonHeight = connection.target_height;
+        else if (connection.height > 0) daemonHeight = connection.height;
+    }
+
+    if (daemonHeight > 0) {
+        if (tooltip) {
+            *tooltip = QString("Wallet Height: %1 | Network Tip: %2").arg(walletHeight).arg(daemonHeight);
+        }
+        quint64 blocksBehind = (daemonHeight > startHeight) ? (daemonHeight - startHeight) : 0;
+        return formatPausedSyncStatus(blocksBehind);
+    } 
+    
+    return "[PAUSED] Sync paused";
+}
+
 QString formatRestoreHeight(quint64 height) {
     const QDateTime restoreDate = appData()->restoreHeights[constants::networkType]->heightToDate(height);
     return QString("%1  (%2)").arg(QString::number(height), restoreDate.toString("yyyy-MM-dd"));
@@ -723,5 +770,14 @@ QString getVersion() {
     version += " (release)";
 #endif
     return version;
+}
+
+QString getRestoreHeightFilename(NetworkType::Type nettype) {
+    if (nettype == NetworkType::MAINNET)
+        return ":/assets/restore_heights_monero_mainnet.txt";
+    else if (nettype == NetworkType::TESTNET)
+        return ":/assets/restore_heights_monero_testnet.txt";
+    else
+        return ":/assets/restore_heights_monero_stagenet.txt";
 }
 }

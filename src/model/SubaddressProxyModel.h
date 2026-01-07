@@ -20,7 +20,7 @@ public slots:
     void setSearchFilter(const QString& searchString){
         m_searchRegExp.setPattern(searchString);
         m_searchCaseSensitiveRegExp.setPattern(searchString);
-        invalidateFilter();
+        invalidate();
     }
 
 private:
