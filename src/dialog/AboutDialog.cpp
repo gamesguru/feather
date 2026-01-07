@@ -29,6 +29,12 @@ AboutDialog::AboutDialog(QWidget *parent)
     ui->ackText->setText(ack_text);
 
     ui->label_featherVersion->setText(FEATHER_VERSION);
+#ifdef FEATHER_BUILD_TAG
+    ui->label_buildTag->setText(FEATHER_BUILD_TAG);
+#else
+    ui->label_buildTag->hide();
+    ui->label_30->hide();
+#endif
     ui->label_moneroVersion->setText(MONERO_VERSION);
     ui->label_qtVersion->setText(QT_VERSION_STR);
     ui->label_torVersion->setText(TOR_VERSION);

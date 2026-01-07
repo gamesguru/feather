@@ -19,8 +19,14 @@ public:
 
 public slots:
     void setSearchFilter(const QString& searchString){
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+        beginFilterChange();
+        m_searchRegExp.setPattern(searchString);
+        endFilterChange();
+#else
         m_searchRegExp.setPattern(searchString);
         invalidateFilter();
+#endif
     }
 
 private:

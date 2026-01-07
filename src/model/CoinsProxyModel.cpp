@@ -4,6 +4,7 @@
 #include "CoinsProxyModel.h"
 #include "CoinsModel.h"
 #include "libwalletqt/rows/CoinsInfo.h"
+#include <QtGlobal>
 
 CoinsProxyModel::CoinsProxyModel(QObject *parent, Coins *coins)
         : QSortFilterProxyModel(parent)
@@ -15,13 +16,25 @@ CoinsProxyModel::CoinsProxyModel(QObject *parent, Coins *coins)
 }
 
 void CoinsProxyModel::setShowSpent(const bool showSpent) {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    beginFilterChange();
+    m_showSpent = showSpent;
+    endFilterChange();
+#else
     m_showSpent = showSpent;
     invalidateFilter();
+#endif
 }
 
 void CoinsProxyModel::setSearchFilter(const QString &searchString) {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    beginFilterChange();
+    m_searchRegExp.setPattern(searchString);
+    endFilterChange();
+#else
     m_searchRegExp.setPattern(searchString);
     invalidateFilter();
+#endif
 }
 
 bool CoinsProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const
