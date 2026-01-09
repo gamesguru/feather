@@ -789,7 +789,10 @@ QString WindowManager::loadStylesheet(const QString &resource) {
         return "";
     }
 
-    f.open(QFile::ReadOnly | QFile::Text);
+    if (!f.open(QFile::ReadOnly | QFile::Text)) {
+        qWarning() << "Failed to open stylesheet:" << resource;
+        return "";
+    }
     QTextStream ts(&f);
     QString data = ts.readAll();
     f.close();
