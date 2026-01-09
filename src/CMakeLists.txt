@@ -309,6 +309,7 @@ if (WITH_SCANNER)
             Qt::Multimedia
             Qt::MultimediaWidgets
             ${ZXING_LIBRARIES}
+            ${BCUR_LIBRARY}
     )
 endif()
 
