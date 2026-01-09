@@ -182,7 +182,7 @@ target_include_directories(feather PUBLIC
         ${LIBZIP_INCLUDE_DIRS}
         ${ZLIB_INCLUDE_DIRS}
         ${POLYSEED_INCLUDE_DIR}
-        ${BCUR_INCLUDE_DIR}
+
 )
 
 target_compile_definitions(feather PRIVATE FEATHER_VERSION="${DETECTED_FEATHER_VERSION}")
@@ -194,6 +194,7 @@ if(WITH_SCANNER)
             ${QtMultimedia_INCLUDE_DIRS}
             ${QtMultimediaWidgets_INCLUDE_DIRS}
             ${ZXING_INCLUDE_DIRS}
+            ${BCUR_INCLUDE_DIR}
     )
 endif()
 
