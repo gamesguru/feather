@@ -21,8 +21,8 @@ NodeWidget::NodeWidget(QWidget *parent)
 
     connect(ui->btn_addCustomNodes, &QPushButton::clicked, this, &NodeWidget::onCustomAddClicked);
 
-    connect(ui->checkBox_websocketList, &QCheckBox::stateChanged, [this](int id){
-        bool custom = (id == 0);
+    connect(ui->checkBox_websocketList, &QCheckBox::checkStateChanged, [this](Qt::CheckState state){
+        bool custom = (state == Qt::Unchecked);
         ui->stackedWidget->setCurrentIndex(custom);
         ui->frame_addCustomNodes->setVisible(custom);
         conf()->set(Config::nodeSource, custom);
