@@ -998,13 +998,8 @@ void MainWindow::onSyncStatus(quint64 height, quint64 target, bool daemonSync) {
         // and we are blocksLeft behind out of (target-1) total blocks (since block 0 is genesis)
         double approximateSizeMB = 0.0;
         if (target > 1) {
-            approximateSizeMB = (blocksLeft * 500.0) / (target - 1);
-        }
-        QString sizeText;
-        if (approximateSizeMB < 1) {
-            sizeText = QString("%1 KB").arg(QString::number(approximateSizeMB * 1024, 'f', 0));
-        } else {
-            sizeText = QString("%1 MB").arg(QString::number(approximateSizeMB, 'f', 1));
+             quint64 estimatedBytes = Utils::estimateSyncDataSize(blocksLeft);
+             sizeText = Utils::formatBytes(estimatedBytes);
         }
         QString statusMsg = Utils::formatSyncStatus(height, target, daemonSync);
         // Shows "# blocks remaining (approx. X MB)" to sync

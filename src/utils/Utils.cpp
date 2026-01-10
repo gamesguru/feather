@@ -723,8 +723,8 @@ QString formatSyncTimeEstimate(quint64 blocks) {
 }
 
 quint64 estimateSyncDataSize(quint64 blocks) {
-    // Estimate 1024 bytes per block (1KB) for wallet scanning.
-    return blocks * 1024;
+    // Estimate 30KB per block for wallet scanning.
+    return blocks * 30 * 1024;
 }
 
 QString formatPausedSyncStatus(quint64 blocks) {
@@ -752,7 +752,9 @@ QString getPausedSyncStatus(Wallet *wallet, Nodes *nodes, QString *tooltip) {
         if (tooltip) {
             *tooltip = QString("Wallet Height: %1 | Network Tip: %2").arg(walletHeight).arg(daemonHeight);
         }
-        quint64 blocksBehind = (daemonHeight > startHeight) ? (daemonHeight - startHeight) : 0;
+        if (blocksBehind == 0) {
+            return "[PAUSED] Sync paused";
+        }
         return formatPausedSyncStatus(blocksBehind);
     } 
     
