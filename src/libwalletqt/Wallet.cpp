@@ -431,6 +431,12 @@ void Wallet::initAsync(const QString &daemonAddress, bool trustedDaemon, quint64
 
         if (success) {
             qInfo() << "init async finished - starting refresh. Paused:" << m_syncPaused;
+
+            // Fetch initial heights so UI can update even if paused
+            quint64 daemonHeight = m_walletImpl->daemonBlockChainHeight();
+            quint64 targetHeight = m_walletImpl->daemonBlockChainTargetHeight();
+            emit heightsRefreshed(daemonHeight > 0, daemonHeight, targetHeight);
+
             if (!m_syncPaused) {
                 startRefresh();
             }
