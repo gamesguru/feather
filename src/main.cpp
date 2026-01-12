@@ -188,6 +188,7 @@ if (AttachConsole(ATTACH_PARENT_PROCESS)) {
         info.emplace_back("Tor", TOR_VERSION);
         info.emplace_back("SSL", QSslSocket::sslLibraryVersionString());
         info.emplace_back("Mode", stagenet ? "Stagenet" : (testnet ? "Testnet" : "Mainnet"));
+        info.emplace_back("Network", conf()->get(Config::syncPaused).toBool() ? "PAUSED" : "ACTIVE");
 
         for (const auto &k: info) {
             qWarning().nospace().noquote() << QString("%1: %2").arg(k.first, k.second);

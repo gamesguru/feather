@@ -459,6 +459,23 @@ void Wallet::pauseRefresh() {
     m_refreshEnabled = false;
 }
 
+void Wallet::updateNetworkStatus() {
+    const auto future = m_scheduler.run([this] {
+        if (!isHwBacked() || isDeviceConnected()) {
+            quint64 daemonHeight = m_walletImpl->daemonBlockChainHeight();
+            bool success = daemonHeight > 0;
+
+            quint64 targetHeight = 0;
+            if (success) {
+                targetHeight = m_walletImpl->daemonBlockChainTargetHeight();
+            }
+            bool haveHeights = (daemonHeight > 0 && targetHeight > 0);
+
+            emit heightsRefreshed(haveHeights, daemonHeight, targetHeight);
+        }
+    });
+}
+
 void Wallet::startRefreshThread()
 {
     const auto future = m_scheduler.run([this] {

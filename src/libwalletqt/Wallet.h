@@ -217,6 +217,7 @@ public:
     // ##### Synchronization (Refresh) #####
     void startRefresh();
     void pauseRefresh();
+    Q_INVOKABLE void updateNetworkStatus();
 
     //! returns current wallet's block height
     //! (can be less than daemon's blockchain height when wallet sync in progress)
