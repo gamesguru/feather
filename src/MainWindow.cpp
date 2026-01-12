@@ -378,29 +378,6 @@ void MainWindow::initStatusBar() {
         if (m_wallet) {
             TxImportDialog dialog(this, m_wallet);
             dialog.exec();
-
-            auto *layout = new QVBoxLayout(&dialog);
-            layout->addWidget(new QLabel("Enter transaction ID:"));
-
-            auto *lineEdit = new QLineEdit;
-            lineEdit->setMinimumWidth(600);
-            layout->addWidget(lineEdit);
-
-            auto *btnBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-            connect(btnBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-            connect(btnBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-            layout->addWidget(btnBox);
-
-            // Use fixed size based on content - prevents manual resizing
-            dialog.layout()->setSizeConstraint(QLayout::SetFixedSize);
-
-            if (dialog.exec() == QDialog::Accepted) {
-                QString txid = lineEdit->text();
-                if (!txid.isEmpty()) {
-                    m_wallet->importTransaction(txid.trimmed());
-                    this->setStatusText("Transaction scanned: " + txid.trimmed().left(8) + "...");
-                }
-            }
         }
     });
 }
