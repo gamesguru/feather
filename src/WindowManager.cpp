@@ -7,6 +7,7 @@
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QWindow>
+#include <QFontMetrics>
 
 #include "Application.h"
 #include "constants.h"
@@ -655,7 +656,14 @@ void WindowManager::buildTrayMenu() {
 
     for (const auto &window : m_windows) {
         QString name = window->walletName();
-        QMenu *submenu = menu->addMenu(name);
+        QString displayName = name;
+        if (name.length() > 20) {
+            displayName = name.left(17) + "...";
+        }
+
+        QMenu *submenu = menu->addMenu(displayName);
+        submenu->setToolTip(name);
+        submenu->menuAction()->setToolTip(name);
         submenu->addAction("Show/Hide", window, &MainWindow::showOrHide);
         submenu->addAction("Close", window, &MainWindow::close);
     }

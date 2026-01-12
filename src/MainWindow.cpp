@@ -216,6 +216,7 @@ void MainWindow::initStatusBar() {
     ui->menuTools->addAction(scanTxAction);
 
     connect(pauseSyncAction, &QAction::toggled, this, [this](bool checked) {
+        qInfo() << "Pause Sync toggled. Checked =" << checked;
         conf()->set(Config::syncPaused, checked);
         if (m_wallet) {
             if (checked) {
@@ -864,6 +865,7 @@ void MainWindow::onBalanceUpdated(quint64 balance, quint64 spendable) {
 }
 
 void MainWindow::setPausedSyncStatus() {
+    qInfo() << "setPausedSyncStatus called. Sync paused:" << conf()->get(Config::syncPaused).toBool();
     QString tooltip;
     QString status = Utils::getPausedSyncStatus(m_wallet, m_nodes, &tooltip);
     this->setStatusText(status);
@@ -981,6 +983,7 @@ void MainWindow::onMultiBroadcast(const QMap<QString, QString> &txHexMap) {
 }
 
 void MainWindow::onSyncStatus(quint64 height, quint64 target, bool daemonSync) {
+    qInfo() << "onSyncStatus: Height" << height << "Target" << target << "DaemonSync" << daemonSync;
     if (height >= (target - 1) && target > 0) {
         this->updateNetStats();
         this->setStatusText(QString("Synchronized (%1)").arg(QLocale().toString(height)));
@@ -1517,19 +1520,78 @@ void MainWindow::closeEvent(QCloseEvent *event) {
     event->accept();
 }
 
-void MainWindow::changeEvent(QEvent* event)
+void MainWindow::showEvent(QShowEvent *event)
 {
-    if ((event->type() == QEvent::WindowStateChange) && this->isMinimized()) {
-        if (conf()->get(Config::lockOnMinimize).toBool()) {
-            this->lockWallet();
-        }
-        if (conf()->get(Config::showTrayIcon).toBool() && conf()->get(Config::minimizeToTray).toBool()) {
-            this->hide();
+    QMainWindow::showEvent(event);
+    qDebug() << "MainWindow::showEvent. WindowHandle:" << this->windowHandle();
+    if (auto *window = this->windowHandle()) {
+        if (!m_visibilityConnection) {
+            m_visibilityConnection = connect(window, &QWindow::visibilityChanged, this, [this](QWindow::Visibility visibility){
+                qDebug() << "Visibility changed:" << visibility << " WindowState:" << this->windowHandle()->windowState();
+                if (visibility == QWindow::Minimized || this->windowHandle()->windowState() & Qt::WindowMinimized) {
+                    if (conf()->get(Config::lockOnMinimize).toBool()) {
+                        this->lockWallet();
+                    }
+
+                    bool showTray = conf()->get(Config::showTrayIcon).toBool();
+                    bool minimizeToTray = conf()->get(Config::minimizeToTray).toBool();
+
+                    qInfo() << "Visibility: Minimized. Tray=" << showTray << " MinToTray=" << minimizeToTray;
+
+                    if (showTray && minimizeToTray) {
+                        this->hide();
+                    }
+                }
+            });
+            qDebug() << "Connected to visibilityChanged signal:" << (bool)m_visibilityConnection;
         }
     } else {
-        QMainWindow::changeEvent(event);
+        qDebug() << "MainWindow::showEvent: No window handle available!";
     }
 }
+
+void MainWindow::changeEvent(QEvent* event)
+{
+    QMainWindow::changeEvent(event);
+
+// In changeEvent:
+    if (event->type() == QEvent::WindowStateChange) {
+        qInfo() << "changeEvent: WindowStateChange. State:" << this->windowState() << " isMinimized:" << this->isMinimized();
+        if (this->isMinimized()) {
+             // ... existing logic ...
+            if (conf()->get(Config::lockOnMinimize).toBool()) {
+                this->lockWallet();
+            }
+
+            bool showTray = conf()->get(Config::showTrayIcon).toBool();
+            bool minimizeToTray = conf()->get(Config::minimizeToTray).toBool();
+
+            qInfo() << "WindowStateChange: minimized. Tray=" << showTray << " MinToTray=" << minimizeToTray;
+
+            if (showTray && minimizeToTray) {
+                this->hide();
+            }
+        }
+    } else if (event->type() == QEvent::ActivationChange) {
+        auto winHandleState = this->windowHandle() ? this->windowHandle()->windowState() : Qt::WindowNoState;
+        qInfo() << "changeEvent: ActivationChange. State:" << this->windowState() << " isActive:" << this->isActiveWindow() << " WinHandleState:" << winHandleState;
+        if (this->windowHandle() && (this->windowHandle()->windowState() & Qt::WindowMinimized || this->isMinimized())) {
+             qInfo() << "changeEvent: ActivationChange -> detected Minimized state";
+             if (conf()->get(Config::lockOnMinimize).toBool()) {
+                this->lockWallet();
+            }
+
+            bool showTray = conf()->get(Config::showTrayIcon).toBool();
+            bool minimizeToTray = conf()->get(Config::minimizeToTray).toBool();
+
+            if (showTray && minimizeToTray) {
+                this->hide();
+            }
+        }
+    }
+}
+
+// Add logs to sync methods (need to locate them first, assuming onSyncStatus and setPausedSyncStatus)
 
 void MainWindow::showHistoryTab() {
     this->raise();
@@ -1826,6 +1888,7 @@ QString MainWindow::statusDots() {
 }
 
 void MainWindow::showOrHide() {
+    qDebug() << "showOrHide called. isHidden=" << this->isHidden();
     if (this->isHidden())
         this->bringToFront();
     else

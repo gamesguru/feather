@@ -6,6 +6,7 @@
 
 #include <QMainWindow>
 #include <QSystemTrayIcon>
+#include <QWindow>
 
 #include "components.h"
 #include "SettingsDialog.h"
@@ -97,6 +98,7 @@ signals:
 
 protected:
     void changeEvent(QEvent* event) override;
+    void showEvent(QShowEvent *event) override;
 
 private slots:
     // TODO: use a consistent naming convention for slots
@@ -267,6 +269,8 @@ private:
 
     EventFilter *m_eventFilter = nullptr;
     qint64 m_userLastActive = QDateTime::currentSecsSinceEpoch();
+
+    QMetaObject::Connection m_visibilityConnection;
 
 #ifdef CHECK_UPDATES
     QSharedPointer<Updater> m_updater = nullptr;
