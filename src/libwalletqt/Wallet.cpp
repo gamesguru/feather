@@ -444,7 +444,6 @@ void Wallet::initAsync(const QString &daemonAddress, bool trustedDaemon, quint64
 
 void Wallet::startRefresh() {
     m_refreshEnabled = true;
-    m_refreshEnabled = true;
     m_refreshNow = true;
 }
 

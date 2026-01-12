@@ -332,11 +332,13 @@ void MainWindow::initStatusBar() {
             uint64_t startHeight = lookup->dateToHeight(fromDateEdit->date().startOfDay().toSecsSinceEpoch());
             uint64_t endHeight = lookup->dateToHeight(toDateEdit->date().endOfDay().toSecsSinceEpoch());
             quint64 blocks = (endHeight > startHeight) ? endHeight - startHeight : 0;
+            quint64 size = Utils::estimateSyncDataSize(blocks);
 
-            this->setStatusText(tr("Syncing range %1 - %2 (~%3 blocks)...")
+            this->setStatusText(tr("Syncing range %1 - %2 (~%3 blocks)\nEst. download size: %4")
                                 .arg(fromDateEdit->date().toString("yyyy-MM-dd"))
                                 .arg(toDateEdit->date().toString("yyyy-MM-dd"))
-                                .arg(QLocale().toString(blocks)));
+                                .arg(QLocale().toString(blocks))
+                                .arg(Utils::formatBytes(size)));
         }
     });
 
