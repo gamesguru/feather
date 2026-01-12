@@ -332,12 +332,11 @@ void MainWindow::initStatusBar() {
             uint64_t startHeight = lookup->dateToHeight(fromDateEdit->date().startOfDay().toSecsSinceEpoch());
             uint64_t endHeight = lookup->dateToHeight(toDateEdit->date().endOfDay().toSecsSinceEpoch());
             quint64 blocks = (endHeight > startHeight) ? endHeight - startHeight : 0;
-            quint64 size = Utils::estimateSyncDataSize(blocks);
 
-            this->setStatusText(QString("Syncing range %1 - %2 (~%3)...")
+            this->setStatusText(tr("Syncing range %1 - %2 (~%3 blocks)...")
                                 .arg(fromDateEdit->date().toString("yyyy-MM-dd"))
                                 .arg(toDateEdit->date().toString("yyyy-MM-dd"))
-                                .arg(Utils::formatBytes(size)));
+                                .arg(QLocale().toString(blocks)));
         }
     });
 
@@ -353,22 +352,21 @@ void MainWindow::initStatusBar() {
             if (daemonHeight > 0) {
                 blocksBehind = (daemonHeight > walletCreationHeight) ? (daemonHeight - walletCreationHeight) : 0;
                 quint64 estimatedBytes = Utils::estimateSyncDataSize(blocksBehind);
-                estBlocks = QString::number(blocksBehind);
+                estBlocks = QLocale().toString(blocksBehind);
                 estSize = QString("~%1").arg(Utils::formatBytes(estimatedBytes));
             }
 
-            QString msg = QString("Full sync will rescan from your restore height.\n\n"
-                                  "Blocks behind: %1\n"
-                                  "Estimated data: %2\n\n"
-                                  "Note: We will not rescan blocks which have cached/hashed/checksummed, "
-                                  "and any discrepancy between block height and daemon height can be understood in these terms.\n\n"
-                                  "Continue?")
+            QString msg = tr("Full sync will rescan from your restore height.\n\n"
+                             "Blocks to scan: %1\n"
+                             "Estimated data: %2\n\n"
+                             "Note: Cached blocks will be skipped.\n\n"
+                             "Continue?")
                           .arg(estBlocks)
                           .arg(estSize);
 
-            if (QMessageBox::question(this, "Full Sync", msg) == QMessageBox::Yes) {
+            if (QMessageBox::question(this, tr("Full Sync"), msg) == QMessageBox::Yes) {
                 m_wallet->fullSync();
-                this->setStatusText(QString("Full sync started (%1)...").arg(estSize));
+                this->setStatusText(tr("Full sync started (%1 blocks)...").arg(estBlocks));
             }
         }
     });
