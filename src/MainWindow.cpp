@@ -391,7 +391,7 @@ void MainWindow::initStatusBar() {
             connect(btnBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
             layout->addWidget(btnBox);
 
-            // Compact vertical size, allow horizontal resize
+            // Use fixed size based on content - prevents manual resizing
             dialog.layout()->setSizeConstraint(QLayout::SetFixedSize);
 
             if (dialog.exec() == QDialog::Accepted) {

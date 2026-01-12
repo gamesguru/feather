@@ -717,8 +717,14 @@ QString formatSyncTimeEstimate(quint64 blocks) {
     quint64 minutes = blocks * 2;
     quint64 days = minutes / (60 * 24);
 
-    QString timeStr = (days > 0) ? QString("~%1 days").arg(days) : QString("~%1 hours").arg(minutes / 60);
-    if (days == 0 && minutes < 60) timeStr = "< 1 hour";
+    QString timeStr;
+    if (days > 0) {
+        timeStr = QObject::tr("~%1 days").arg(days);
+    } else if (minutes >= 60) {
+        timeStr = QObject::tr("~%1 hours").arg(minutes / 60);
+    } else {
+        timeStr = QObject::tr("< 1 hour");
+    }
     return timeStr;
 }
 
@@ -750,16 +756,16 @@ QString getPausedSyncStatus(Wallet *wallet, Nodes *nodes, QString *tooltip) {
 
     if (daemonHeight > 0) {
         if (tooltip) {
-            *tooltip = QString("Wallet Height: %1 | Network Tip: %2").arg(walletHeight).arg(daemonHeight);
+            *tooltip = QObject::tr("Wallet Height: %1 | Network Tip: %2").arg(walletHeight).arg(daemonHeight);
         }
         quint64 blocksBehind = (daemonHeight > startHeight) ? (daemonHeight - startHeight) : 0;
         if (blocksBehind == 0) {
-            return "[PAUSED] Sync paused";
+            return QObject::tr("[PAUSED] Sync paused");
         }
         return formatPausedSyncStatus(blocksBehind);
     } 
     
-    return "[PAUSED] Sync paused";
+    return QObject::tr("[PAUSED] Sync paused");
 }
 
 QString formatRestoreHeight(quint64 height) {

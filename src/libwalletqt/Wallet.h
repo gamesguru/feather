@@ -231,7 +231,7 @@ public:
     void syncStatusUpdated(quint64 height, quint64 target);
     Q_INVOKABLE void skipToTip();
     Q_INVOKABLE void syncDateRange(const QDate &start, const QDate &end);
-    void fullSync(); // from restoreHeight, not genesis - recreate your wallet for that ;P
+    void fullSync(); // Rescans from wallet creation height, not genesis block
 
     bool importTransaction(const QString &txid);
 
