@@ -656,7 +656,7 @@ void MainWindow::initOffline() {
 
     connect(m_wallet, &Wallet::heightsRefreshed, this, [this](bool success, quint64 daemonHeight, quint64 targetHeight) {
         if (conf()->get(Config::syncPaused).toBool()) {
-            qInfo() << "Heights refreshed (Paused): Daemon" << daemonHeight << "Target" << targetHeight;
+            qDebug() << "Heights refreshed (Paused): Daemon" << daemonHeight << "Target" << targetHeight;
             this->setPausedSyncStatus();
         }
     });
@@ -859,15 +859,15 @@ void MainWindow::onBalanceUpdated(quint64 balance, quint64 spendable) {
 }
 
 void MainWindow::setPausedSyncStatus() {
-    qWarning() << "setPausedSyncStatus called. Sync paused:" << conf()->get(Config::syncPaused).toBool();
+    qDebug() << "setPausedSyncStatus called. Sync paused:" << conf()->get(Config::syncPaused).toBool();
     QString tooltip;
     QString status = Utils::getPausedSyncStatus(m_wallet, m_nodes, &tooltip);
 
     // Log variables for debugging 149 vs 814k discrepancy
     if (m_wallet) {
-        qWarning() << "Paused Status Calc: WalletHeight:" << m_wallet->blockChainHeight()
-                   << "DaemonHeight:" << m_wallet->daemonBlockChainHeight()
-                   << "TargetHeight:" << m_wallet->daemonBlockChainTargetHeight();
+        qDebug() << "Paused Status Calc: WalletHeight:" << m_wallet->blockChainHeight()
+                 << "DaemonHeight:" << m_wallet->daemonBlockChainHeight()
+                 << "TargetHeight:" << m_wallet->daemonBlockChainTargetHeight();
     }
 
     this->setStatusText(status);
@@ -878,7 +878,7 @@ void MainWindow::setPausedSyncStatus() {
 void MainWindow::setStatusText(const QString &text, bool override, int timeout) {
     // Log to qWarning as requested for debugging
     if (text != m_statusText) {
-        qWarning() << "Setting status text:" << text;
+        qTrace() << "Setting status text:" << text;
     }
 
     if (override) {
@@ -990,7 +990,7 @@ void MainWindow::onMultiBroadcast(const QMap<QString, QString> &txHexMap) {
 }
 
 void MainWindow::onSyncStatus(quint64 height, quint64 target, bool daemonSync) {
-    qWarning() << "onSyncStatus: Height" << height << "Target" << target << "DaemonSync" << daemonSync;
+    qDebug() << "onSyncStatus: Height" << height << "Target" << target << "DaemonSync" << daemonSync;
     if (height >= (target - 1) && target > 0) {
         this->updateNetStats();
         this->setStatusText(QString("Synchronized (%1)").arg(QLocale().toString(height)));

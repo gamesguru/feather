@@ -221,6 +221,6 @@ if (AttachConsole(ATTACH_PARENT_PROCESS)) {
     wm->setEventFilter(&filter);
 
     int exitCode = Application::exec();
-    qWarning() << "Application::exec() returned with exit code:" << exitCode;
+    qInstallMessageHandler(nullptr);
     return exitCode;
 }
