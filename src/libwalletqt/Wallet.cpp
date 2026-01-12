@@ -431,7 +431,9 @@ void Wallet::initAsync(const QString &daemonAddress, bool trustedDaemon, quint64
 
         if (success) {
             qDebug() << "init async finished - starting refresh";
-            startRefresh();
+            if (!m_syncPaused) {
+                startRefresh();
+            }
         }
     });
     if (future.first)
@@ -566,6 +568,15 @@ void Wallet::syncStatusUpdated(quint64 height, quint64 target) {
     }
 
     emit syncStatus(height, target, false);
+}
+
+void Wallet::setSyncPaused(bool paused) {
+    m_syncPaused = paused;
+    if (paused) {
+        pauseRefresh();
+    } else {
+        startRefresh();
+    }
 }
 
 void Wallet::skipToTip() {

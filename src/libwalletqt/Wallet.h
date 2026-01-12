@@ -229,6 +229,7 @@ public:
     quint64 daemonBlockChainTargetHeight() const;
 
     void syncStatusUpdated(quint64 height, quint64 target);
+    void setSyncPaused(bool paused);
     Q_INVOKABLE void skipToTip();
     Q_INVOKABLE void syncDateRange(const QDate &start, const QDate &end);
     void fullSync(); // Rescans from wallet creation height, not genesis block
@@ -534,6 +535,7 @@ private:
 
     std::atomic<quint64> m_stopHeight{0};
     std::atomic<bool> m_rangeSyncActive{false};
+    std::atomic<bool> m_syncPaused{false};
 };
 
 #endif // FEATHER_WALLET_H

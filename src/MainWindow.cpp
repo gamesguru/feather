@@ -219,11 +219,11 @@ void MainWindow::initStatusBar() {
         conf()->set(Config::syncPaused, checked);
         if (m_wallet) {
             if (checked) {
-                m_wallet->pauseRefresh();
-                
+                m_wallet->setSyncPaused(true);
+
                 this->setPausedSyncStatus();
             } else {
-                m_wallet->startRefresh();
+                m_wallet->setSyncPaused(false);
                 this->setStatusText(tr("Resuming sync..."));
             }
         }
@@ -816,11 +816,11 @@ void MainWindow::onWalletOpened() {
     this->updateTitle();
     m_nodes->allowConnection();
     if (!conf()->get(Config::disableAutoRefresh).toBool()) {
-        m_nodes->connectToNode();
         if (conf()->get(Config::syncPaused).toBool()) {
-            m_wallet->pauseRefresh();
+            m_wallet->setSyncPaused(true);
             this->setPausedSyncStatus();
         }
+        m_nodes->connectToNode();
     }
     m_updateBytes.start(250);
 
@@ -1712,7 +1712,7 @@ void MainWindow::onDeviceError(const QString &error, quint64 errorCode) {
         }
     }
     m_statusBtnHwDevice->setIcon(this->hardwareDevicePairedIcon());
-    m_wallet->startRefresh();
+    m_wallet->setSyncPaused(conf()->get(Config::syncPaused).toBool());
     m_showDeviceError = false;
 }
 
