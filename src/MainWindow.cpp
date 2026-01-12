@@ -220,10 +220,12 @@ void MainWindow::initStatusBar() {
         if (m_wallet) {
             if (checked) {
                 m_wallet->setSyncPaused(true);
+                websocketNotifier()->websocketClient->stop();
 
                 this->setPausedSyncStatus();
             } else {
                 m_wallet->setSyncPaused(false);
+                websocketNotifier()->websocketClient->restart();
                 this->setStatusText(tr("Resuming sync..."));
             }
         }
