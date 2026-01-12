@@ -759,6 +759,9 @@ QString getPausedSyncStatus(Wallet *wallet, Nodes *nodes, QString *tooltip) {
     quint64 creationHeight = wallet->getWalletCreationHeight();
     quint64 startHeight = (walletHeight > creationHeight) ? walletHeight : creationHeight;
     quint64 daemonHeight = wallet->daemonBlockChainTargetHeight();
+    if (daemonHeight == 0) {
+        daemonHeight = wallet->daemonBlockChainHeight();
+    }
 
     // If sync is paused or wallet just started, Wallet's internal height might be 0.
     // If the daemon is connected, use its target_height or height to determine the latest tip.
