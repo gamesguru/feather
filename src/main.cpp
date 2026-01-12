@@ -219,6 +219,6 @@ if (AttachConsole(ATTACH_PARENT_PROCESS)) {
     wm->setEventFilter(&filter);
 
     int exitCode = Application::exec();
-    qDebug() << "Application::exec() returned";
+    qDebug() << "Application::exec() returned with exit code:" << exitCode;
     return exitCode;
 }

@@ -559,6 +559,20 @@ QTextCharFormat addressTextFormat(const SubaddressIndex &index, quint64 amount) 
 }
 
 void applicationLogHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg) {
+    if (conf()->get(Config::disableLogging).toBool())
+        return;
+
+    int level = conf()->get(Config::logLevel).toInt();
+
+    // Mapping:
+    // 0: Critical/Fatal [always reported under below scheme]
+    // 1: + Warning
+    // 2: + Info
+    // 3+: + Debug
+    if (level < 3 && type == QtDebugMsg) return;
+    if (level < 2 && type == QtInfoMsg) return;
+    if (level < 1 && type == QtWarningMsg) return;
+
     const QString fn = context.function ? QString::fromUtf8(context.function) : "";
     const QString date = QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss");
     QString line;

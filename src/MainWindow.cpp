@@ -1508,7 +1508,7 @@ void MainWindow::changeEvent(QEvent* event)
 
 // In changeEvent:
     if (event->type() == QEvent::WindowStateChange) {
-        qInfo() << "changeEvent: WindowStateChange. State:" << this->windowState() << " isMinimized:" << this->isMinimized();
+        qDebug() << "changeEvent: WindowStateChange. State:" << this->windowState() << " isMinimized:" << this->isMinimized();
         if (this->isMinimized()) {
              // ... existing logic ...
             if (conf()->get(Config::lockOnMinimize).toBool()) {
@@ -1525,11 +1525,11 @@ void MainWindow::changeEvent(QEvent* event)
             }
         }
     } else if (event->type() == QEvent::ActivationChange) {
-        qInfo() << "changeEvent: ActivationChange. Active:" << this->isActiveWindow();
+        qDebug() << "changeEvent: ActivationChange. Active:" << this->isActiveWindow();
         QTimer::singleShot(500, this, [this](){
             auto handle = this->windowHandle();
             if (handle && !handle->isExposed()) {
-                qInfo() << "ActivationChange (delayed): Window not exposed -> Hiding to tray";
+            qDebug() << "ActivationChange (delayed): Window not exposed -> Hiding to tray";
                 if (conf()->get(Config::lockOnMinimize).toBool()) {
                     this->lockWallet();
                 }
@@ -1537,7 +1537,12 @@ void MainWindow::changeEvent(QEvent* event)
                 bool showTray = conf()->get(Config::showTrayIcon).toBool();
                 bool minimizeToTray = conf()->get(Config::minimizeToTray).toBool();
                 if (showTray && minimizeToTray) {
-                    this->hide();
+                // Hide all widgets and dialogs, not just MainWindow
+                    for (const auto &widget : QApplication::topLevelWidgets()) {
+                        if (widget->isVisible() && !widget->windowFlags().testFlag(Qt::Popup) && !widget->windowFlags().testFlag(Qt::ToolTip)) {
+                            widget->hide();
+                        }
+                    }
                 }
             }
         });
