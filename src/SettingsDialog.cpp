@@ -314,6 +314,7 @@ void Settings::setupDisplayTab() {
     connect(ui->checkBox_showTrayIcon, &QCheckBox::toggled, [this](bool toggled) {
         conf()->set(Config::showTrayIcon, toggled);
         ui->checkBox_minimizeToTray->setEnabled(toggled);
+        ui->checkBox_trayLeftClickToggles->setEnabled(toggled);
         emit showTrayIcon(toggled);
     });
 
@@ -322,6 +323,13 @@ void Settings::setupDisplayTab() {
     ui->checkBox_minimizeToTray->setChecked(conf()->get(Config::minimizeToTray).toBool());
     connect(ui->checkBox_minimizeToTray, &QCheckBox::toggled, [this](bool toggled) {
         conf()->set(Config::minimizeToTray, toggled);
+    });
+
+    // [Left click system tray icon to toggle focus]
+    ui->checkBox_trayLeftClickToggles->setEnabled(ui->checkBox_showTrayIcon->isChecked());
+    ui->checkBox_trayLeftClickToggles->setChecked(conf()->get(Config::trayLeftClickToggles).toBool());
+    connect(ui->checkBox_trayLeftClickToggles, &QCheckBox::toggled, [this](bool toggled) {
+        conf()->set(Config::trayLeftClickToggles, toggled);
     });
 }
 

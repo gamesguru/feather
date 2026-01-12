@@ -109,6 +109,7 @@ public:
         lockOnMinimize,
         showTrayIcon,
         minimizeToTray,
+        trayLeftClickToggles,
 
         // Transactions
         multiBroadcast,

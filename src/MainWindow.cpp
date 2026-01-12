@@ -1523,31 +1523,6 @@ void MainWindow::closeEvent(QCloseEvent *event) {
 void MainWindow::showEvent(QShowEvent *event)
 {
     QMainWindow::showEvent(event);
-    qDebug() << "MainWindow::showEvent. WindowHandle:" << this->windowHandle();
-    if (auto *window = this->windowHandle()) {
-        if (!m_visibilityConnection) {
-            m_visibilityConnection = connect(window, &QWindow::visibilityChanged, this, [this](QWindow::Visibility visibility){
-                qDebug() << "Visibility changed:" << visibility << " WindowState:" << this->windowHandle()->windowState();
-                if (visibility == QWindow::Minimized || this->windowHandle()->windowState() & Qt::WindowMinimized) {
-                    if (conf()->get(Config::lockOnMinimize).toBool()) {
-                        this->lockWallet();
-                    }
-
-                    bool showTray = conf()->get(Config::showTrayIcon).toBool();
-                    bool minimizeToTray = conf()->get(Config::minimizeToTray).toBool();
-
-                    qInfo() << "Visibility: Minimized. Tray=" << showTray << " MinToTray=" << minimizeToTray;
-
-                    if (showTray && minimizeToTray) {
-                        this->hide();
-                    }
-                }
-            });
-            qDebug() << "Connected to visibilityChanged signal:" << (bool)m_visibilityConnection;
-        }
-    } else {
-        qDebug() << "MainWindow::showEvent: No window handle available!";
-    }
 }
 
 void MainWindow::changeEvent(QEvent* event)
@@ -1573,21 +1548,22 @@ void MainWindow::changeEvent(QEvent* event)
             }
         }
     } else if (event->type() == QEvent::ActivationChange) {
-        auto winHandleState = this->windowHandle() ? this->windowHandle()->windowState() : Qt::WindowNoState;
-        qInfo() << "changeEvent: ActivationChange. State:" << this->windowState() << " isActive:" << this->isActiveWindow() << " WinHandleState:" << winHandleState;
-        if (this->windowHandle() && (this->windowHandle()->windowState() & Qt::WindowMinimized || this->isMinimized())) {
-             qInfo() << "changeEvent: ActivationChange -> detected Minimized state";
-             if (conf()->get(Config::lockOnMinimize).toBool()) {
-                this->lockWallet();
-            }
+        qInfo() << "changeEvent: ActivationChange. Active:" << this->isActiveWindow();
+        QTimer::singleShot(500, this, [this](){
+            auto handle = this->windowHandle();
+            if (handle && !handle->isExposed()) {
+                qInfo() << "ActivationChange (delayed): Window not exposed -> Hiding to tray";
+                if (conf()->get(Config::lockOnMinimize).toBool()) {
+                    this->lockWallet();
+                }
 
-            bool showTray = conf()->get(Config::showTrayIcon).toBool();
-            bool minimizeToTray = conf()->get(Config::minimizeToTray).toBool();
-
-            if (showTray && minimizeToTray) {
-                this->hide();
+                bool showTray = conf()->get(Config::showTrayIcon).toBool();
+                bool minimizeToTray = conf()->get(Config::minimizeToTray).toBool();
+                if (showTray && minimizeToTray) {
+                    this->hide();
+                }
             }
-        }
+        });
     }
 }
 

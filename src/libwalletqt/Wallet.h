@@ -458,7 +458,6 @@ signals:
     void connectionStatusChanged(int status) const;
     void currentSubaddressAccountChanged() const;
 
-
     void syncStatus(quint64 height, quint64 target, bool daemonSync = false);
 
     void balanceUpdated(quint64 balance, quint64 spendable);

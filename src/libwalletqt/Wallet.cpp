@@ -561,15 +561,6 @@ quint64 Wallet::daemonBlockChainTargetHeight() const {
     return m_daemonBlockChainTargetHeight;
 }
 
-void Wallet::syncStatusUpdated(quint64 height, quint64 target) {
-    if (height >= (target - 1)) {
-        // TODO: is this needed?
-        this->updateBalance();
-    }
-
-    emit syncStatus(height, target, false);
-}
-
 void Wallet::setSyncPaused(bool paused) {
     m_syncPaused = paused;
     if (paused) {

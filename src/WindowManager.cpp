@@ -7,7 +7,6 @@
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QWindow>
-#include <QFontMetrics>
 
 #include "Application.h"
 #include "constants.h"
@@ -47,6 +46,24 @@ WindowManager::WindowManager(QObject *parent)
     m_tray->setToolTip("Feather Wallet");
     this->buildTrayMenu();
     m_tray->setVisible(conf()->get(Config::showTrayIcon).toBool());
+
+    connect(m_tray, &QSystemTrayIcon::activated, [this](QSystemTrayIcon::ActivationReason reason) {
+        if (reason == QSystemTrayIcon::Trigger) {
+            if (conf()->get(Config::trayLeftClickToggles).toBool()) {
+                for (const auto &window : m_windows) {
+                    if (window->isVisible()) {
+                        window->hide();
+                    } else {
+                        window->show();
+                        window->raise();
+                        window->activateWindow();
+                    }
+                }
+            } else {
+                m_tray->contextMenu()->popup(QCursor::pos());
+            }
+        }
+    });
 
     this->initSkins();
     this->patchMacStylesheet();
@@ -95,11 +112,24 @@ void WindowManager::quitAfterLastWindow() {
 void WindowManager::close() {
     qDebug() << Q_FUNC_INFO << QThread::currentThreadId();
 
+    if (m_closing) {
+        return;
+    }
+    m_closing = true;
+
+
     // Stop all threads before application shutdown to avoid QThreadStorage warnings
     if (m_cleanupThread && m_cleanupThread->isRunning()) {
         m_cleanupThread->quit();
         m_cleanupThread->wait();
         qDebug() << "WindowManager: cleanup thread stopped in close()";
+    }
+
+    // Close all windows first to ensure they cancel their tasks/connections
+    // Iterate over a copy because close() modifies m_windows
+    auto windows = m_windows;
+    for (const auto &window: windows) {
+        window->close();
     }
 
     // Stop Tor manager threads
@@ -110,10 +140,6 @@ void WindowManager::close() {
         qCritical() << "WindowManager: Thread pool tasks did not complete within 15s timeout. "
                     << "Forcing exit to prevent use-after-free.";
         std::_Exit(1);  // Fast exit without cleanup - threads may still hold resources
-    }
-
-    for (const auto &window: m_windows) {
-        window->close();
     }
 
     if (m_splashDialog) {
@@ -656,14 +682,7 @@ void WindowManager::buildTrayMenu() {
 
     for (const auto &window : m_windows) {
         QString name = window->walletName();
-        QString displayName = name;
-        if (name.length() > 20) {
-            displayName = name.left(17) + "...";
-        }
-
-        QMenu *submenu = menu->addMenu(displayName);
-        submenu->setToolTip(name);
-        submenu->menuAction()->setToolTip(name);
+        QMenu *submenu = menu->addMenu(name);
         submenu->addAction("Show/Hide", window, &MainWindow::showOrHide);
         submenu->addAction("Close", window, &MainWindow::close);
     }

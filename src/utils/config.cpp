@@ -75,6 +75,7 @@ static const QHash<Config::ConfigKey, ConfigDirective> configStrings = {
         {Config::lockOnMinimize, {QS("lockOnMinimize"), false}},
         {Config::showTrayIcon, {QS("showTrayIcon"), true}},
         {Config::minimizeToTray, {QS("minimizeToTray"), false}},
+        {Config::trayLeftClickToggles, {QS("trayLeftClickToggles"), false}},
         {Config::disableWebsocket, {QS("disableWebsocket"), false}},
         {Config::disableAutoRefresh, {QS("disableAutoRefresh"), false}},
         {Config::offlineMode, {QS("offlineMode"), false}},
