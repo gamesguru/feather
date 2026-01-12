@@ -1,0 +1,2703 @@
+commit 65c45af6be791fda8edc3978a06eacb50794d3ba
+Author: gg <chown_tee@proton.me>
+Date:   Mon Jan 12 10:52:44 2026 -0500
+
+    Fix minimize to tray. Add setting: toggle focus on tray left-click.
+
+diff --git a/setup_flags.sh b/setup_flags.sh
+deleted file mode 100644
+index 9112cf76..00000000
+--- a/setup_flags.sh
++++ /dev/null
+@@ -1,15 +0,0 @@
+-#!/bin/bash
+-
+-# Configure CMake with custom flags
+-# - FEATHER_VERSION_DEBUG_BUILD=ON : Use git describe for version string
+-# - CHECK_UPDATES=OFF              : Disable built-in update checker
+-# - USE_DEVICE_TREZOR=OFF          : Disable Trezor hardware wallet support
+-# - WITH_SCANNER=OFF               : Disable webcam QR scanner support
+-
+-cmake \
+-    -DCMAKE_BUILD_TYPE=Debug \
+-    -DFEATHER_VERSION_DEBUG_BUILD=ON \
+-    -DCHECK_UPDATES=OFF \
+-    -DUSE_DEVICE_TREZOR=OFF \
+-    -DWITH_SCANNER=OFF \
+-    ..
+diff --git a/src/MainWindow.cpp b/src/MainWindow.cpp
+index fbcbc010..e0645c4a 100644
+--- a/src/MainWindow.cpp
++++ b/src/MainWindow.cpp
+@@ -1523,31 +1523,6 @@ void MainWindow::closeEvent(QCloseEvent *event) {
+ void MainWindow::showEvent(QShowEvent *event)
+ {
+     QMainWindow::showEvent(event);
+-    qDebug() << "MainWindow::showEvent. WindowHandle:" << this->windowHandle();
+-    if (auto *window = this->windowHandle()) {
+-        if (!m_visibilityConnection) {
+-            m_visibilityConnection = connect(window, &QWindow::visibilityChanged, this, [this](QWindow::Visibility visibility){
+-                qDebug() << "Visibility changed:" << visibility << " WindowState:" << this->windowHandle()->windowState();
+-                if (visibility == QWindow::Minimized || this->windowHandle()->windowState() & Qt::WindowMinimized) {
+-                    if (conf()->get(Config::lockOnMinimize).toBool()) {
+-                        this->lockWallet();
+-                    }
+-
+-                    bool showTray = conf()->get(Config::showTrayIcon).toBool();
+-                    bool minimizeToTray = conf()->get(Config::minimizeToTray).toBool();
+-
+-                    qInfo() << "Visibility: Minimized. Tray=" << showTray << " MinToTray=" << minimizeToTray;
+-
+-                    if (showTray && minimizeToTray) {
+-                        this->hide();
+-                    }
+-                }
+-            });
+-            qDebug() << "Connected to visibilityChanged signal:" << (bool)m_visibilityConnection;
+-        }
+-    } else {
+-        qDebug() << "MainWindow::showEvent: No window handle available!";
+-    }
+ }
+ 
+ void MainWindow::changeEvent(QEvent* event)
+@@ -1573,21 +1548,22 @@ void MainWindow::changeEvent(QEvent* event)
+             }
+         }
+     } else if (event->type() == QEvent::ActivationChange) {
+-        auto winHandleState = this->windowHandle() ? this->windowHandle()->windowState() : Qt::WindowNoState;
+-        qInfo() << "changeEvent: ActivationChange. State:" << this->windowState() << " isActive:" << this->isActiveWindow() << " WinHandleState:" << winHandleState;
+-        if (this->windowHandle() && (this->windowHandle()->windowState() & Qt::WindowMinimized || this->isMinimized())) {
+-             qInfo() << "changeEvent: ActivationChange -> detected Minimized state";
+-             if (conf()->get(Config::lockOnMinimize).toBool()) {
+-                this->lockWallet();
+-            }
+-
+-            bool showTray = conf()->get(Config::showTrayIcon).toBool();
+-            bool minimizeToTray = conf()->get(Config::minimizeToTray).toBool();
++        qInfo() << "changeEvent: ActivationChange. Active:" << this->isActiveWindow();
++        QTimer::singleShot(500, this, [this](){
++            auto handle = this->windowHandle();
++            if (handle && !handle->isExposed()) {
++                qInfo() << "ActivationChange (delayed): Window not exposed -> Hiding to tray";
++                if (conf()->get(Config::lockOnMinimize).toBool()) {
++                    this->lockWallet();
++                }
+ 
+-            if (showTray && minimizeToTray) {
+-                this->hide();
++                bool showTray = conf()->get(Config::showTrayIcon).toBool();
++                bool minimizeToTray = conf()->get(Config::minimizeToTray).toBool();
++                if (showTray && minimizeToTray) {
++                    this->hide();
++                }
+             }
+-        }
++        });
+     }
+ }
+ 
+diff --git a/src/SettingsDialog.cpp b/src/SettingsDialog.cpp
+index 982fef24..9dabad09 100644
+--- a/src/SettingsDialog.cpp
++++ b/src/SettingsDialog.cpp
+@@ -314,6 +314,7 @@ void Settings::setupDisplayTab() {
+     connect(ui->checkBox_showTrayIcon, &QCheckBox::toggled, [this](bool toggled) {
+         conf()->set(Config::showTrayIcon, toggled);
+         ui->checkBox_minimizeToTray->setEnabled(toggled);
++        ui->checkBox_trayLeftClickToggles->setEnabled(toggled);
+         emit showTrayIcon(toggled);
+     });
+ 
+@@ -323,6 +324,13 @@ void Settings::setupDisplayTab() {
+     connect(ui->checkBox_minimizeToTray, &QCheckBox::toggled, [this](bool toggled) {
+         conf()->set(Config::minimizeToTray, toggled);
+     });
++
++    // [Left click system tray icon to toggle focus]
++    ui->checkBox_trayLeftClickToggles->setEnabled(ui->checkBox_showTrayIcon->isChecked());
++    ui->checkBox_trayLeftClickToggles->setChecked(conf()->get(Config::trayLeftClickToggles).toBool());
++    connect(ui->checkBox_trayLeftClickToggles, &QCheckBox::toggled, [this](bool toggled) {
++        conf()->set(Config::trayLeftClickToggles, toggled);
++    });
+ }
+ 
+ void Settings::setupMemoryTab() {
+diff --git a/src/SettingsDialog.ui b/src/SettingsDialog.ui
+index ccaad425..f4f01107 100644
+--- a/src/SettingsDialog.ui
++++ b/src/SettingsDialog.ui
+@@ -838,6 +838,36 @@
+                 </item>
+                </layout>
+               </item>
++              <item>
++               <layout class="QHBoxLayout" name="horizontalLayout_17">
++                <item>
++                 <spacer name="horizontalSpacer_3">
++                  <property name="orientation">
++                   <enum>Qt::Orientation::Horizontal</enum>
++                  </property>
++                  <property name="sizeType">
++                   <enum>QSizePolicy::Policy::Fixed</enum>
++                  </property>
++                  <property name="sizeHint" stdset="0">
++                   <size>
++                    <width>30</width>
++                    <height>20</height>
++                   </size>
++                  </property>
++                 </spacer>
++                </item>
++                <item>
++                 <widget class="QCheckBox" name="checkBox_trayLeftClickToggles">
++                  <property name="enabled">
++                   <bool>false</bool>
++                  </property>
++                  <property name="text">
++                   <string>Left click system tray icon to toggle focus</string>
++                  </property>
++                 </widget>
++                </item>
++               </layout>
++              </item>
+              </layout>
+             </item>
+             <item>
+diff --git a/src/WindowManager.cpp b/src/WindowManager.cpp
+index 48daf008..d3f72c48 100644
+--- a/src/WindowManager.cpp
++++ b/src/WindowManager.cpp
+@@ -7,7 +7,6 @@
+ #include <QInputDialog>
+ #include <QMessageBox>
+ #include <QWindow>
+-#include <QFontMetrics>
+ 
+ #include "Application.h"
+ #include "constants.h"
+@@ -48,6 +47,24 @@ WindowManager::WindowManager(QObject *parent)
+     this->buildTrayMenu();
+     m_tray->setVisible(conf()->get(Config::showTrayIcon).toBool());
+ 
++    connect(m_tray, &QSystemTrayIcon::activated, [this](QSystemTrayIcon::ActivationReason reason) {
++        if (reason == QSystemTrayIcon::Trigger) {
++            if (conf()->get(Config::trayLeftClickToggles).toBool()) {
++                for (const auto &window : m_windows) {
++                    if (window->isVisible()) {
++                        window->hide();
++                    } else {
++                        window->show();
++                        window->raise();
++                        window->activateWindow();
++                    }
++                }
++            } else {
++                m_tray->contextMenu()->popup(QCursor::pos());
++            }
++        }
++    });
++
+     this->initSkins();
+     this->patchMacStylesheet();
+ 
+@@ -95,6 +112,12 @@ void WindowManager::quitAfterLastWindow() {
+ void WindowManager::close() {
+     qDebug() << Q_FUNC_INFO << QThread::currentThreadId();
+ 
++    if (m_closing) {
++        return;
++    }
++    m_closing = true;
++
++
+     // Stop all threads before application shutdown to avoid QThreadStorage warnings
+     if (m_cleanupThread && m_cleanupThread->isRunning()) {
+         m_cleanupThread->quit();
+@@ -102,6 +125,13 @@ void WindowManager::close() {
+         qDebug() << "WindowManager: cleanup thread stopped in close()";
+     }
+ 
++    // Close all windows first to ensure they cancel their tasks/connections
++    // Iterate over a copy because close() modifies m_windows
++    auto windows = m_windows;
++    for (const auto &window: windows) {
++        window->close();
++    }
++
+     // Stop Tor manager threads
+     torManager()->stop();
+ 
+@@ -112,10 +142,6 @@ void WindowManager::close() {
+         std::_Exit(1);  // Fast exit without cleanup - threads may still hold resources
+     }
+ 
+-    for (const auto &window: m_windows) {
+-        window->close();
+-    }
+-
+     if (m_splashDialog) {
+         m_splashDialog->deleteLater();
+     }
+@@ -656,14 +682,7 @@ void WindowManager::buildTrayMenu() {
+ 
+     for (const auto &window : m_windows) {
+         QString name = window->walletName();
+-        QString displayName = name;
+-        if (name.length() > 20) {
+-            displayName = name.left(17) + "...";
+-        }
+-
+-        QMenu *submenu = menu->addMenu(displayName);
+-        submenu->setToolTip(name);
+-        submenu->menuAction()->setToolTip(name);
++        QMenu *submenu = menu->addMenu(name);
+         submenu->addAction("Show/Hide", window, &MainWindow::showOrHide);
+         submenu->addAction("Close", window, &MainWindow::close);
+     }
+diff --git a/src/WindowManager.h b/src/WindowManager.h
+index d0f3e460..54690e2e 100644
+--- a/src/WindowManager.h
++++ b/src/WindowManager.h
+@@ -113,6 +113,7 @@ private:
+     bool m_openWalletTriedOnce = false;
+     bool m_openingWallet = false;
+     bool m_initialNetworkConfigured = false;
++    bool m_closing = false;
+ 
+     QThread *m_cleanupThread;
+ };
+diff --git a/src/libwalletqt/Wallet.cpp b/src/libwalletqt/Wallet.cpp
+index df7179cb..cfde59f5 100644
+--- a/src/libwalletqt/Wallet.cpp
++++ b/src/libwalletqt/Wallet.cpp
+@@ -561,15 +561,6 @@ quint64 Wallet::daemonBlockChainTargetHeight() const {
+     return m_daemonBlockChainTargetHeight;
+ }
+ 
+-void Wallet::syncStatusUpdated(quint64 height, quint64 target) {
+-    if (height >= (target - 1)) {
+-        // TODO: is this needed?
+-        this->updateBalance();
+-    }
+-
+-    emit syncStatus(height, target, false);
+-}
+-
+ void Wallet::setSyncPaused(bool paused) {
+     m_syncPaused = paused;
+     if (paused) {
+diff --git a/src/libwalletqt/Wallet.h b/src/libwalletqt/Wallet.h
+index 4341efe2..d09604e4 100644
+--- a/src/libwalletqt/Wallet.h
++++ b/src/libwalletqt/Wallet.h
+@@ -458,7 +458,6 @@ signals:
+     void connectionStatusChanged(int status) const;
+     void currentSubaddressAccountChanged() const;
+ 
+-
+     void syncStatus(quint64 height, quint64 target, bool daemonSync = false);
+ 
+     void balanceUpdated(quint64 balance, quint64 spendable);
+diff --git a/src/utils/config.cpp b/src/utils/config.cpp
+index f9453d5c..9da3d876 100644
+--- a/src/utils/config.cpp
++++ b/src/utils/config.cpp
+@@ -75,6 +75,7 @@ static const QHash<Config::ConfigKey, ConfigDirective> configStrings = {
+         {Config::lockOnMinimize, {QS("lockOnMinimize"), false}},
+         {Config::showTrayIcon, {QS("showTrayIcon"), true}},
+         {Config::minimizeToTray, {QS("minimizeToTray"), false}},
++        {Config::trayLeftClickToggles, {QS("trayLeftClickToggles"), false}},
+         {Config::disableWebsocket, {QS("disableWebsocket"), false}},
+         {Config::disableAutoRefresh, {QS("disableAutoRefresh"), false}},
+         {Config::offlineMode, {QS("offlineMode"), false}},
+diff --git a/src/utils/config.h b/src/utils/config.h
+index ffe9a6e6..085c1331 100644
+--- a/src/utils/config.h
++++ b/src/utils/config.h
+@@ -109,6 +109,7 @@ public:
+         lockOnMinimize,
+         showTrayIcon,
+         minimizeToTray,
++        trayLeftClickToggles,
+ 
+         // Transactions
+         multiBroadcast,
+
+commit 71dfea7db08073684d5bd93d843e5903c0a9c529
+Author: gg <chown_tee@proton.me>
+Date:   Mon Jan 12 10:38:30 2026 -0500
+
+    p log minimize event# Please enter the commit message for your changes. Lines starting
+
+diff --git a/src/MainWindow.cpp b/src/MainWindow.cpp
+index a67be3d4..fbcbc010 100644
+--- a/src/MainWindow.cpp
++++ b/src/MainWindow.cpp
+@@ -216,6 +216,7 @@ void MainWindow::initStatusBar() {
+     ui->menuTools->addAction(scanTxAction);
+ 
+     connect(pauseSyncAction, &QAction::toggled, this, [this](bool checked) {
++        qInfo() << "Pause Sync toggled. Checked =" << checked;
+         conf()->set(Config::syncPaused, checked);
+         if (m_wallet) {
+             if (checked) {
+@@ -864,6 +865,7 @@ void MainWindow::onBalanceUpdated(quint64 balance, quint64 spendable) {
+ }
+ 
+ void MainWindow::setPausedSyncStatus() {
++    qInfo() << "setPausedSyncStatus called. Sync paused:" << conf()->get(Config::syncPaused).toBool();
+     QString tooltip;
+     QString status = Utils::getPausedSyncStatus(m_wallet, m_nodes, &tooltip);
+     this->setStatusText(status);
+@@ -981,6 +983,7 @@ void MainWindow::onMultiBroadcast(const QMap<QString, QString> &txHexMap) {
+ }
+ 
+ void MainWindow::onSyncStatus(quint64 height, quint64 target, bool daemonSync) {
++    qInfo() << "onSyncStatus: Height" << height << "Target" << target << "DaemonSync" << daemonSync;
+     if (height >= (target - 1) && target > 0) {
+         this->updateNetStats();
+         this->setStatusText(QString("Synchronized (%1)").arg(QLocale().toString(height)));
+@@ -1517,20 +1520,79 @@ void MainWindow::closeEvent(QCloseEvent *event) {
+     event->accept();
+ }
+ 
++void MainWindow::showEvent(QShowEvent *event)
++{
++    QMainWindow::showEvent(event);
++    qDebug() << "MainWindow::showEvent. WindowHandle:" << this->windowHandle();
++    if (auto *window = this->windowHandle()) {
++        if (!m_visibilityConnection) {
++            m_visibilityConnection = connect(window, &QWindow::visibilityChanged, this, [this](QWindow::Visibility visibility){
++                qDebug() << "Visibility changed:" << visibility << " WindowState:" << this->windowHandle()->windowState();
++                if (visibility == QWindow::Minimized || this->windowHandle()->windowState() & Qt::WindowMinimized) {
++                    if (conf()->get(Config::lockOnMinimize).toBool()) {
++                        this->lockWallet();
++                    }
++
++                    bool showTray = conf()->get(Config::showTrayIcon).toBool();
++                    bool minimizeToTray = conf()->get(Config::minimizeToTray).toBool();
++
++                    qInfo() << "Visibility: Minimized. Tray=" << showTray << " MinToTray=" << minimizeToTray;
++
++                    if (showTray && minimizeToTray) {
++                        this->hide();
++                    }
++                }
++            });
++            qDebug() << "Connected to visibilityChanged signal:" << (bool)m_visibilityConnection;
++        }
++    } else {
++        qDebug() << "MainWindow::showEvent: No window handle available!";
++    }
++}
++
+ void MainWindow::changeEvent(QEvent* event)
+ {
+-    if ((event->type() == QEvent::WindowStateChange) && this->isMinimized()) {
+-        if (conf()->get(Config::lockOnMinimize).toBool()) {
+-            this->lockWallet();
++    QMainWindow::changeEvent(event);
++
++// In changeEvent:
++    if (event->type() == QEvent::WindowStateChange) {
++        qInfo() << "changeEvent: WindowStateChange. State:" << this->windowState() << " isMinimized:" << this->isMinimized();
++        if (this->isMinimized()) {
++             // ... existing logic ...
++            if (conf()->get(Config::lockOnMinimize).toBool()) {
++                this->lockWallet();
++            }
++
++            bool showTray = conf()->get(Config::showTrayIcon).toBool();
++            bool minimizeToTray = conf()->get(Config::minimizeToTray).toBool();
++
++            qInfo() << "WindowStateChange: minimized. Tray=" << showTray << " MinToTray=" << minimizeToTray;
++
++            if (showTray && minimizeToTray) {
++                this->hide();
++            }
+         }
+-        if (conf()->get(Config::showTrayIcon).toBool() && conf()->get(Config::minimizeToTray).toBool()) {
+-            this->hide();
++    } else if (event->type() == QEvent::ActivationChange) {
++        auto winHandleState = this->windowHandle() ? this->windowHandle()->windowState() : Qt::WindowNoState;
++        qInfo() << "changeEvent: ActivationChange. State:" << this->windowState() << " isActive:" << this->isActiveWindow() << " WinHandleState:" << winHandleState;
++        if (this->windowHandle() && (this->windowHandle()->windowState() & Qt::WindowMinimized || this->isMinimized())) {
++             qInfo() << "changeEvent: ActivationChange -> detected Minimized state";
++             if (conf()->get(Config::lockOnMinimize).toBool()) {
++                this->lockWallet();
++            }
++
++            bool showTray = conf()->get(Config::showTrayIcon).toBool();
++            bool minimizeToTray = conf()->get(Config::minimizeToTray).toBool();
++
++            if (showTray && minimizeToTray) {
++                this->hide();
++            }
+         }
+-    } else {
+-        QMainWindow::changeEvent(event);
+     }
+ }
+ 
++// Add logs to sync methods (need to locate them first, assuming onSyncStatus and setPausedSyncStatus)
++
+ void MainWindow::showHistoryTab() {
+     this->raise();
+     ui->tabWidget->setCurrentIndex(this->findTab("History"));
+@@ -1826,6 +1888,7 @@ QString MainWindow::statusDots() {
+ }
+ 
+ void MainWindow::showOrHide() {
++    qDebug() << "showOrHide called. isHidden=" << this->isHidden();
+     if (this->isHidden())
+         this->bringToFront();
+     else
+diff --git a/src/MainWindow.h b/src/MainWindow.h
+index d465ceba..da45aab2 100644
+--- a/src/MainWindow.h
++++ b/src/MainWindow.h
+@@ -6,6 +6,7 @@
+ 
+ #include <QMainWindow>
+ #include <QSystemTrayIcon>
++#include <QWindow>
+ 
+ #include "components.h"
+ #include "SettingsDialog.h"
+@@ -97,6 +98,7 @@ signals:
+ 
+ protected:
+     void changeEvent(QEvent* event) override;
++    void showEvent(QShowEvent *event) override;
+ 
+ private slots:
+     // TODO: use a consistent naming convention for slots
+@@ -268,6 +270,8 @@ private:
+     EventFilter *m_eventFilter = nullptr;
+     qint64 m_userLastActive = QDateTime::currentSecsSinceEpoch();
+ 
++    QMetaObject::Connection m_visibilityConnection;
++
+ #ifdef CHECK_UPDATES
+     QSharedPointer<Updater> m_updater = nullptr;
+ #endif
+diff --git a/src/WindowManager.cpp b/src/WindowManager.cpp
+index 69d81198..48daf008 100644
+--- a/src/WindowManager.cpp
++++ b/src/WindowManager.cpp
+@@ -7,6 +7,7 @@
+ #include <QInputDialog>
+ #include <QMessageBox>
+ #include <QWindow>
++#include <QFontMetrics>
+ 
+ #include "Application.h"
+ #include "constants.h"
+@@ -655,7 +656,14 @@ void WindowManager::buildTrayMenu() {
+ 
+     for (const auto &window : m_windows) {
+         QString name = window->walletName();
+-        QMenu *submenu = menu->addMenu(name);
++        QString displayName = name;
++        if (name.length() > 20) {
++            displayName = name.left(17) + "...";
++        }
++
++        QMenu *submenu = menu->addMenu(displayName);
++        submenu->setToolTip(name);
++        submenu->menuAction()->setToolTip(name);
+         submenu->addAction("Show/Hide", window, &MainWindow::showOrHide);
+         submenu->addAction("Close", window, &MainWindow::close);
+     }
+diff --git a/src/dialog/TxImportDialog.cpp b/src/dialog/TxImportDialog.cpp
+index 1473311f..56b2befc 100644
+--- a/src/dialog/TxImportDialog.cpp
++++ b/src/dialog/TxImportDialog.cpp
+@@ -18,6 +18,7 @@ TxImportDialog::TxImportDialog(QWidget *parent, Wallet *wallet)
+     connect(ui->btn_import, &QPushButton::clicked, this, &TxImportDialog::onImport);
+ 
+     this->adjustSize();
++    this->layout()->setSizeConstraint(QLayout::SetFixedSize);
+ }
+ 
+ void TxImportDialog::onImport() {
+
+commit 5a385678b311d5cdc2d44476af8c81ae9e2d23e5
+Author: gg <chown_tee@proton.me>
+Date:   Mon Jan 12 09:40:06 2026 -0500
+
+    fix sync 1000 block even when paused bug
+
+diff --git a/src/MainWindow.cpp b/src/MainWindow.cpp
+index 406a3e55..a67be3d4 100644
+--- a/src/MainWindow.cpp
++++ b/src/MainWindow.cpp
+@@ -219,11 +219,11 @@ void MainWindow::initStatusBar() {
+         conf()->set(Config::syncPaused, checked);
+         if (m_wallet) {
+             if (checked) {
+-                m_wallet->pauseRefresh();
+-                
++                m_wallet->setSyncPaused(true);
++
+                 this->setPausedSyncStatus();
+             } else {
+-                m_wallet->startRefresh();
++                m_wallet->setSyncPaused(false);
+                 this->setStatusText(tr("Resuming sync..."));
+             }
+         }
+@@ -816,11 +816,11 @@ void MainWindow::onWalletOpened() {
+     this->updateTitle();
+     m_nodes->allowConnection();
+     if (!conf()->get(Config::disableAutoRefresh).toBool()) {
+-        m_nodes->connectToNode();
+         if (conf()->get(Config::syncPaused).toBool()) {
+-            m_wallet->pauseRefresh();
++            m_wallet->setSyncPaused(true);
+             this->setPausedSyncStatus();
+         }
++        m_nodes->connectToNode();
+     }
+     m_updateBytes.start(250);
+ 
+@@ -1712,7 +1712,7 @@ void MainWindow::onDeviceError(const QString &error, quint64 errorCode) {
+         }
+     }
+     m_statusBtnHwDevice->setIcon(this->hardwareDevicePairedIcon());
+-    m_wallet->startRefresh();
++    m_wallet->setSyncPaused(conf()->get(Config::syncPaused).toBool());
+     m_showDeviceError = false;
+ }
+ 
+diff --git a/src/libwalletqt/Wallet.cpp b/src/libwalletqt/Wallet.cpp
+index 8f3c8a93..df7179cb 100644
+--- a/src/libwalletqt/Wallet.cpp
++++ b/src/libwalletqt/Wallet.cpp
+@@ -431,7 +431,9 @@ void Wallet::initAsync(const QString &daemonAddress, bool trustedDaemon, quint64
+ 
+         if (success) {
+             qDebug() << "init async finished - starting refresh";
+-            startRefresh();
++            if (!m_syncPaused) {
++                startRefresh();
++            }
+         }
+     });
+     if (future.first)
+@@ -568,6 +570,15 @@ void Wallet::syncStatusUpdated(quint64 height, quint64 target) {
+     emit syncStatus(height, target, false);
+ }
+ 
++void Wallet::setSyncPaused(bool paused) {
++    m_syncPaused = paused;
++    if (paused) {
++        pauseRefresh();
++    } else {
++        startRefresh();
++    }
++}
++
+ void Wallet::skipToTip() {
+     if (!m_wallet2)
+         return;
+diff --git a/src/libwalletqt/Wallet.h b/src/libwalletqt/Wallet.h
+index 2b345310..4341efe2 100644
+--- a/src/libwalletqt/Wallet.h
++++ b/src/libwalletqt/Wallet.h
+@@ -229,6 +229,7 @@ public:
+     quint64 daemonBlockChainTargetHeight() const;
+ 
+     void syncStatusUpdated(quint64 height, quint64 target);
++    void setSyncPaused(bool paused);
+     Q_INVOKABLE void skipToTip();
+     Q_INVOKABLE void syncDateRange(const QDate &start, const QDate &end);
+     void fullSync(); // Rescans from wallet creation height, not genesis block
+@@ -534,6 +535,7 @@ private:
+ 
+     std::atomic<quint64> m_stopHeight{0};
+     std::atomic<bool> m_rangeSyncActive{false};
++    std::atomic<bool> m_syncPaused{false};
+ };
+ 
+ #endif // FEATHER_WALLET_H
+
+commit dde94b5a4dc18be85edb0cdcf1fb46e47198ab5d
+Author: gg <chown_tee@proton.me>
+Date:   Mon Jan 12 09:34:45 2026 -0500
+
+    remove Import Tx (duplicate feature?)
+
+diff --git a/src/MainWindow.cpp b/src/MainWindow.cpp
+index 88624dfa..406a3e55 100644
+--- a/src/MainWindow.cpp
++++ b/src/MainWindow.cpp
+@@ -375,9 +375,8 @@ void MainWindow::initStatusBar() {
+ 
+     connect(scanTxAction, &QAction::triggered, this, [this](){
+         if (m_wallet) {
+-            QDialog dialog(this);
+-            dialog.setWindowTitle("Scan Transaction");
+-            dialog.setWindowIcon(QIcon(":/assets/images/appicons/64x64.png"));
++            TxImportDialog dialog(this, m_wallet);
++            dialog.exec();
+ 
+             auto *layout = new QVBoxLayout(&dialog);
+             layout->addWidget(new QLabel("Enter transaction ID:"));
+diff --git a/src/dialog/TxImportDialog.cpp b/src/dialog/TxImportDialog.cpp
+index 56b2befc..1473311f 100644
+--- a/src/dialog/TxImportDialog.cpp
++++ b/src/dialog/TxImportDialog.cpp
+@@ -18,7 +18,6 @@ TxImportDialog::TxImportDialog(QWidget *parent, Wallet *wallet)
+     connect(ui->btn_import, &QPushButton::clicked, this, &TxImportDialog::onImport);
+ 
+     this->adjustSize();
+-    this->layout()->setSizeConstraint(QLayout::SetFixedSize);
+ }
+ 
+ void TxImportDialog::onImport() {
+
+commit 810adb30e39a7f1882be69446a1aa9d15e485e9e
+Author: gg <chown_tee@proton.me>
+Date:   Mon Jan 12 09:33:39 2026 -0500
+
+    small lint fixes
+
+diff --git a/src/MainWindow.cpp b/src/MainWindow.cpp
+index 14ed0109..88624dfa 100644
+--- a/src/MainWindow.cpp
++++ b/src/MainWindow.cpp
+@@ -332,11 +332,13 @@ void MainWindow::initStatusBar() {
+             uint64_t startHeight = lookup->dateToHeight(fromDateEdit->date().startOfDay().toSecsSinceEpoch());
+             uint64_t endHeight = lookup->dateToHeight(toDateEdit->date().endOfDay().toSecsSinceEpoch());
+             quint64 blocks = (endHeight > startHeight) ? endHeight - startHeight : 0;
++            quint64 size = Utils::estimateSyncDataSize(blocks);
+ 
+-            this->setStatusText(tr("Syncing range %1 - %2 (~%3 blocks)...")
++            this->setStatusText(tr("Syncing range %1 - %2 (~%3 blocks)\nEst. download size: %4")
+                                 .arg(fromDateEdit->date().toString("yyyy-MM-dd"))
+                                 .arg(toDateEdit->date().toString("yyyy-MM-dd"))
+-                                .arg(QLocale().toString(blocks)));
++                                .arg(QLocale().toString(blocks))
++                                .arg(Utils::formatBytes(size)));
+         }
+     });
+ 
+diff --git a/src/libwalletqt/Wallet.cpp b/src/libwalletqt/Wallet.cpp
+index f43605e8..8f3c8a93 100644
+--- a/src/libwalletqt/Wallet.cpp
++++ b/src/libwalletqt/Wallet.cpp
+@@ -443,7 +443,6 @@ void Wallet::initAsync(const QString &daemonAddress, bool trustedDaemon, quint64
+ // #################### Synchronization (Refresh) ####################
+ 
+ void Wallet::startRefresh() {
+-    m_refreshEnabled = true;
+     m_refreshEnabled = true;
+     m_refreshNow = true;
+ }
+
+commit fdae95f564c5a576a20d4de11a984bee0993996e
+Author: gg <chown_tee@proton.me>
+Date:   Mon Jan 12 09:15:47 2026 -0500
+
+    simplify status bar to block count, not download size/time
+
+diff --git a/src/MainWindow.cpp b/src/MainWindow.cpp
+index c09bb1d9..14ed0109 100644
+--- a/src/MainWindow.cpp
++++ b/src/MainWindow.cpp
+@@ -332,12 +332,11 @@ void MainWindow::initStatusBar() {
+             uint64_t startHeight = lookup->dateToHeight(fromDateEdit->date().startOfDay().toSecsSinceEpoch());
+             uint64_t endHeight = lookup->dateToHeight(toDateEdit->date().endOfDay().toSecsSinceEpoch());
+             quint64 blocks = (endHeight > startHeight) ? endHeight - startHeight : 0;
+-            quint64 size = Utils::estimateSyncDataSize(blocks);
+ 
+-            this->setStatusText(QString("Syncing range %1 - %2 (~%3)...")
++            this->setStatusText(tr("Syncing range %1 - %2 (~%3 blocks)...")
+                                 .arg(fromDateEdit->date().toString("yyyy-MM-dd"))
+                                 .arg(toDateEdit->date().toString("yyyy-MM-dd"))
+-                                .arg(Utils::formatBytes(size)));
++                                .arg(QLocale().toString(blocks)));
+         }
+     });
+ 
+@@ -353,22 +352,21 @@ void MainWindow::initStatusBar() {
+             if (daemonHeight > 0) {
+                 blocksBehind = (daemonHeight > walletCreationHeight) ? (daemonHeight - walletCreationHeight) : 0;
+                 quint64 estimatedBytes = Utils::estimateSyncDataSize(blocksBehind);
+-                estBlocks = QString::number(blocksBehind);
++                estBlocks = QLocale().toString(blocksBehind);
+                 estSize = QString("~%1").arg(Utils::formatBytes(estimatedBytes));
+             }
+ 
+-            QString msg = QString("Full sync will rescan from your restore height.\n\n"
+-                                  "Blocks behind: %1\n"
+-                                  "Estimated data: %2\n\n"
+-                                  "Note: We will not rescan blocks which have cached/hashed/checksummed, "
+-                                  "and any discrepancy between block height and daemon height can be understood in these terms.\n\n"
+-                                  "Continue?")
++            QString msg = tr("Full sync will rescan from your restore height.\n\n"
++                             "Blocks to scan: %1\n"
++                             "Estimated data: %2\n\n"
++                             "Note: Cached blocks will be skipped.\n\n"
++                             "Continue?")
+                           .arg(estBlocks)
+                           .arg(estSize);
+ 
+-            if (QMessageBox::question(this, "Full Sync", msg) == QMessageBox::Yes) {
++            if (QMessageBox::question(this, tr("Full Sync"), msg) == QMessageBox::Yes) {
+                 m_wallet->fullSync();
+-                this->setStatusText(QString("Full sync started (%1)...").arg(estSize));
++                this->setStatusText(tr("Full sync started (%1 blocks)...").arg(estBlocks));
+             }
+         }
+     });
+
+commit fbcfa7a4e2393d45db50fe3312054ae33534bb71
+Author: gg <chown_tee@proton.me>
+Date:   Mon Jan 12 09:09:41 2026 -0500
+
+    more lint fixes; start blocks instead of time
+
+diff --git a/src/MainWindow.cpp b/src/MainWindow.cpp
+index f89f889c..c09bb1d9 100644
+--- a/src/MainWindow.cpp
++++ b/src/MainWindow.cpp
+@@ -984,25 +984,16 @@ void MainWindow::onMultiBroadcast(const QMap<QString, QString> &txHexMap) {
+ void MainWindow::onSyncStatus(quint64 height, quint64 target, bool daemonSync) {
+     if (height >= (target - 1) && target > 0) {
+         this->updateNetStats();
+-        this->setStatusText(QString("Synchronized (%1)").arg(height));
++        this->setStatusText(QString("Synchronized (%1)").arg(QLocale().toString(height)));
+     } else {
+-        // Calculate depth
+         quint64 blocksLeft = (target > height) ? (target - height) : 0;
+-        // Estimate download size
+-        QString sizeText;
+-        if (target > 1) {
+-             quint64 estimatedBytes = Utils::estimateSyncDataSize(blocksLeft);
+-             sizeText = Utils::formatBytes(estimatedBytes);
+-        }
+-        QString statusMsg = Utils::formatSyncStatus(height, target, daemonSync);
+-        // Show size estimate only if available
+-        if (!sizeText.isEmpty()) {
+-            this->setStatusText(QString("%1 (approx. %2)").arg(statusMsg).arg(sizeText));
+-        } else {
+-            this->setStatusText(statusMsg);
+-        }
++        QString type = daemonSync ? tr("Blockchain") : tr("Wallet");
++        QString blocksStr = QLocale().toString(blocksLeft);
++        this->setStatusText(tr("%1 sync: %2 blocks behind").arg(type, blocksStr));
+     }
+-    m_statusLabelStatus->setToolTip(QString("Wallet Height: %1 | Network Tip: %2").arg(height).arg(target));
++    m_statusLabelStatus->setToolTip(tr("Wallet Height: %1 | Network Tip: %2")
++        .arg(QLocale().toString(height))
++        .arg(QLocale().toString(target)));
+ }
+ 
+ void MainWindow::onConnectionStatusChanged(int status)
+diff --git a/src/utils/Utils.cpp b/src/utils/Utils.cpp
+index 23ae865b..375e535a 100644
+--- a/src/utils/Utils.cpp
++++ b/src/utils/Utils.cpp
+@@ -734,8 +734,8 @@ quint64 estimateSyncDataSize(quint64 blocks) {
+ }
+ 
+ QString formatPausedSyncStatus(quint64 blocks) {
+-    quint64 size = estimateSyncDataSize(blocks);
+-    return QObject::tr("[PAUSED] Sync %1 blocks / %2 upon resume").arg(blocks).arg(formatBytes(size));
++    QString blocksStr = QLocale().toString(blocks);
++    return QObject::tr("[PAUSED] %1 blocks behind").arg(blocksStr);
+ }
+ 
+ QString getPausedSyncStatus(Wallet *wallet, Nodes *nodes, QString *tooltip) {
+
+commit e408843c30f6c0a484ff77c92d37d15b4c072542
+Author: gg <chown_tee@proton.me>
+Date:   Mon Jan 12 09:01:17 2026 -0500
+
+    fix remaining small issues
+
+diff --git a/src/MainWindow.cpp b/src/MainWindow.cpp
+index 9282db96..f89f889c 100644
+--- a/src/MainWindow.cpp
++++ b/src/MainWindow.cpp
+@@ -391,7 +391,7 @@ void MainWindow::initStatusBar() {
+             connect(btnBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+             layout->addWidget(btnBox);
+ 
+-            // Compact vertical size, allow horizontal resize
++            // Use fixed size based on content - prevents manual resizing
+             dialog.layout()->setSizeConstraint(QLayout::SetFixedSize);
+ 
+             if (dialog.exec() == QDialog::Accepted) {
+diff --git a/src/libwalletqt/Wallet.h b/src/libwalletqt/Wallet.h
+index 4b7d3d6b..2b345310 100644
+--- a/src/libwalletqt/Wallet.h
++++ b/src/libwalletqt/Wallet.h
+@@ -231,7 +231,7 @@ public:
+     void syncStatusUpdated(quint64 height, quint64 target);
+     Q_INVOKABLE void skipToTip();
+     Q_INVOKABLE void syncDateRange(const QDate &start, const QDate &end);
+-    void fullSync(); // from restoreHeight, not genesis - recreate your wallet for that ;P
++    void fullSync(); // Rescans from wallet creation height, not genesis block
+ 
+     bool importTransaction(const QString &txid);
+ 
+diff --git a/src/utils/Utils.cpp b/src/utils/Utils.cpp
+index a3339485..23ae865b 100644
+--- a/src/utils/Utils.cpp
++++ b/src/utils/Utils.cpp
+@@ -717,8 +717,14 @@ QString formatSyncTimeEstimate(quint64 blocks) {
+     quint64 minutes = blocks * 2;
+     quint64 days = minutes / (60 * 24);
+ 
+-    QString timeStr = (days > 0) ? QString("~%1 days").arg(days) : QString("~%1 hours").arg(minutes / 60);
+-    if (days == 0 && minutes < 60) timeStr = "< 1 hour";
++    QString timeStr;
++    if (days > 0) {
++        timeStr = QObject::tr("~%1 days").arg(days);
++    } else if (minutes >= 60) {
++        timeStr = QObject::tr("~%1 hours").arg(minutes / 60);
++    } else {
++        timeStr = QObject::tr("< 1 hour");
++    }
+     return timeStr;
+ }
+ 
+@@ -750,16 +756,16 @@ QString getPausedSyncStatus(Wallet *wallet, Nodes *nodes, QString *tooltip) {
+ 
+     if (daemonHeight > 0) {
+         if (tooltip) {
+-            *tooltip = QString("Wallet Height: %1 | Network Tip: %2").arg(walletHeight).arg(daemonHeight);
++            *tooltip = QObject::tr("Wallet Height: %1 | Network Tip: %2").arg(walletHeight).arg(daemonHeight);
+         }
+         quint64 blocksBehind = (daemonHeight > startHeight) ? (daemonHeight - startHeight) : 0;
+         if (blocksBehind == 0) {
+-            return "[PAUSED] Sync paused";
++            return QObject::tr("[PAUSED] Sync paused");
+         }
+         return formatPausedSyncStatus(blocksBehind);
+     } 
+     
+-    return "[PAUSED] Sync paused";
++    return QObject::tr("[PAUSED] Sync paused");
+ }
+ 
+ QString formatRestoreHeight(quint64 height) {
+
+commit 1cf93f99cc186d0a23ff3a64a5aaaba2af54f223
+Author: gg <chown_tee@proton.me>
+Date:   Mon Jan 12 08:59:57 2026 -0500
+
+    fix file close cache bug
+
+diff --git a/src/model/WalletKeysFilesModel.cpp b/src/model/WalletKeysFilesModel.cpp
+index 58bc703c..fc85eaa9 100644
+--- a/src/model/WalletKeysFilesModel.cpp
++++ b/src/model/WalletKeysFilesModel.cpp
+@@ -97,18 +97,19 @@ void WalletKeysFilesModel::findWallets() {
+ 
+         if (Utils::fileExists(basePath + ".address.txt")) {
+             QFile file(basePath + ".address.txt");
+-            if (!file.open(QFile::ReadOnly | QFile::Text))
+-                continue;
+-            const QString _address = QString::fromUtf8(file.readAll());
+-
+-            if (!_address.isEmpty()) {
+-                addr = _address;
+-                if (addr.startsWith("5") || addr.startsWith("7"))
+-                    networkType = NetworkType::STAGENET;
+-                else if (addr.startsWith("9") || addr.startsWith("B"))
+-                    networkType = NetworkType::TESTNET;
++            if (file.open(QFile::ReadOnly | QFile::Text)) {
++                const QString _address = QString::fromUtf8(file.readAll());
++
++                if (!_address.isEmpty()) {
++                    addr = _address;
++                    if (addr.startsWith("5") || addr.startsWith("7"))
++                        networkType = NetworkType::STAGENET;
++                    else if (addr.startsWith("9") || addr.startsWith("B"))
++                        networkType = NetworkType::TESTNET;
++                }
++                file.close();
+             }
+-            file.close();
++            // If file can't be opened, just proceed without the cached address
+         }
+ 
+         this->addWalletKeysFile(WalletKeysFile(fileInfo, networkType, std::move(addr)));
+
+commit 8b90b3c9133aacad2d6789fc7e59bbe9ebebc09f
+Author: gg <chown_tee@proton.me>
+Date:   Mon Jan 12 08:58:23 2026 -0500
+
+    fix p1: full sync bug & mutex
+
+diff --git a/src/WindowManager.cpp b/src/WindowManager.cpp
+index b0e50ec2..69d81198 100644
+--- a/src/WindowManager.cpp
++++ b/src/WindowManager.cpp
+@@ -106,7 +106,7 @@ void WindowManager::close() {
+ 
+     // Wait for all threads in the global thread pool with timeout to prevent indefinite blocking
+     if (!QThreadPool::globalInstance()->waitForDone(15000)) {
+-        qCritical() << "WindowManager: Thread pool tasks did not complete within 30s timeout. "
++        qCritical() << "WindowManager: Thread pool tasks did not complete within 15s timeout. "
+                     << "Forcing exit to prevent use-after-free.";
+         std::_Exit(1);  // Fast exit without cleanup - threads may still hold resources
+     }
+diff --git a/src/libwalletqt/Wallet.cpp b/src/libwalletqt/Wallet.cpp
+index 4c079f42..f43605e8 100644
+--- a/src/libwalletqt/Wallet.cpp
++++ b/src/libwalletqt/Wallet.cpp
+@@ -574,6 +574,7 @@ void Wallet::skipToTip() {
+         return;
+     uint64_t tip = m_wallet2->get_blockchain_current_height();
+     if (tip > 0) {
++        QMutexLocker locker(&m_asyncMutex);
+         // Log previous height for debugging
+         uint64_t prevHeight = m_wallet2->get_refresh_from_block_height();
+         qInfo() << "Skip Sync triggered. Head moving from" << prevHeight << "to:" << tip;
+@@ -599,10 +600,12 @@ void Wallet::syncDateRange(const QDate &start, const QDate &end) {
+     if (startHeight >= endHeight)
+         return;
+ 
+-    m_stopHeight = endHeight;
+-    m_rangeSyncActive = true;
+-
+-    m_wallet2->set_refresh_from_block_height(startHeight);
++    {
++        QMutexLocker locker(&m_asyncMutex);
++        m_stopHeight = endHeight;
++        m_rangeSyncActive = true;
++        m_wallet2->set_refresh_from_block_height(startHeight);
++    }
+     pauseRefresh();
+     startRefresh();
+ }
+@@ -627,13 +630,12 @@ void Wallet::fullSync() {
+                    << ". This may miss transactions if skipToTip() was previously used.";
+     }
+ 
+-    m_wallet2->set_refresh_from_block_height(originalHeight);
++    {
++        QMutexLocker locker(&m_asyncMutex);
++        m_wallet2->set_refresh_from_block_height(originalHeight);
++    }
+     // Trigger rescan
+     pauseRefresh();
+-
+-    // Optional: Clear transaction cache to ensure fresh view
+-    // m_wallet2->clearCache();
+-
+     startRefresh();
+ 
+     qInfo() << "Full Sync triggered. Rescanning from original restore height:" << originalHeight;
+
+commit 28a2f6d8f96e52ce48431ad287fa39386785f7e8
+Author: gg <chown_tee@proton.me>
+Date:   Mon Jan 12 08:24:03 2026 -0500
+
+    resolve build errors & lint warnings
+
+diff --git a/src/MainWindow.cpp b/src/MainWindow.cpp
+index d15bf349..9282db96 100644
+--- a/src/MainWindow.cpp
++++ b/src/MainWindow.cpp
+@@ -277,14 +277,8 @@ void MainWindow::initStatusBar() {
+         auto *fromDateEdit = new QDateEdit(QDate::currentDate().addDays(-defaultDays));
+         fromDateEdit->setCalendarPopup(true);
+         fromDateEdit->setDisplayFormat("yyyy-MM-dd");
+-        fromDateEdit->setCalendarPopup(true);
+-        fromDateEdit->setDisplayFormat("yyyy-MM-dd");
+         fromDateEdit->setToolTip(tr("Calculated from 'End date' and day span."));
+ 
+-
+-        toDateEdit->setCalendarPopup(true);
+-        toDateEdit->setDisplayFormat("yyyy-MM-dd");
+-
+         auto *infoLabel = new QLabel;
+         infoLabel->setWordWrap(true);
+         infoLabel->setStyleSheet("QLabel { color: #888; font-size: 11px; }");
+@@ -994,17 +988,19 @@ void MainWindow::onSyncStatus(quint64 height, quint64 target, bool daemonSync) {
+     } else {
+         // Calculate depth
+         quint64 blocksLeft = (target > height) ? (target - height) : 0;
+-        // Estimate download size in MB: assuming 500 MB for full history,
+-        // and we are blocksLeft behind out of (target-1) total blocks (since block 0 is genesis)
+-        double approximateSizeMB = 0.0;
++        // Estimate download size
++        QString sizeText;
+         if (target > 1) {
+              quint64 estimatedBytes = Utils::estimateSyncDataSize(blocksLeft);
+              sizeText = Utils::formatBytes(estimatedBytes);
+         }
+         QString statusMsg = Utils::formatSyncStatus(height, target, daemonSync);
+-        // Shows "# blocks remaining (approx. X MB)" to sync
+-        // Shows "Wallet sync: # blocks remaining (approx. X MB)"
+-        this->setStatusText(QString("%1 (approx. %2)").arg(statusMsg).arg(sizeText));
++        // Show size estimate only if available
++        if (!sizeText.isEmpty()) {
++            this->setStatusText(QString("%1 (approx. %2)").arg(statusMsg).arg(sizeText));
++        } else {
++            this->setStatusText(statusMsg);
++        }
+     }
+     m_statusLabelStatus->setToolTip(QString("Wallet Height: %1 | Network Tip: %2").arg(height).arg(target));
+ }
+diff --git a/src/WindowManager.cpp b/src/WindowManager.cpp
+index 38c4cd97..b0e50ec2 100644
+--- a/src/WindowManager.cpp
++++ b/src/WindowManager.cpp
+@@ -104,8 +104,12 @@ void WindowManager::close() {
+     // Stop Tor manager threads
+     torManager()->stop();
+ 
+-    // Wait for all threads in the global thread pool
+-    QThreadPool::globalInstance()->waitForDone();
++    // Wait for all threads in the global thread pool with timeout to prevent indefinite blocking
++    if (!QThreadPool::globalInstance()->waitForDone(15000)) {
++        qCritical() << "WindowManager: Thread pool tasks did not complete within 30s timeout. "
++                    << "Forcing exit to prevent use-after-free.";
++        std::_Exit(1);  // Fast exit without cleanup - threads may still hold resources
++    }
+ 
+     for (const auto &window: m_windows) {
+         window->close();
+diff --git a/src/libwalletqt/Wallet.cpp b/src/libwalletqt/Wallet.cpp
+index 85ec7399..4c079f42 100644
+--- a/src/libwalletqt/Wallet.cpp
++++ b/src/libwalletqt/Wallet.cpp
+@@ -592,10 +592,9 @@ void Wallet::syncDateRange(const QDate &start, const QDate &end) {
+     cryptonote::network_type nettype = m_wallet2->nettype();
+     QString filename = Utils::getRestoreHeightFilename(static_cast<NetworkType::Type>(nettype));
+ 
+-    auto lookup = RestoreHeightLookup::fromFile(filename, static_cast<NetworkType::Type>(nettype));
++    std::unique_ptr<RestoreHeightLookup> lookup(RestoreHeightLookup::fromFile(filename, static_cast<NetworkType::Type>(nettype)));
+     uint64_t startHeight = lookup->dateToHeight(start.startOfDay().toSecsSinceEpoch());
+     uint64_t endHeight = lookup->dateToHeight(end.startOfDay().toSecsSinceEpoch());
+-    delete lookup;
+ 
+     if (startHeight >= endHeight)
+         return;
+@@ -621,9 +620,11 @@ void Wallet::fullSync() {
+     if (!storedHeight.isEmpty()) {
+         originalHeight = storedHeight.toULongLong();
+     } else {
+-        // Fallback (dangerous if skipped, but better than 0)
++        // Fallback: if skipToTip() was used, this may be the current tip, missing all transactions
+         originalHeight = m_wallet2->get_refresh_from_block_height();
+->>>>>>> 43ee0e4e (Implement Skip Sync and Data Saving features)
++        qWarning() << "fullSync: No stored creation height found (feather.creation_height). "
++                   << "Falling back to current refresh height:" << originalHeight
++                   << ". This may miss transactions if skipToTip() was previously used.";
+     }
+ 
+     m_wallet2->set_refresh_from_block_height(originalHeight);
+@@ -672,6 +673,7 @@ bool Wallet::importTransaction(const QString &txid) {
+         m_wallet2->scan_tx(txids);
+         qInfo() << "Successfully imported transaction:" << txid;
+         this->updateBalance();
++        this->history()->refresh();
+         return true;
+     } catch (const std::exception &e) {
+         qWarning() << "Failed to import transaction: " << txid << ", error: " << e.what();
+diff --git a/src/libwalletqt/Wallet.h b/src/libwalletqt/Wallet.h
+index 8dee4365..4b7d3d6b 100644
+--- a/src/libwalletqt/Wallet.h
++++ b/src/libwalletqt/Wallet.h
+@@ -532,8 +532,8 @@ private:
+     QTimer *m_storeTimer = nullptr;
+     std::set<std::string> m_selectedInputs;
+ 
+-    uint64_t m_stopHeight = 0;
+-    bool m_rangeSyncActive = false;
++    std::atomic<quint64> m_stopHeight{0};
++    std::atomic<bool> m_rangeSyncActive{false};
+ };
+ 
+ #endif // FEATHER_WALLET_H
+diff --git a/src/utils/Utils.cpp b/src/utils/Utils.cpp
+index 55260154..a3339485 100644
+--- a/src/utils/Utils.cpp
++++ b/src/utils/Utils.cpp
+@@ -752,6 +752,7 @@ QString getPausedSyncStatus(Wallet *wallet, Nodes *nodes, QString *tooltip) {
+         if (tooltip) {
+             *tooltip = QString("Wallet Height: %1 | Network Tip: %2").arg(walletHeight).arg(daemonHeight);
+         }
++        quint64 blocksBehind = (daemonHeight > startHeight) ? (daemonHeight - startHeight) : 0;
+         if (blocksBehind == 0) {
+             return "[PAUSED] Sync paused";
+         }
+
+commit 29c90e409a0e092b3404c72aa4184206b8c6e86b
+Author: gg <chown_tee@proton.me>
+Date:   Sat Jan 10 09:43:07 2026 -0500
+
+    breaking commit? why?
+
+diff --git a/src/MainWindow.cpp b/src/MainWindow.cpp
+index 7b58f564..d15bf349 100644
+--- a/src/MainWindow.cpp
++++ b/src/MainWindow.cpp
+@@ -998,13 +998,8 @@ void MainWindow::onSyncStatus(quint64 height, quint64 target, bool daemonSync) {
+         // and we are blocksLeft behind out of (target-1) total blocks (since block 0 is genesis)
+         double approximateSizeMB = 0.0;
+         if (target > 1) {
+-            approximateSizeMB = (blocksLeft * 500.0) / (target - 1);
+-        }
+-        QString sizeText;
+-        if (approximateSizeMB < 1) {
+-            sizeText = QString("%1 KB").arg(QString::number(approximateSizeMB * 1024, 'f', 0));
+-        } else {
+-            sizeText = QString("%1 MB").arg(QString::number(approximateSizeMB, 'f', 1));
++             quint64 estimatedBytes = Utils::estimateSyncDataSize(blocksLeft);
++             sizeText = Utils::formatBytes(estimatedBytes);
+         }
+         QString statusMsg = Utils::formatSyncStatus(height, target, daemonSync);
+         // Shows "# blocks remaining (approx. X MB)" to sync
+diff --git a/src/utils/Utils.cpp b/src/utils/Utils.cpp
+index 0ef06d99..55260154 100644
+--- a/src/utils/Utils.cpp
++++ b/src/utils/Utils.cpp
+@@ -723,8 +723,8 @@ QString formatSyncTimeEstimate(quint64 blocks) {
+ }
+ 
+ quint64 estimateSyncDataSize(quint64 blocks) {
+-    // Estimate 1024 bytes per block (1KB) for wallet scanning.
+-    return blocks * 1024;
++    // Estimate 30KB per block for wallet scanning.
++    return blocks * 30 * 1024;
+ }
+ 
+ QString formatPausedSyncStatus(quint64 blocks) {
+@@ -752,7 +752,9 @@ QString getPausedSyncStatus(Wallet *wallet, Nodes *nodes, QString *tooltip) {
+         if (tooltip) {
+             *tooltip = QString("Wallet Height: %1 | Network Tip: %2").arg(walletHeight).arg(daemonHeight);
+         }
+-        quint64 blocksBehind = (daemonHeight > startHeight) ? (daemonHeight - startHeight) : 0;
++        if (blocksBehind == 0) {
++            return "[PAUSED] Sync paused";
++        }
+         return formatPausedSyncStatus(blocksBehind);
+     } 
+     
+
+commit c7f88c3854c1fea88ee356d7c38d5b6944571ea9
+Author: gg <chown_tee@proton.me>
+Date:   Sat Jan 10 04:37:11 2026 -0500
+
+    fix resize bug?
+
+diff --git a/src/dialog/TxImportDialog.cpp b/src/dialog/TxImportDialog.cpp
+index 1473311f..56b2befc 100644
+--- a/src/dialog/TxImportDialog.cpp
++++ b/src/dialog/TxImportDialog.cpp
+@@ -18,6 +18,7 @@ TxImportDialog::TxImportDialog(QWidget *parent, Wallet *wallet)
+     connect(ui->btn_import, &QPushButton::clicked, this, &TxImportDialog::onImport);
+ 
+     this->adjustSize();
++    this->layout()->setSizeConstraint(QLayout::SetFixedSize);
+ }
+ 
+ void TxImportDialog::onImport() {
+
+commit 7e93b8fd4083e1e4d0d04fda0569fb6f3d3117b1
+Author: gg <chown_tee@proton.me>
+Date:   Sat Jan 10 00:13:33 2026 -0500
+
+    more deprecation warning/Qt6 stuff
+
+diff --git a/src/plugins/crowdfunding/CCSProgressDelegate.cpp b/src/plugins/crowdfunding/CCSProgressDelegate.cpp
+index c915d24d..021b36ea 100644
+--- a/src/plugins/crowdfunding/CCSProgressDelegate.cpp
++++ b/src/plugins/crowdfunding/CCSProgressDelegate.cpp
+@@ -23,7 +23,7 @@ void CCSProgressDelegate::paint(QPainter *painter, const QStyleOptionViewItem &o
+     progressBarOption.state = QStyle::State_Enabled;
+     progressBarOption.direction = QApplication::layoutDirection();
+     progressBarOption.rect = option.rect;
+-    progressBarOption.fontMetrics = QApplication::fontMetrics();
++    progressBarOption.fontMetrics = QFontMetrics(qApp->font());
+     progressBarOption.minimum = 0;
+     progressBarOption.maximum = 100;
+     progressBarOption.textAlignment = Qt::AlignCenter;
+diff --git a/src/qrcode/utils/QrCodeUtils.cpp b/src/qrcode/utils/QrCodeUtils.cpp
+index e957780f..ee3841eb 100644
+--- a/src/qrcode/utils/QrCodeUtils.cpp
++++ b/src/qrcode/utils/QrCodeUtils.cpp
+@@ -3,14 +3,14 @@
+ 
+ #include "QrCodeUtils.h"
+ 
+-Result QrCodeUtils::ReadBarcode(const QImage& img, const ZXing::DecodeHints& hints)
++Result QrCodeUtils::ReadBarcode(const QImage& img, const ZXing::ReaderOptions& hints)
+ {
+     auto ImgFmtFromQImg = [](const QImage& img){
+         switch (img.format()) {
+             case QImage::Format_ARGB32:
+             case QImage::Format_RGB32:
+ #if Q_BYTE_ORDER == Q_LITTLE_ENDIAN
+-                return ZXing::ImageFormat::BGRX;
++                return ZXing::ImageFormat::BGRA;
+ 
+ #else
+                 return ZXing::ImageFormat::XRGB;
+@@ -21,7 +21,7 @@ Result QrCodeUtils::ReadBarcode(const QImage& img, const ZXing::DecodeHints& hin
+ 
+             case QImage::Format_RGBX8888:
+             case QImage::Format_RGBA8888: 
+-                return ZXing::ImageFormat::RGBX;
++                return ZXing::ImageFormat::RGBA;
+ 
+             case QImage::Format_Grayscale8: 
+                 return ZXing::ImageFormat::Lum;
+@@ -50,7 +50,7 @@ Result QrCodeUtils::ReadBarcode(const QImage& img, const ZXing::DecodeHints& hin
+ 
+ 
+ QString QrCodeUtils::scanImage(const QImage &img) {
+-    const auto hints = ZXing::DecodeHints()
++    const auto hints = ZXing::ReaderOptions()
+             .setFormats(ZXing::BarcodeFormat::QRCode | ZXing::BarcodeFormat::DataMatrix)
+             .setTryHarder(true)
+             .setBinarizer(ZXing::Binarizer::FixedThreshold);
+diff --git a/src/qrcode/utils/QrCodeUtils.h b/src/qrcode/utils/QrCodeUtils.h
+index 305bc968..b41c7be0 100644
+--- a/src/qrcode/utils/QrCodeUtils.h
++++ b/src/qrcode/utils/QrCodeUtils.h
+@@ -27,7 +27,7 @@ private:
+ class QrCodeUtils {
+ public:
+     static QString scanImage(const QImage &img);
+-    static Result ReadBarcode(const QImage& img, const ZXing::DecodeHints& hints = { });
++    static Result ReadBarcode(const QImage& img, const ZXing::ReaderOptions& hints = { });
+ };
+ 
+ #endif //FEATHER_QRCODEUTILS_H
+diff --git a/src/utils/WebsocketClient.cpp b/src/utils/WebsocketClient.cpp
+index 815666bf..fd0e089a 100644
+--- a/src/utils/WebsocketClient.cpp
++++ b/src/utils/WebsocketClient.cpp
+@@ -20,7 +20,7 @@ WebsocketClient::WebsocketClient(QObject *parent)
+     connect(webSocket, &QWebSocket::stateChanged, this, &WebsocketClient::onStateChanged);
+     connect(webSocket, &QWebSocket::connected, this, &WebsocketClient::onConnected);
+     connect(webSocket, &QWebSocket::disconnected, this, &WebsocketClient::onDisconnected);
+-    connect(webSocket, QOverload<QAbstractSocket::SocketError>::of(&QWebSocket::error), this, &WebsocketClient::onError);
++    connect(webSocket, &QWebSocket::errorOccurred, this, &WebsocketClient::onError);
+ 
+     connect(webSocket, &QWebSocket::binaryMessageReceived, this, &WebsocketClient::onbinaryMessageReceived);
+ 
+diff --git a/src/widgets/NodeWidget.cpp b/src/widgets/NodeWidget.cpp
+index b2c94e77..b01e5d23 100644
+--- a/src/widgets/NodeWidget.cpp
++++ b/src/widgets/NodeWidget.cpp
+@@ -21,8 +21,8 @@ NodeWidget::NodeWidget(QWidget *parent)
+ 
+     connect(ui->btn_addCustomNodes, &QPushButton::clicked, this, &NodeWidget::onCustomAddClicked);
+ 
+-    connect(ui->checkBox_websocketList, &QCheckBox::stateChanged, [this](int id){
+-        bool custom = (id == 0);
++    connect(ui->checkBox_websocketList, &QCheckBox::checkStateChanged, [this](Qt::CheckState state){
++        bool custom = (state == Qt::Unchecked);
+         ui->stackedWidget->setCurrentIndex(custom);
+         ui->frame_addCustomNodes->setVisible(custom);
+         conf()->set(Config::nodeSource, custom);
+
+commit 8fa89ac3cc8a109e58a7122666807f72c4639955
+Author: gg <chown_tee@proton.me>
+Date:   Fri Jan 9 17:31:58 2026 -0500
+
+    more deprecation warnings resolved
+
+diff --git a/src/model/HistoryView.cpp b/src/model/HistoryView.cpp
+index c9820971..eb10219e 100644
+--- a/src/model/HistoryView.cpp
++++ b/src/model/HistoryView.cpp
+@@ -115,8 +115,8 @@ void HistoryView::showHeaderMenu(const QPoint& position)
+ {
+     const QList<QAction*> actions = m_columnActions->actions();
+     for (auto& action : actions) {
+-        Q_ASSERT(static_cast<QMetaType::Type>(action->data().type()) == QMetaType::Int);
+-        if (static_cast<QMetaType::Type>(action->data().type()) != QMetaType::Int) {
++        Q_ASSERT(static_cast<QMetaType::Type>(action->data().typeId()) == QMetaType::Int);
++        if (static_cast<QMetaType::Type>(action->data().typeId()) != QMetaType::Int) {
+             continue;
+         }
+         int columnIndex = action->data().toInt();
+@@ -131,8 +131,8 @@ void HistoryView::toggleColumnVisibility(QAction* action)
+     // Verify action carries a column index as data. Since QVariant.toInt()
+     // below will accept anything that's interpretable as int, perform a type
+     // check here to make sure data actually IS int
+-    Q_ASSERT(static_cast<QMetaType::Type>(action->data().type()) == QMetaType::Int);
+-    if (static_cast<QMetaType::Type>(action->data().type()) != QMetaType::Int) {
++    Q_ASSERT(static_cast<QMetaType::Type>(action->data().typeId()) == QMetaType::Int);
++    if (static_cast<QMetaType::Type>(action->data().typeId()) != QMetaType::Int) {
+         return;
+     }
+ 
+
+commit ed93160b727af3c1ae334cd05572ecd143a7a750
+Author: gg <chown_tee@proton.me>
+Date:   Fri Jan 9 17:30:45 2026 -0500
+
+    handle deprecation warnings in build
+
+diff --git a/src/WindowManager.cpp b/src/WindowManager.cpp
+index 13ad493f..38c4cd97 100644
+--- a/src/WindowManager.cpp
++++ b/src/WindowManager.cpp
+@@ -789,7 +789,10 @@ QString WindowManager::loadStylesheet(const QString &resource) {
+         return "";
+     }
+ 
+-    f.open(QFile::ReadOnly | QFile::Text);
++    if (!f.open(QFile::ReadOnly | QFile::Text)) {
++        qWarning() << "Failed to open stylesheet:" << resource;
++        return "";
++    }
+     QTextStream ts(&f);
+     QString data = ts.readAll();
+     f.close();
+diff --git a/src/model/AddressBookProxyModel.h b/src/model/AddressBookProxyModel.h
+index 4ea5565a..dfcbad23 100644
+--- a/src/model/AddressBookProxyModel.h
++++ b/src/model/AddressBookProxyModel.h
+@@ -17,8 +17,9 @@ public:
+ 
+ public slots:
+     void setSearchFilter(const QString& searchString){
++        beginFilterChange();
+         m_searchRegExp.setPattern(searchString);
+-        invalidateFilter();
++        endFilterChange();
+     }
+ 
+ private:
+diff --git a/src/model/SubaddressProxyModel.h b/src/model/SubaddressProxyModel.h
+index 38069ed1..d65c68aa 100644
+--- a/src/model/SubaddressProxyModel.h
++++ b/src/model/SubaddressProxyModel.h
+@@ -18,9 +18,10 @@ public:
+ 
+ public slots:
+     void setSearchFilter(const QString& searchString){
++        beginFilterChange();
+         m_searchRegExp.setPattern(searchString);
+         m_searchCaseSensitiveRegExp.setPattern(searchString);
+-        invalidateFilter();
++        endFilterChange();
+     }
+ 
+ private:
+diff --git a/src/model/TransactionHistoryProxyModel.h b/src/model/TransactionHistoryProxyModel.h
+index 8217efbe..50e8a72c 100644
+--- a/src/model/TransactionHistoryProxyModel.h
++++ b/src/model/TransactionHistoryProxyModel.h
+@@ -19,8 +19,9 @@ public:
+ 
+ public slots:
+     void setSearchFilter(const QString& searchString){
++        beginFilterChange();
+         m_searchRegExp.setPattern(searchString);
+-        invalidateFilter();
++        endFilterChange();
+     }
+ 
+ private:
+diff --git a/src/model/WalletKeysFilesModel.cpp b/src/model/WalletKeysFilesModel.cpp
+index 343ad181..58bc703c 100644
+--- a/src/model/WalletKeysFilesModel.cpp
++++ b/src/model/WalletKeysFilesModel.cpp
+@@ -97,7 +97,8 @@ void WalletKeysFilesModel::findWallets() {
+ 
+         if (Utils::fileExists(basePath + ".address.txt")) {
+             QFile file(basePath + ".address.txt");
+-            file.open(QFile::ReadOnly | QFile::Text);
++            if (!file.open(QFile::ReadOnly | QFile::Text))
++                continue;
+             const QString _address = QString::fromUtf8(file.readAll());
+ 
+             if (!_address.isEmpty()) {
+
+commit 5410323c245a30f7c87e6f77adad115bed5a7a6a
+Author: gg <chown_tee@proton.me>
+Date:   Fri Jan 9 17:22:23 2026 -0500
+
+    fixup
+
+diff --git a/cmake/FindBCUR.cmake b/cmake/FindBCUR.cmake
+index 44ce1bbc..671ce4cd 100644
+--- a/cmake/FindBCUR.cmake
++++ b/cmake/FindBCUR.cmake
+@@ -1,18 +1,12 @@
+-message(STATUS "FindBCUR: Starting. Initial BCUR_INCLUDE_DIR=${BCUR_INCLUDE_DIR}")
+ find_path(BCUR_INCLUDE_DIR "bcur/bc-ur.hpp")
+ find_library(BCUR_LIBRARY bcur)
+ 
+-message(STATUS "FindBCUR: After find. BCUR_INCLUDE_DIR=${BCUR_INCLUDE_DIR}")
+-
+ if (NOT BCUR_INCLUDE_DIR OR NOT BCUR_LIBRARY)
+     MESSAGE(STATUS "Could not find installed BCUR, using vendored library instead")
+     set(BCUR_VENDORED "ON")
+-    set(BCUR_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/src/third-party CACHE PATH "Path to BCUR headers" FORCE)
+-    set(BCUR_LIBRARY bcur_static CACHE STRING "BCUR library name" FORCE)
+-    message(STATUS "Using vendored BCUR at ${BCUR_INCLUDE_DIR}")
+-else()
+-    message(STATUS "Found installed BCUR at ${BCUR_INCLUDE_DIR}")
++    set(BCUR_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/src/third-party)
++    set(BCUR_LIBRARY bcur_static)
+ endif()
+ 
+-message(STATUS "FindBCUR: Final BCUR PATH ${BCUR_INCLUDE_DIR}")
+-message(STATUS "FindBCUR: Final BCUR LIBRARY ${BCUR_LIBRARY}")
+\ No newline at end of file
++message(STATUS "BCUR PATH ${BCUR_INCLUDE_DIR}")
++message(STATUS "BCUR LIBRARY ${BCUR_LIBRARY}")
+\ No newline at end of file
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 3587f5bb..1ff01908 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -309,6 +309,7 @@ if (WITH_SCANNER)
+             Qt::Multimedia
+             Qt::MultimediaWidgets
+             ${ZXING_LIBRARIES}
++            ${BCUR_LIBRARY}
+     )
+ endif()
+ 
+
+commit d1f3ce76ae028a22e56d718f3dac145fe3189872
+Author: gg <chown_tee@proton.me>
+Date:   Fri Jan 9 17:04:04 2026 -0500
+
+    fix
+
+diff --git a/cmake/FindBCUR.cmake b/cmake/FindBCUR.cmake
+index 671ce4cd..44ce1bbc 100644
+--- a/cmake/FindBCUR.cmake
++++ b/cmake/FindBCUR.cmake
+@@ -1,12 +1,18 @@
++message(STATUS "FindBCUR: Starting. Initial BCUR_INCLUDE_DIR=${BCUR_INCLUDE_DIR}")
+ find_path(BCUR_INCLUDE_DIR "bcur/bc-ur.hpp")
+ find_library(BCUR_LIBRARY bcur)
+ 
++message(STATUS "FindBCUR: After find. BCUR_INCLUDE_DIR=${BCUR_INCLUDE_DIR}")
++
+ if (NOT BCUR_INCLUDE_DIR OR NOT BCUR_LIBRARY)
+     MESSAGE(STATUS "Could not find installed BCUR, using vendored library instead")
+     set(BCUR_VENDORED "ON")
+-    set(BCUR_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/src/third-party)
+-    set(BCUR_LIBRARY bcur_static)
++    set(BCUR_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/src/third-party CACHE PATH "Path to BCUR headers" FORCE)
++    set(BCUR_LIBRARY bcur_static CACHE STRING "BCUR library name" FORCE)
++    message(STATUS "Using vendored BCUR at ${BCUR_INCLUDE_DIR}")
++else()
++    message(STATUS "Found installed BCUR at ${BCUR_INCLUDE_DIR}")
+ endif()
+ 
+-message(STATUS "BCUR PATH ${BCUR_INCLUDE_DIR}")
+-message(STATUS "BCUR LIBRARY ${BCUR_LIBRARY}")
+\ No newline at end of file
++message(STATUS "FindBCUR: Final BCUR PATH ${BCUR_INCLUDE_DIR}")
++message(STATUS "FindBCUR: Final BCUR LIBRARY ${BCUR_LIBRARY}")
+\ No newline at end of file
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index f94d2e38..3587f5bb 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -182,7 +182,7 @@ target_include_directories(feather PUBLIC
+         ${LIBZIP_INCLUDE_DIRS}
+         ${ZLIB_INCLUDE_DIRS}
+         ${POLYSEED_INCLUDE_DIR}
+-        ${BCUR_INCLUDE_DIR}
++
+ )
+ 
+ target_compile_definitions(feather PRIVATE FEATHER_VERSION="${DETECTED_FEATHER_VERSION}")
+@@ -194,6 +194,7 @@ if(WITH_SCANNER)
+             ${QtMultimedia_INCLUDE_DIRS}
+             ${QtMultimediaWidgets_INCLUDE_DIRS}
+             ${ZXING_INCLUDE_DIRS}
++            ${BCUR_INCLUDE_DIR}
+     )
+ endif()
+ 
+diff --git a/src/model/SubaddressProxyModel.h b/src/model/SubaddressProxyModel.h
+index 833c6f25..38069ed1 100644
+--- a/src/model/SubaddressProxyModel.h
++++ b/src/model/SubaddressProxyModel.h
+@@ -20,7 +20,7 @@ public slots:
+     void setSearchFilter(const QString& searchString){
+         m_searchRegExp.setPattern(searchString);
+         m_searchCaseSensitiveRegExp.setPattern(searchString);
+-        invalidate();
++        invalidateFilter();
+     }
+ 
+ private:
+
+commit b698555ecc125a4e582d05f7062d503349bff1b0
+Author: gg <chown_tee@proton.me>
+Date:   Wed Jan 7 06:37:00 2026 -0500
+
+    Implement Skip Sync and Data Saving features
+    
+    Logic:
+    - Add 'Skip to Tip', 'Date Range', and 'Full Sync' engine to libwalletqt
+    - Implement 'Scan Transaction' functionality for specific TXIDs
+    
+    UI:
+    - Add context menu actions to bottom bar for selective sync
+    - Display block-depth count in status bar, courtesy of @masflam
+    
+    bounty claimed here (as "mr_overquald")
+    https://bounties.monero.social/posts/79/1-230m-add-a-skip-sync-feature-to-a-monero-wallet
+    
+    Co-authored-by: MasFlam <masflam@masflam.com>
+    
+    refactor, cleanup, and format code.
+    
+    allow for storing a debug version in the build #
+    
+    wip gem
+    
+    idk gem, little pruney there
+    
+    restore master. Let's go from there again
+    
+    Implement Skip Sync and Data Saving features
+    
+    Logic:
+    - Add 'Skip to Tip', 'Date Range', and 'Full Sync' engine to libwalletqt
+    - Implement 'Scan Transaction' functionality for specific TXIDs
+    
+    UI:
+    - Add context menu actions to bottom bar for selective sync
+    - Display block-depth count in status bar, courtesy of @masflam
+    
+    bounty claimed here (as "mr_overquald")
+    https://bounties.monero.social/posts/79/1-230m-add-a-skip-sync-feature-to-a-monero-wallet
+    
+    Co-authored-by: MasFlam <masflam@masflam.com>
+    
+    allow for storing a debug version in the build #
+    
+    idk gem, little pruney there
+    
+    allow for storing a debug version in the build num (merge: keep-both)
+    
+    fix cmakelists
+    
+    wip
+    
+    ds updates to Wallet.cpp/Wallet.h
+    
+    fix build error
+    
+    wip
+    
+    wip2
+    
+    super
+    
+    getting there
+    
+    fix warning/info messages
+    
+    bigger scan Tx window
+    
+    fix transaction diaglogue sizing
+    
+    fix warning/info in build logs
+    
+    updae message box stuff
+    
+    better
+    
+    fix compile error; hopefully persist settings?
+    
+    fixing it up
+    
+    laughable bug
+    
+    better conditional & debug logging
+    
+    better?
+    
+    tidy estimatedBytes
+    
+    use simple QDialog for transaction Scan window
+    
+    rename to syncPause
+    
+    properly dispose of QThreadStorage disposal
+    
+    $ ./build/bin/feather --version
+    FeatherWallet 2.8.1-79-g16eec531
+    QThreadStorage: entry 2 destroyed before end of thread 0x562e3e2b3b90
+    QThreadStorage: entry 1 destroyed before end of thread 0x562e3e2b3b90
+    
+    shellcheck stuff?
+    
+    wip1
+    
+    wip2
+    
+    more wip
+    
+    better
+    
+    improvements in status bar
+    
+    debug build
+    
+    better!
+    
+    keep trucking
+    
+    better synch status
+    
+    trying to get status always updated
+    
+    put into helper method
+    
+    restore CMakeLists.txt back to master status
+    
+    polishing for review
+    
+    remove formatting diffs; remove BCUR ref
+    
+    refactor bool importTransaction()
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index dd2087ad..09fd8a86 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -1,7 +1,34 @@
+-cmake_minimum_required(VERSION 3.18)
++cmake_minimum_required(VERSION 3.16)
++
++# Configurable options
++option(FEATHER_VERSION_DEBUG_BUILD "Enable git describe version string" OFF)
++
++if(FEATHER_VERSION_DEBUG_BUILD AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
++    find_package(Git)
++    if(GIT_FOUND)
++        execute_process(
++            COMMAND ${GIT_EXECUTABLE} describe --tags --dirty --always
++            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
++            OUTPUT_VARIABLE GIT_DESCRIBE_VERSION
++            OUTPUT_STRIP_TRAILING_WHITESPACE
++        )
++        message(STATUS "Feather DEBUG BUILD version (git): ${GIT_DESCRIBE_VERSION}")
++        set(DETECTED_FEATHER_VERSION ${GIT_DESCRIBE_VERSION})
++    endif()
++endif()
++
++if(NOT DETECTED_FEATHER_VERSION)
++    set(DETECTED_FEATHER_VERSION "2.8.1")
++endif()
++
++# Extract standard version format for project()
++string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" PROJECT_VERSION_CLEAN "${DETECTED_FEATHER_VERSION}")
++if(NOT PROJECT_VERSION_CLEAN)
++    set(PROJECT_VERSION_CLEAN "2.8.1")
++endif()
+ 
+ project(feather
+-  VERSION "2.8.1"
++  VERSION ${PROJECT_VERSION_CLEAN}
+   DESCRIPTION "A free Monero desktop wallet"
+   LANGUAGES CXX C ASM
+ )
+diff --git a/setup_flags.sh b/setup_flags.sh
+new file mode 100644
+index 00000000..9112cf76
+--- /dev/null
++++ b/setup_flags.sh
+@@ -0,0 +1,15 @@
++#!/bin/bash
++
++# Configure CMake with custom flags
++# - FEATHER_VERSION_DEBUG_BUILD=ON : Use git describe for version string
++# - CHECK_UPDATES=OFF              : Disable built-in update checker
++# - USE_DEVICE_TREZOR=OFF          : Disable Trezor hardware wallet support
++# - WITH_SCANNER=OFF               : Disable webcam QR scanner support
++
++cmake \
++    -DCMAKE_BUILD_TYPE=Debug \
++    -DFEATHER_VERSION_DEBUG_BUILD=ON \
++    -DCHECK_UPDATES=OFF \
++    -DUSE_DEVICE_TREZOR=OFF \
++    -DWITH_SCANNER=OFF \
++    ..
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 1ad529ca..f94d2e38 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -185,7 +185,7 @@ target_include_directories(feather PUBLIC
+         ${BCUR_INCLUDE_DIR}
+ )
+ 
+-target_compile_definitions(feather PRIVATE FEATHER_VERSION="${PROJECT_VERSION}")
++target_compile_definitions(feather PRIVATE FEATHER_VERSION="${DETECTED_FEATHER_VERSION}")
+ target_compile_definitions(feather PRIVATE FEATHER_TARGET_TRIPLET="${FEATHER_TARGET_TRIPLET}")
+ target_compile_definitions(feather PRIVATE TOR_VERSION="${TOR_VERSION}")
+ 
+@@ -289,7 +289,6 @@ target_link_libraries(feather PRIVATE
+         ${ICU_LIBRARIES}
+         ${LIBZIP_LIBRARIES}
+         ${ZLIB_LIBRARIES}
+-        ${BCUR_LIBRARY}
+ )
+ 
+ if(CHECK_UPDATES)
+diff --git a/src/MainWindow.cpp b/src/MainWindow.cpp
+index 6a2d6b80..7b58f564 100644
+--- a/src/MainWindow.cpp
++++ b/src/MainWindow.cpp
+@@ -8,6 +8,10 @@
+ #include <QInputDialog>
+ #include <QMessageBox>
+ #include <QCheckBox>
++#include <QFormLayout>
++#include <QSpinBox>
++#include <QDateEdit>
++#include <QDialogButtonBox>
+ 
+ #include "constants.h"
+ #include "dialog/AddressCheckerIndexDialog.h"
+@@ -30,10 +34,12 @@
+ #include "libwalletqt/TransactionHistory.h"
+ #include "model/AddressBookModel.h"
+ #include "plugins/PluginRegistry.h"
++#include "plugins/Plugin.h"
+ #include "utils/AppData.h"
+ #include "utils/AsyncTask.h"
+ #include "utils/ColorScheme.h"
+ #include "utils/Icons.h"
++#include "utils/RestoreHeightLookup.h"
+ #include "utils/TorManager.h"
+ #include "utils/WebsocketNotifier.h"
+ 
+@@ -80,7 +86,7 @@ MainWindow::MainWindow(WindowManager *windowManager, Wallet *wallet, QWidget *pa
+ 
+     this->onOfflineMode(conf()->get(Config::offlineMode).toBool());
+     conf()->set(Config::restartRequired, false);
+-    
++
+     // Websocket notifier
+ #ifdef CHECK_UPDATES
+     connect(websocketNotifier(), &WebsocketNotifier::UpdatesReceived, m_updater.data(), &Updater::wsUpdatesReceived);
+@@ -135,7 +141,7 @@ void MainWindow::initStatusBar() {
+     this->statusBar()->setFixedHeight(30);
+ 
+     m_statusLabelStatus = new QLabel("Idle", this);
+-    m_statusLabelStatus->setTextInteractionFlags(Qt::TextSelectableByMouse);
++    m_statusLabelStatus->setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::LinksAccessibleByMouse);
+     this->statusBar()->addWidget(m_statusLabelStatus);
+ 
+     m_statusLabelNetStats = new QLabel("", this);
+@@ -188,6 +194,221 @@ void MainWindow::initStatusBar() {
+     connect(m_statusBtnHwDevice, &StatusBarButton::clicked, this, &MainWindow::menuHwDeviceClicked);
+     this->statusBar()->addPermanentWidget(m_statusBtnHwDevice);
+     m_statusBtnHwDevice->hide();
++
++    m_statusLabelStatus->setContextMenuPolicy(Qt::ActionsContextMenu);
++
++    QAction *pauseSyncAction = new QAction(tr("Pause Sync"), this);
++    pauseSyncAction->setCheckable(true);
++    pauseSyncAction->setChecked(conf()->get(Config::syncPaused).toBool());
++    m_statusLabelStatus->addAction(pauseSyncAction);
++
++    QAction *skipSyncAction = new QAction(tr("Skip Sync"), this);
++    m_statusLabelStatus->addAction(skipSyncAction);
++
++    QAction *syncRangeAction = new QAction(tr("Sync Date Range..."), this);
++    m_statusLabelStatus->addAction(syncRangeAction);
++
++    QAction *fullSyncAction = new QAction(tr("Full Sync"), this);
++    m_statusLabelStatus->addAction(fullSyncAction);
++
++    QAction *scanTxAction = new QAction(tr("Scan Transaction"), this);
++    m_statusLabelStatus->addAction(scanTxAction);
++    ui->menuTools->addAction(scanTxAction);
++
++    connect(pauseSyncAction, &QAction::toggled, this, [this](bool checked) {
++        conf()->set(Config::syncPaused, checked);
++        if (m_wallet) {
++            if (checked) {
++                m_wallet->pauseRefresh();
++                
++                this->setPausedSyncStatus();
++            } else {
++                m_wallet->startRefresh();
++                this->setStatusText(tr("Resuming sync..."));
++            }
++        }
++    });
++
++    connect(skipSyncAction, &QAction::triggered, this, [this](){
++        if (!m_wallet) return;
++
++        QString msg = tr("Skip sync will set your wallet's restore height to the current network height.\n\n"
++                          "Use this if you know you haven't received any transactions since your last sync.\n"
++                          "You can always use 'Full Sync' to rescan from the beginning.\n\n"
++                          "Continue?");
++
++        if (QMessageBox::question(this, tr("Skip Sync"), msg) == QMessageBox::Yes) {
++            m_wallet->skipToTip();
++            this->setStatusText(tr("Skipped sync to tip."));
++        }
++    });
++
++    connect(syncRangeAction, &QAction::triggered, this, [this](){
++        if (!m_wallet) return;
++
++        QDialog dialog(this);
++        dialog.setWindowTitle(tr("Sync Date Range"));
++        dialog.setWindowIcon(QIcon(":/assets/images/appicons/64x64.png"));
++        dialog.setWindowFlags(dialog.windowFlags() & ~Qt::WindowContextHelpButtonHint);
++        dialog.setWindowFlags(dialog.windowFlags() | Qt::MSWindowsFixedSizeDialogHint);
++
++        auto *layout = new QVBoxLayout(&dialog);
++
++        auto *formLayout = new QFormLayout;
++        formLayout->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
++
++        auto *toDateEdit = new QDateEdit(QDate::currentDate());
++        toDateEdit->setCalendarPopup(true);
++        toDateEdit->setDisplayFormat("yyyy-MM-dd");
++
++        // Load lookup for accurate block calculations
++        NetworkType::Type nettype = m_wallet->nettype();
++        QString filename = Utils::getRestoreHeightFilename(nettype);
++
++        std::unique_ptr<RestoreHeightLookup> lookup(RestoreHeightLookup::fromFile(filename, nettype));
++
++        int defaultDays = 7;
++
++        auto *daysSpinBox = new QSpinBox;
++        daysSpinBox->setRange(1, 3650); // 10 years
++        daysSpinBox->setValue(defaultDays);
++        daysSpinBox->setSuffix(tr(" days"));
++
++        auto *fromDateEdit = new QDateEdit(QDate::currentDate().addDays(-defaultDays));
++        fromDateEdit->setCalendarPopup(true);
++        fromDateEdit->setDisplayFormat("yyyy-MM-dd");
++        fromDateEdit->setCalendarPopup(true);
++        fromDateEdit->setDisplayFormat("yyyy-MM-dd");
++        fromDateEdit->setToolTip(tr("Calculated from 'End date' and day span."));
++
++
++        toDateEdit->setCalendarPopup(true);
++        toDateEdit->setDisplayFormat("yyyy-MM-dd");
++
++        auto *infoLabel = new QLabel;
++        infoLabel->setWordWrap(true);
++        infoLabel->setStyleSheet("QLabel { color: #888; font-size: 11px; }");
++
++        formLayout->addRow(tr("Day span:"), daysSpinBox);
++        formLayout->addRow(tr("Start date:"), fromDateEdit);
++        formLayout->addRow(tr("End date:"), toDateEdit);
++
++        layout->addLayout(formLayout);
++        layout->addWidget(infoLabel);
++
++        auto updateInfo = [=, &lookup]() {
++            QDate start = fromDateEdit->date();
++            QDate end = toDateEdit->date();
++
++            uint64_t startHeight = lookup->dateToHeight(start.startOfDay().toSecsSinceEpoch());
++            uint64_t endHeight = lookup->dateToHeight(end.endOfDay().toSecsSinceEpoch());
++
++            if (endHeight < startHeight) endHeight = startHeight;
++            quint64 blocks = endHeight - startHeight;
++            quint64 size = Utils::estimateSyncDataSize(blocks);
++
++            infoLabel->setText(tr("Scanning ~%1 blocks\nEst. download size: %2")
++                               .arg(blocks)
++                               .arg(Utils::formatBytes(size)));
++        };
++
++        auto updateFromDate = [=]() {
++            fromDateEdit->setDate(toDateEdit->date().addDays(-daysSpinBox->value()));
++            updateInfo();
++        };
++
++        connect(fromDateEdit, &QDateEdit::dateChanged, updateInfo);
++        connect(toDateEdit, &QDateEdit::dateChanged, updateFromDate);
++        connect(daysSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), updateFromDate);
++
++        // Init label
++        updateInfo();
++
++        auto *btnBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
++        connect(btnBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
++        connect(btnBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
++        layout->addWidget(btnBox);
++
++        dialog.resize(320, dialog.height());
++
++        if (dialog.exec() == QDialog::Accepted) {
++            m_wallet->syncDateRange(fromDateEdit->date(), toDateEdit->date());
++
++            // Re-calculate for status text
++            uint64_t startHeight = lookup->dateToHeight(fromDateEdit->date().startOfDay().toSecsSinceEpoch());
++            uint64_t endHeight = lookup->dateToHeight(toDateEdit->date().endOfDay().toSecsSinceEpoch());
++            quint64 blocks = (endHeight > startHeight) ? endHeight - startHeight : 0;
++            quint64 size = Utils::estimateSyncDataSize(blocks);
++
++            this->setStatusText(QString("Syncing range %1 - %2 (~%3)...")
++                                .arg(fromDateEdit->date().toString("yyyy-MM-dd"))
++                                .arg(toDateEdit->date().toString("yyyy-MM-dd"))
++                                .arg(Utils::formatBytes(size)));
++        }
++    });
++
++    connect(fullSyncAction, &QAction::triggered, this, [this](){
++        if (m_wallet) {
++            QString estBlocks = "Unknown (waiting for node)";
++            QString estSize = "Unknown";
++
++            quint64 walletCreationHeight = m_wallet->getWalletCreationHeight();
++            quint64 daemonHeight = m_wallet->daemonBlockChainHeight();
++            quint64 blocksBehind = 0;
++
++            if (daemonHeight > 0) {
++                blocksBehind = (daemonHeight > walletCreationHeight) ? (daemonHeight - walletCreationHeight) : 0;
++                quint64 estimatedBytes = Utils::estimateSyncDataSize(blocksBehind);
++                estBlocks = QString::number(blocksBehind);
++                estSize = QString("~%1").arg(Utils::formatBytes(estimatedBytes));
++            }
++
++            QString msg = QString("Full sync will rescan from your restore height.\n\n"
++                                  "Blocks behind: %1\n"
++                                  "Estimated data: %2\n\n"
++                                  "Note: We will not rescan blocks which have cached/hashed/checksummed, "
++                                  "and any discrepancy between block height and daemon height can be understood in these terms.\n\n"
++                                  "Continue?")
++                          .arg(estBlocks)
++                          .arg(estSize);
++
++            if (QMessageBox::question(this, "Full Sync", msg) == QMessageBox::Yes) {
++                m_wallet->fullSync();
++                this->setStatusText(QString("Full sync started (%1)...").arg(estSize));
++            }
++        }
++    });
++
++    connect(scanTxAction, &QAction::triggered, this, [this](){
++        if (m_wallet) {
++            QDialog dialog(this);
++            dialog.setWindowTitle("Scan Transaction");
++            dialog.setWindowIcon(QIcon(":/assets/images/appicons/64x64.png"));
++
++            auto *layout = new QVBoxLayout(&dialog);
++            layout->addWidget(new QLabel("Enter transaction ID:"));
++
++            auto *lineEdit = new QLineEdit;
++            lineEdit->setMinimumWidth(600);
++            layout->addWidget(lineEdit);
++
++            auto *btnBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
++            connect(btnBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
++            connect(btnBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
++            layout->addWidget(btnBox);
++
++            // Compact vertical size, allow horizontal resize
++            dialog.layout()->setSizeConstraint(QLayout::SetFixedSize);
++
++            if (dialog.exec() == QDialog::Accepted) {
++                QString txid = lineEdit->text();
++                if (!txid.isEmpty()) {
++                    m_wallet->importTransaction(txid.trimmed());
++                    this->setStatusText("Transaction scanned: " + txid.trimmed().left(8) + "...");
++                }
++            }
++        }
++    });
+ }
+ 
+ void MainWindow::initPlugins() {
+@@ -489,6 +710,17 @@ void MainWindow::initWalletContext() {
+         this->onConnectionStatusChanged(status);
+         m_nodes->autoConnect();
+     });
++
++    connect(m_wallet, &Wallet::heightsRefreshed, this, [this](bool success, quint64 daemonHeight, quint64 targetHeight) {
++        // When paused, we might get success=false because wallet->refresh() is skipped,
++        // preventing strict cache updates. We should attempt to fallback to m_nodes info.
++        if (!success && !conf()->get(Config::syncPaused).toBool()) return;
++
++        // Update sync estimate if paused
++        if (conf()->get(Config::syncPaused).toBool()) {
++             this->setPausedSyncStatus();
++        }
++    });
+     connect(m_wallet, &Wallet::currentSubaddressAccountChanged, this, &MainWindow::updateTitle);
+     connect(m_wallet, &Wallet::walletPassphraseNeeded, this, &MainWindow::onWalletPassphraseNeeded);
+ 
+@@ -509,7 +741,7 @@ void MainWindow::initWalletContext() {
+     connect(m_wallet, &Wallet::deviceButtonRequest, this, &MainWindow::onDeviceButtonRequest);
+     connect(m_wallet, &Wallet::deviceButtonPressed, this, &MainWindow::onDeviceButtonPressed);
+     connect(m_wallet, &Wallet::deviceError,         this, &MainWindow::onDeviceError);
+-    
++
+     connect(m_wallet, &Wallet::multiBroadcast,      this, &MainWindow::onMultiBroadcast);
+ }
+ 
+@@ -590,7 +822,13 @@ void MainWindow::onWalletOpened() {
+     this->updatePasswordIcon();
+     this->updateTitle();
+     m_nodes->allowConnection();
+-    m_nodes->connectToNode();
++    if (!conf()->get(Config::disableAutoRefresh).toBool()) {
++        m_nodes->connectToNode();
++        if (conf()->get(Config::syncPaused).toBool()) {
++            m_wallet->pauseRefresh();
++            this->setPausedSyncStatus();
++        }
++    }
+     m_updateBytes.start(250);
+ 
+     if (conf()->get(Config::writeRecentlyOpenedWallets).toBool()) {
+@@ -632,6 +870,14 @@ void MainWindow::onBalanceUpdated(quint64 balance, quint64 spendable) {
+     m_statusLabelBalance->setText(balance_str);
+ }
+ 
++void MainWindow::setPausedSyncStatus() {
++    QString tooltip;
++    QString status = Utils::getPausedSyncStatus(m_wallet, m_nodes, &tooltip);
++    this->setStatusText(status);
++    if (!tooltip.isEmpty())
++        m_statusLabelStatus->setToolTip(tooltip);
++}
++
+ void MainWindow::setStatusText(const QString &text, bool override, int timeout) {
+     if (override) {
+         m_statusOverrideActive = true;
+@@ -742,11 +988,30 @@ void MainWindow::onMultiBroadcast(const QMap<QString, QString> &txHexMap) {
+ }
+ 
+ void MainWindow::onSyncStatus(quint64 height, quint64 target, bool daemonSync) {
+-    if (height >= (target - 1)) {
++    if (height >= (target - 1) && target > 0) {
+         this->updateNetStats();
++        this->setStatusText(QString("Synchronized (%1)").arg(height));
++    } else {
++        // Calculate depth
++        quint64 blocksLeft = (target > height) ? (target - height) : 0;
++        // Estimate download size in MB: assuming 500 MB for full history,
++        // and we are blocksLeft behind out of (target-1) total blocks (since block 0 is genesis)
++        double approximateSizeMB = 0.0;
++        if (target > 1) {
++            approximateSizeMB = (blocksLeft * 500.0) / (target - 1);
++        }
++        QString sizeText;
++        if (approximateSizeMB < 1) {
++            sizeText = QString("%1 KB").arg(QString::number(approximateSizeMB * 1024, 'f', 0));
++        } else {
++            sizeText = QString("%1 MB").arg(QString::number(approximateSizeMB, 'f', 1));
++        }
++        QString statusMsg = Utils::formatSyncStatus(height, target, daemonSync);
++        // Shows "# blocks remaining (approx. X MB)" to sync
++        // Shows "Wallet sync: # blocks remaining (approx. X MB)"
++        this->setStatusText(QString("%1 (approx. %2)").arg(statusMsg).arg(sizeText));
+     }
+-    this->setStatusText(Utils::formatSyncStatus(height, target, daemonSync));
+-    m_statusLabelStatus->setToolTip(QString("Wallet height: %1").arg(QString::number(height)));
++    m_statusLabelStatus->setToolTip(QString("Wallet Height: %1 | Network Tip: %2").arg(height).arg(target));
+ }
+ 
+ void MainWindow::onConnectionStatusChanged(int status)
+@@ -788,6 +1053,12 @@ void MainWindow::onConnectionStatusChanged(int status)
+         }
+     }
+ 
++    if (conf()->get(Config::syncPaused).toBool() && !conf()->get(Config::offlineMode).toBool()) {
++        if (status == Wallet::ConnectionStatus_Synchronizing || status == Wallet::ConnectionStatus_Synchronized) {
++            this->setPausedSyncStatus();
++        }
++    }
++
+     m_statusBtnConnectionStatusIndicator->setIcon(icon);
+ }
+ 
+@@ -967,7 +1238,7 @@ void MainWindow::onTransactionCreated(PendingTransaction *tx, const QVector<QStr
+ #ifdef WITH_SCANNER
+         OfflineTxSigningWizard wizard(this, m_wallet, tx);
+         wizard.exec();
+-        
++
+         if (!wizard.readyToCommit()) {
+             return;
+         } else {
+@@ -1142,7 +1413,7 @@ void MainWindow::showKeyImageSyncWizard() {
+ #ifdef WITH_SCANNER
+     OfflineTxSigningWizard wizard{this, m_wallet};
+     wizard.exec();
+-    
++
+     if (wizard.readyToSign()) {
+         TxConfAdvDialog dialog{m_wallet, "", this, true};
+         dialog.setUnsignedTransaction(wizard.unsignedTransaction());
+@@ -1533,6 +1804,11 @@ void MainWindow::updateNetStats() {
+         return;
+     }
+ 
++    if (conf()->get(Config::syncPaused).toBool()) {
++        m_statusLabelNetStats->hide();
++        return;
++    }
++
+     m_statusLabelNetStats->show();
+     m_statusLabelNetStats->setText(QString("(D: %1)").arg(Utils::formatBytes(m_wallet->getBytesReceived())));
+ }
+@@ -1544,12 +1820,12 @@ void MainWindow::rescanSpent() {
+                     "Make sure you are connected to a trusted node.\n\n"
+                     "Do you want to proceed?");
+     warning.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
+-    
++
+     auto r = warning.exec();
+     if (r == QMessageBox::No) {
+         return;
+     }
+-    
++
+     if (!m_wallet->rescanSpent()) {
+         Utils::showError(this, "Failed to rescan spent outputs", m_wallet->errorString());
+     } else {
+diff --git a/src/MainWindow.h b/src/MainWindow.h
+index c44270d3..d465ceba 100644
+--- a/src/MainWindow.h
++++ b/src/MainWindow.h
+@@ -209,6 +209,7 @@ private:
+     void unlockWallet(const QString &password);
+     void closeQDialogChildren(QObject *object);
+     int findTab(const QString &title);
++    void setPausedSyncStatus();
+ 
+     QIcon hardwareDevicePairedIcon();
+     QIcon hardwareDeviceUnpairedIcon();
+diff --git a/src/WindowManager.cpp b/src/WindowManager.cpp
+index 5d6696e9..13ad493f 100644
+--- a/src/WindowManager.cpp
++++ b/src/WindowManager.cpp
+@@ -71,9 +71,13 @@ void WindowManager::setEventFilter(EventFilter *ef) {
+ 
+ WindowManager::~WindowManager() {
+     qDebug() << "~WindowManager";
+-    m_cleanupThread->quit();
+-    m_cleanupThread->wait();
+-    qDebug() << "WindowManager: cleanup thread done" << QThread::currentThreadId();
++    if (m_cleanupThread && m_cleanupThread->isRunning()) {
++        m_cleanupThread->quit();
++        m_cleanupThread->wait();
++        qDebug() << "WindowManager: cleanup thread done" << QThread::currentThreadId();
++    } else {
++        qDebug() << "WindowManager: cleanup thread already stopped";
++    }
+ }
+ 
+ // ######################## APPLICATION LIFECYCLE ########################
+@@ -89,6 +93,20 @@ void WindowManager::quitAfterLastWindow() {
+ 
+ void WindowManager::close() {
+     qDebug() << Q_FUNC_INFO << QThread::currentThreadId();
++
++    // Stop all threads before application shutdown to avoid QThreadStorage warnings
++    if (m_cleanupThread && m_cleanupThread->isRunning()) {
++        m_cleanupThread->quit();
++        m_cleanupThread->wait();
++        qDebug() << "WindowManager: cleanup thread stopped in close()";
++    }
++
++    // Stop Tor manager threads
++    torManager()->stop();
++
++    // Wait for all threads in the global thread pool
++    QThreadPool::globalInstance()->waitForDone();
++
+     for (const auto &window: m_windows) {
+         window->close();
+     }
+@@ -106,8 +124,6 @@ void WindowManager::close() {
+         m_docsDialog->deleteLater();
+     }
+ 
+-    torManager()->stop();
+-
+     deleteLater();
+ 
+     qDebug() << "Calling QApplication::quit()";
+diff --git a/src/libwalletqt/Wallet.cpp b/src/libwalletqt/Wallet.cpp
+index c26e40d9..85ec7399 100644
+--- a/src/libwalletqt/Wallet.cpp
++++ b/src/libwalletqt/Wallet.cpp
+@@ -14,6 +14,7 @@
+ #include "WalletManager.h"
+ #include "WalletListenerImpl.h"
+ 
++#include "utils/config.h"
+ #include "config.h"
+ #include "constants.h"
+ 
+@@ -25,6 +26,8 @@
+ #include "model/CoinsModel.h"
+ 
+ #include "utils/ScopeGuard.h"
++#include "utils/RestoreHeightLookup.h"
++#include "utils/Utils.h"
+ 
+ #include "wallet/wallet2.h"
+ 
+@@ -83,6 +86,15 @@ Wallet::Wallet(Monero::Wallet *wallet, QObject *parent)
+     connect(m_subaddress, &Subaddress::corrupted, [this]{
+        emit keysCorrupted();
+     });
++
++    // Store original creation height if not already present
++    // This protects the restore height from being overwritten by "Skip Sync" or range syncs
++    if (!cacheAttributeExists("feather.creation_height")) {
++        quint64 height = m_wallet2->get_refresh_from_block_height();
++        if (height > 0) {
++            setCacheAttribute("feather.creation_height", QString::number(height));
++        }
++    }
+ }
+ 
+ // #################### Status ####################
+@@ -502,13 +514,26 @@ void Wallet::onHeightsRefreshed(bool success, quint64 daemonHeight, quint64 targ
+     m_daemonBlockChainHeight = daemonHeight;
+     m_daemonBlockChainTargetHeight = targetHeight;
+ 
++    if (conf()->get(Config::syncPaused).toBool()) {
++        if (success) {
++            quint64 walletHeight = blockChainHeight();
++            if (walletHeight < (targetHeight - 1)) {
++                setConnectionStatus(ConnectionStatus_Synchronizing);
++            } else {
++                setConnectionStatus(ConnectionStatus_Synchronized);
++            }
++        } else {
++             setConnectionStatus(ConnectionStatus_Disconnected);
++        }
++        return;
++    }
++
+     if (success) {
+         quint64 walletHeight = blockChainHeight();
+ 
+         if (daemonHeight < targetHeight) {
+             emit syncStatus(daemonHeight, targetHeight, true);
+-        }
+-        else {
++        } else {
+             this->syncStatusUpdated(walletHeight, daemonHeight);
+         }
+ 
+@@ -544,7 +569,120 @@ void Wallet::syncStatusUpdated(quint64 height, quint64 target) {
+     emit syncStatus(height, target, false);
+ }
+ 
++void Wallet::skipToTip() {
++    if (!m_wallet2)
++        return;
++    uint64_t tip = m_wallet2->get_blockchain_current_height();
++    if (tip > 0) {
++        // Log previous height for debugging
++        uint64_t prevHeight = m_wallet2->get_refresh_from_block_height();
++        qInfo() << "Skip Sync triggered. Head moving from" << prevHeight << "to:" << tip;
++
++        m_wallet2->set_refresh_from_block_height(tip);
++        pauseRefresh();
++        startRefresh();
++    }
++}
++
++void Wallet::syncDateRange(const QDate &start, const QDate &end) {
++    if (!m_wallet2)
++        return;
++
++    // Convert dates to heights with internal table lookup
++    cryptonote::network_type nettype = m_wallet2->nettype();
++    QString filename = Utils::getRestoreHeightFilename(static_cast<NetworkType::Type>(nettype));
++
++    auto lookup = RestoreHeightLookup::fromFile(filename, static_cast<NetworkType::Type>(nettype));
++    uint64_t startHeight = lookup->dateToHeight(start.startOfDay().toSecsSinceEpoch());
++    uint64_t endHeight = lookup->dateToHeight(end.startOfDay().toSecsSinceEpoch());
++    delete lookup;
++
++    if (startHeight >= endHeight)
++        return;
++
++    m_stopHeight = endHeight;
++    m_rangeSyncActive = true;
++
++    m_wallet2->set_refresh_from_block_height(startHeight);
++    pauseRefresh();
++    startRefresh();
++}
++
++void Wallet::fullSync() {
++    if (!m_wallet2)
++        return;
++
++    // Reset range sync just in case
++    m_rangeSyncActive = false;
++
++    // Retrieve original creation height from persistent storage
++    uint64_t originalHeight = 0;
++    QString storedHeight = this->getCacheAttribute("feather.creation_height");
++    if (!storedHeight.isEmpty()) {
++        originalHeight = storedHeight.toULongLong();
++    } else {
++        // Fallback (dangerous if skipped, but better than 0)
++        originalHeight = m_wallet2->get_refresh_from_block_height();
++>>>>>>> 43ee0e4e (Implement Skip Sync and Data Saving features)
++    }
++
++    m_wallet2->set_refresh_from_block_height(originalHeight);
++    // Trigger rescan
++    pauseRefresh();
++
++    // Optional: Clear transaction cache to ensure fresh view
++    // m_wallet2->clearCache();
++
++    startRefresh();
++
++    qInfo() << "Full Sync triggered. Rescanning from original restore height:" << originalHeight;
++}
++
++void Wallet::syncStatusUpdated(quint64 height, quint64 targetHeight) {
++    if (m_rangeSyncActive && height >= m_stopHeight) {
++        // At end of requested date range, jump to tip
++        m_rangeSyncActive = false;
++        this->skipToTip();
++        return;
++    }
++
++    if (height >= (targetHeight - 1)) {
++        this->updateBalance();
++    }
++    emit syncStatus(height, targetHeight, false);
++}
++
++bool Wallet::importTransaction(const QString &txid) {
++    if (!m_wallet2 || txid.isEmpty())
++        return false;
++
++    // If scanning a specific TX, we shouldn't be constrained by range sync
++    if (m_rangeSyncActive) {
++        m_rangeSyncActive = false;
++    }
++
++    try {
++        std::unordered_set<crypto::hash> txids;
++        crypto::hash txid_hash;
++        if (!epee::string_tools::hex_to_pod(txid.toStdString(), txid_hash)) {
++            qWarning() << "Invalid transaction id: " << txid;
++            return false;
++        }
++        txids.insert(txid_hash);
++        m_wallet2->scan_tx(txids);
++        qInfo() << "Successfully imported transaction:" << txid;
++        this->updateBalance();
++        return true;
++    } catch (const std::exception &e) {
++        qWarning() << "Failed to import transaction: " << txid << ", error: " << e.what();
++    }
++    return false;
++}
++
+ void Wallet::onNewBlock(uint64_t walletHeight) {
++    if (conf()->get(Config::syncPaused).toBool()) {
++        return;
++    }
+     // Called whenever a new block gets scanned by the wallet
+     quint64 daemonHeight = m_daemonBlockChainTargetHeight;
+ 
+@@ -693,11 +831,6 @@ bool Wallet::importOutputsFromStr(const std::string &outputs) {
+     return m_walletImpl->importOutputsFromStr(outputs);
+ }
+ 
+-bool Wallet::importTransaction(const QString& txid) {
+-    std::vector<std::string> txids = {txid.toStdString()};
+-    return m_walletImpl->scanTransactions(txids);
+-}
+-
+ // #################### Wallet cache ####################
+ 
+ void Wallet::store() {
+diff --git a/src/libwalletqt/Wallet.h b/src/libwalletqt/Wallet.h
+index 20d21af4..8dee4365 100644
+--- a/src/libwalletqt/Wallet.h
++++ b/src/libwalletqt/Wallet.h
+@@ -142,7 +142,7 @@ public:
+     bool isDeterministic() const;
+ 
+     QString walletName() const;
+-    
++
+     // ##### Balance #####
+     //! returns balance
+     quint64 balance() const;
+@@ -153,7 +153,7 @@ public:
+     quint64 unlockedBalance() const;
+     quint64 unlockedBalance(quint32 accountIndex) const;
+     quint64 unlockedBalanceAll() const;
+-    
++
+     quint64 viewOnlyBalance(quint32 accountIndex) const;
+ 
+     void updateBalance();
+@@ -229,6 +229,11 @@ public:
+     quint64 daemonBlockChainTargetHeight() const;
+ 
+     void syncStatusUpdated(quint64 height, quint64 target);
++    Q_INVOKABLE void skipToTip();
++    Q_INVOKABLE void syncDateRange(const QDate &start, const QDate &end);
++    void fullSync(); // from restoreHeight, not genesis - recreate your wallet for that ;P
++
++    bool importTransaction(const QString &txid);
+ 
+     void refreshModels();
+ 
+@@ -250,25 +255,22 @@ public:
+     void setForceKeyImageSync(bool enabled);
+     bool hasUnknownKeyImages() const;
+     bool keyImageSyncNeeded(quint64 amount, bool sendAll) const;
+-    
++
+     //! export/import key images
+     bool exportKeyImages(const QString& path, bool all = false);
+     bool exportKeyImagesToStr(std::string &keyImages, bool all = false);
+     bool exportKeyImagesForOutputsFromStr(const std::string &outputs, std::string &keyImages);
+-    
++
+     bool importKeyImages(const QString& path);
+     bool importKeyImagesFromStr(const std::string &keyImages);
+ 
+     //! export/import outputs
+     bool exportOutputs(const QString& path, bool all = false);
+     bool exportOutputsToStr(std::string& outputs, bool all);
+-    
++
+     bool importOutputs(const QString& path);
+     bool importOutputsFromStr(const std::string &outputs);
+ 
+-    //! import a transaction
+-    bool importTransaction(const QString& txid);
+-
+     // ##### Wallet cache #####
+     //! saves wallet to the file by given path
+     //! empty path stores in current location
+@@ -342,7 +344,7 @@ public:
+     //! Sign a transfer from file
+     UnsignedTransaction * loadTxFile(const QString &fileName);
+     UnsignedTransaction * loadUnsignedTransactionFromStr(const std::string &data);
+-    
++
+     //! Load an unsigned transaction from a base64 encoded string
+     UnsignedTransaction * loadTxFromBase64Str(const QString &unsigned_tx);
+ 
+@@ -529,6 +531,10 @@ private:
+ 
+     QTimer *m_storeTimer = nullptr;
+     std::set<std::string> m_selectedInputs;
++
++    uint64_t m_stopHeight = 0;
++    bool m_rangeSyncActive = false;
+ };
+ 
+ #endif // FEATHER_WALLET_H
++
+diff --git a/src/model/SubaddressProxyModel.h b/src/model/SubaddressProxyModel.h
+index 38069ed1..833c6f25 100644
+--- a/src/model/SubaddressProxyModel.h
++++ b/src/model/SubaddressProxyModel.h
+@@ -20,7 +20,7 @@ public slots:
+     void setSearchFilter(const QString& searchString){
+         m_searchRegExp.setPattern(searchString);
+         m_searchCaseSensitiveRegExp.setPattern(searchString);
+-        invalidateFilter();
++        invalidate();
+     }
+ 
+ private:
+diff --git a/src/utils/Utils.cpp b/src/utils/Utils.cpp
+index b468fed3..0ef06d99 100644
+--- a/src/utils/Utils.cpp
++++ b/src/utils/Utils.cpp
+@@ -26,6 +26,7 @@
+ #include "utils/os/tails.h"
+ #include "utils/os/whonix.h"
+ #include "libwalletqt/Wallet.h"
++#include "utils/nodes.h"
+ #include "WindowManager.h"
+ 
+ namespace Utils {
+@@ -712,6 +713,52 @@ QString formatSyncStatus(quint64 height, quint64 target, bool daemonSync) {
+     return "Synchronized";
+ }
+ 
++QString formatSyncTimeEstimate(quint64 blocks) {
++    quint64 minutes = blocks * 2;
++    quint64 days = minutes / (60 * 24);
++
++    QString timeStr = (days > 0) ? QString("~%1 days").arg(days) : QString("~%1 hours").arg(minutes / 60);
++    if (days == 0 && minutes < 60) timeStr = "< 1 hour";
++    return timeStr;
++}
++
++quint64 estimateSyncDataSize(quint64 blocks) {
++    // Estimate 1024 bytes per block (1KB) for wallet scanning.
++    return blocks * 1024;
++}
++
++QString formatPausedSyncStatus(quint64 blocks) {
++    quint64 size = estimateSyncDataSize(blocks);
++    return QObject::tr("[PAUSED] Sync %1 blocks / %2 upon resume").arg(blocks).arg(formatBytes(size));
++}
++
++QString getPausedSyncStatus(Wallet *wallet, Nodes *nodes, QString *tooltip) {
++    if (!wallet) return QObject::tr("[PAUSED] Sync paused");
++
++    quint64 walletHeight = wallet->blockChainHeight();
++    quint64 creationHeight = wallet->getWalletCreationHeight();
++    quint64 startHeight = (walletHeight > creationHeight) ? walletHeight : creationHeight;
++    quint64 daemonHeight = wallet->daemonBlockChainTargetHeight();
++
++    // If sync is paused or wallet just started, Wallet's internal height might be 0.
++    // If the daemon is connected, use its target_height or height to determine the latest tip.
++    if (daemonHeight == 0 && nodes) {
++        auto connection = nodes->connection();
++        if (connection.target_height > 0) daemonHeight = connection.target_height;
++        else if (connection.height > 0) daemonHeight = connection.height;
++    }
++
++    if (daemonHeight > 0) {
++        if (tooltip) {
++            *tooltip = QString("Wallet Height: %1 | Network Tip: %2").arg(walletHeight).arg(daemonHeight);
++        }
++        quint64 blocksBehind = (daemonHeight > startHeight) ? (daemonHeight - startHeight) : 0;
++        return formatPausedSyncStatus(blocksBehind);
++    } 
++    
++    return "[PAUSED] Sync paused";
++}
++
+ QString formatRestoreHeight(quint64 height) {
+     const QDateTime restoreDate = appData()->restoreHeights[constants::networkType]->heightToDate(height);
+     return QString("%1  (%2)").arg(QString::number(height), restoreDate.toString("yyyy-MM-dd"));
+@@ -724,4 +771,13 @@ QString getVersion() {
+ #endif
+     return version;
+ }
++
++QString getRestoreHeightFilename(NetworkType::Type nettype) {
++    if (nettype == NetworkType::MAINNET)
++        return ":/assets/restore_heights_monero_mainnet.txt";
++    else if (nettype == NetworkType::TESTNET)
++        return ":/assets/restore_heights_monero_testnet.txt";
++    else
++        return ":/assets/restore_heights_monero_stagenet.txt";
++}
+ }
+diff --git a/src/utils/Utils.h b/src/utils/Utils.h
+index 22bba27f..2f29bfc3 100644
+--- a/src/utils/Utils.h
++++ b/src/utils/Utils.h
+@@ -14,6 +14,8 @@
+ #include "networktype.h"
+ 
+ class SubaddressIndex;
++class Wallet;
++class Nodes;
+ 
+ namespace Utils
+ {
+@@ -119,9 +121,14 @@ namespace Utils
+     void clearLayout(QLayout *layout, bool deleteWidgets = true);
+ 
+     QString formatSyncStatus(quint64 height, quint64 target, bool daemonSync = false);
++    QString formatSyncTimeEstimate(quint64 blocks);
++    quint64 estimateSyncDataSize(quint64 blocks);
++    QString formatPausedSyncStatus(quint64 blocks);
++    QString getPausedSyncStatus(Wallet *wallet, Nodes *nodes, QString *tooltip = nullptr);
+     QString formatRestoreHeight(quint64 height);
+ 
+     QString getVersion();
++    QString getRestoreHeightFilename(NetworkType::Type nettype);
+ }
+ 
+ #endif //FEATHER_UTILS_H
+diff --git a/src/utils/config.cpp b/src/utils/config.cpp
+index b5baa886..f9453d5c 100644
+--- a/src/utils/config.cpp
++++ b/src/utils/config.cpp
+@@ -76,7 +76,9 @@ static const QHash<Config::ConfigKey, ConfigDirective> configStrings = {
+         {Config::showTrayIcon, {QS("showTrayIcon"), true}},
+         {Config::minimizeToTray, {QS("minimizeToTray"), false}},
+         {Config::disableWebsocket, {QS("disableWebsocket"), false}},
++        {Config::disableAutoRefresh, {QS("disableAutoRefresh"), false}},
+         {Config::offlineMode, {QS("offlineMode"), false}},
++        {Config::syncPaused, {QS("syncPaused"), false}},
+ 
+         // Transactions
+         {Config::multiBroadcast, {QS("multiBroadcast"), true}},
+@@ -242,7 +244,9 @@ QDir Config::defaultConfigDir() {
+ #elif defined(Q_OS_MACOS)
+     return QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation));
+ #else
+-    return QDir(QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + "/feather");
++    QDir path(QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + "/feather");
++    qDebug() << "Config path resolved to: " << path.absolutePath();
++    return path;
+ #endif
+ }
+ 
+diff --git a/src/utils/config.h b/src/utils/config.h
+index 04d9d759..ffe9a6e6 100644
+--- a/src/utils/config.h
++++ b/src/utils/config.h
+@@ -88,6 +88,7 @@ public:
+         disableWebsocket,
+ 
+         // Network -> Offline
++        disableAutoRefresh,
+         offlineMode,
+ 
+         // Storage -> Logging
+@@ -120,7 +121,7 @@ public:
+         blockExplorers,
+         blockExplorer,
+         lastPath,
+-        
++
+         // UR
+         URmsPerFragment,
+         URfragmentLength,
+@@ -139,6 +140,9 @@ public:
+         // Tickers
+         tickers,
+         tickersShowFiatBalance,
++
++        // Sync & data saver
++        syncPaused,
+     };
+ 
+     enum PrivacyLevel {
+@@ -169,7 +173,7 @@ public:
+         UnifiedResources = 0,
+         FileTransfer
+     };
+-    
++
+     ~Config() override;
+     QVariant get(ConfigKey key);
+     QString getFileName();

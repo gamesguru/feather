@@ -1,0 +1,140 @@
+1.230ɱ | Add a skip sync feature to a Monero wallet
+Posted by Anonymous
+· Apr 23
+Description
+
+Background:
+
+A "skip sync" feature would allow users to save time and mobile data, if they know they haven't received Monero since the last time they opened their wallet.
+
+In some places, KYC-free mobile data is expensive (e.g. $10 for 1 GB) or limited (e.g. prepaid plans max out at 5 GB/month). In addition, public wifi may be unreliable or difficult to find.
+
+Not only would skip sync save 500 MB+ if the user didn't open the wallet for some weeks, it would also save 30+ minutes of waiting to sync, which is convenient when paying in a brick-and-mortar store or doing a cash in person trade.
+
+How it works:
+
+    Disable "auto_refresh" (to avoid automatic or background syncing)
+    One button named "Skip sync", which runs the "refresh" command with "start_height = the current blockheight"
+    One button named "Sync dates", which allows you to specify a start date and end date to sync (e.g. April 1 - April 8)
+    One button named "Full sync (estimated 500 MB)", which syncs from the last sync date until today.
+    A button to import a TX with "scan_tx"
+
+Skip sync could be available as an opt-in "Data Saving" option in "Settings" or "Advanced".
+
+More info: https://codeberg.org/anarkio/ideas/src/branch/main/monero-skip-sync.md
+
+Unfortunately I can't develop this myself and can't afford to donate.
+Voters
+plowsofgingeropolouseriswhoeverlovesDigit (2)lau90
+Tags
+TBD
+Notifications
+You’re receiving notifications about activity on this post.
+Discussion
+Monero Bounties Bot
+Monero Bounties Bot
+· Apr 23
+
+Donate to the address below to fund this bounty
+88jqsz71KqbeDqkUtowzJ7Y8nyLPGF47J2XPRwVFj9cM4R5kFLcbNwYRsdaePxhpVAMqYQJNTajkH73dgiTaoyZ1SkujYeX
+Your donation will be reflected in the comments.
+Payouts will be made once the bounty is complete to the individual(s) who completed the bounty first.
+Monero Bounties Bot
+Monero Bounties Bot
+· Apr 23 · edited
+
+Bounty increased by 0.05 XMR 💰
+Total Bounty: 0.05 XMR
+Monero Bounties Bot
+Monero Bounties Bot
+· May 23 · edited
+
+Bounty increased by 0.00000001 XMR 💰
+Total Bounty: 0.05000001 XMR
+Monero Bounties Bot
+Monero Bounties Bot
+· May 23 · edited
+
+Bounty increased by 0.051 XMR 💰
+Total Bounty: 0.10100001 XMR
+Monero Bounties Bot
+Monero Bounties Bot
+· Jun 23 · edited
+
+Bounty increased by 0.02 XMR 💰
+Total Bounty: 0.12100001 XMR
+Waterdrought
+Waterdrought
+· May 24
+
+ill give it a shot
+Monero Bounties Bot
+Monero Bounties Bot
+· May 24 · edited
+
+Bounty increased by 0.09 XMR 💰
+Total Bounty: 0.21100001 XMR
+Monero Bounties Bot
+Monero Bounties Bot
+· 5 months ago · edited
+
+Bounty increased by 0.21 XMR 💰
+Total Bounty: 0.42100001 XMR
+Cyrix126
+Cyrix126
+· 4 months ago
+
+link of the codeberg is dead.
+Anyway isn't it an issue for decoy selection which needs the latest block height ?
+Monero Bounties Bot
+Monero Bounties Bot
+· 4 months ago · edited
+
+Bounty increased by 0.08 XMR 💰
+Total Bounty: 0.50100001 XMR
+Monero Bounties Bot
+Monero Bounties Bot
+· 4 months ago · edited
+
+Bounty increased by 0.1 XMR 💰
+Total Bounty: 0.60100001 XMR
+Monero Bounties Bot
+Monero Bounties Bot
+· 4 months ago · edited
+
+Bounty increased by 0.4 XMR 💰
+Total Bounty: 1.00100001 XMR
+Monero Bounties Bot
+Monero Bounties Bot
+· 3 months ago · edited
+
+Bounty increased by 0.1 XMR 💰
+Total Bounty: 1.10100001 XMR
+Monero Bounties Bot
+Monero Bounties Bot
+· 2 months ago · edited
+
+Bounty increased by 0.11 XMR 💰
+Total Bounty: 1.21100001 XMR
+Monero Bounties Bot
+Monero Bounties Bot
+· 2 months ago · edited
+
+Bounty increased by 0.019 XMR 💰
+Total Bounty: 1.23000001 XMR
+plowsof
+plowsof
+· 24 days ago
+
+the total donated seems to be (3dp): 2.440 XMR
+2025-12-15 03:10:28 UTC
+Trinity
+Trinity
+· 22 days ago
+
+Is this still needed? If so, could you reupload the information?
+mr_overquald
+mr_overquald
+· 14 hours ago
+
+I'm implementing this in the Feather wallet. I got 'Skip to Tip' and 'Date Range' logic functional in a local build. Working on some edge cases and documenting user impacts. Planning to submit a PR within a week. -gg

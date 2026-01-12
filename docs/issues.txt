@@ -1,0 +1,15 @@
+
+Check if these issues are valid — if so, understand the root cause of each and fix them.
+
+
+<file name="src/WindowManager.cpp">
+
+<violation number="1" location="src/WindowManager.cpp:108">
+P2: Missing error handling after thread pool timeout. If threads don't complete within 30s, continuing with cleanup while threads are still running could cause use-after-free bugs or crashes. Consider either skipping cleanup and calling exit(), or adding retry logic/forced termination.</violation>
+</file>
+
+<file name="src/MainWindow.cpp">
+
+<violation number="1" location="src/MainWindow.cpp:992">
+P2: When the daemon height is unknown (`target <= 1`), the sync status now shows “(approx. )” because `sizeText` stays empty; provide a fallback string (e.g., “unknown”) or skip the parenthetical when no estimate is available.</violation>
+</file>
