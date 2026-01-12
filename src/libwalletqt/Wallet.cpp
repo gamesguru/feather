@@ -502,6 +502,8 @@ void Wallet::startRefreshThread()
                             m_newWallet = false;
                         }
 
+                        quint64 walletHeight = m_walletImpl->blockChainHeight();
+                        qInfo() << "Calling m_walletImpl->refresh(). Wallet height:" << walletHeight << "Daemon height:" << daemonHeight << "Target:" << targetHeight;
                         m_walletImpl->refresh();
                     }
                     last = std::chrono::steady_clock::now();
