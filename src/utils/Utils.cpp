@@ -734,8 +734,8 @@ quint64 estimateSyncDataSize(quint64 blocks) {
 }
 
 QString formatPausedSyncStatus(quint64 blocks) {
-    quint64 size = estimateSyncDataSize(blocks);
-    return QObject::tr("[PAUSED] Sync %1 blocks / %2 upon resume").arg(blocks).arg(formatBytes(size));
+    QString blocksStr = QLocale().toString(blocks);
+    return QObject::tr("[PAUSED] %1 blocks behind").arg(blocksStr);
 }
 
 QString getPausedSyncStatus(Wallet *wallet, Nodes *nodes, QString *tooltip) {

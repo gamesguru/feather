@@ -984,25 +984,16 @@ void MainWindow::onMultiBroadcast(const QMap<QString, QString> &txHexMap) {
 void MainWindow::onSyncStatus(quint64 height, quint64 target, bool daemonSync) {
     if (height >= (target - 1) && target > 0) {
         this->updateNetStats();
-        this->setStatusText(QString("Synchronized (%1)").arg(height));
+        this->setStatusText(QString("Synchronized (%1)").arg(QLocale().toString(height)));
     } else {
-        // Calculate depth
         quint64 blocksLeft = (target > height) ? (target - height) : 0;
-        // Estimate download size
-        QString sizeText;
-        if (target > 1) {
-             quint64 estimatedBytes = Utils::estimateSyncDataSize(blocksLeft);
-             sizeText = Utils::formatBytes(estimatedBytes);
-        }
-        QString statusMsg = Utils::formatSyncStatus(height, target, daemonSync);
-        // Show size estimate only if available
-        if (!sizeText.isEmpty()) {
-            this->setStatusText(QString("%1 (approx. %2)").arg(statusMsg).arg(sizeText));
-        } else {
-            this->setStatusText(statusMsg);
-        }
+        QString type = daemonSync ? tr("Blockchain") : tr("Wallet");
+        QString blocksStr = QLocale().toString(blocksLeft);
+        this->setStatusText(tr("%1 sync: %2 blocks behind").arg(type, blocksStr));
     }
-    m_statusLabelStatus->setToolTip(QString("Wallet Height: %1 | Network Tip: %2").arg(height).arg(target));
+    m_statusLabelStatus->setToolTip(tr("Wallet Height: %1 | Network Tip: %2")
+        .arg(QLocale().toString(height))
+        .arg(QLocale().toString(target)));
 }
 
 void MainWindow::onConnectionStatusChanged(int status)
