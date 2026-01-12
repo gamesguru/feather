@@ -430,7 +430,7 @@ void Wallet::initAsync(const QString &daemonAddress, bool trustedDaemon, quint64
         setTrustedDaemon(trustedDaemon);
 
         if (success) {
-            qDebug() << "init async finished - starting refresh";
+            qInfo() << "init async finished - starting refresh. Paused:" << m_syncPaused;
             if (!m_syncPaused) {
                 startRefresh();
             }
