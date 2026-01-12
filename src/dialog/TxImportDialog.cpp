@@ -18,8 +18,8 @@ TxImportDialog::TxImportDialog(QWidget *parent, Wallet *wallet)
     connect(ui->btn_import, &QPushButton::clicked, this, &TxImportDialog::onImport);
 
     ui->line_txid->setMinimumWidth(600);
-
     this->adjustSize();
+
     this->layout()->setSizeConstraint(QLayout::SetFixedSize);
 }
 

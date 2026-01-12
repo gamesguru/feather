@@ -234,11 +234,25 @@ void Settings::setupStorageTab() {
         WalletManager::instance()->setLogLevel(toggled ? conf()->get(Config::logLevel).toInt() : -1);
     });
 
+    // [Disable terminal output]
+    QCheckBox *cbDisableStdout = new QCheckBox("Disable terminal output (silence most logs)", this);
+    cbDisableStdout->setChecked(conf()->get(Config::disableLoggingStdout).toBool());
+    connect(cbDisableStdout, &QCheckBox::toggled, [](bool toggled){
+        conf()->set(Config::disableLoggingStdout, toggled);
+    });
+    // Insert into the logging layout (verticalLayout_2)
+    // We add it after checkBox_enableLogging
+    int index = ui->verticalLayout_2->indexOf(ui->checkBox_enableLogging);
+    ui->verticalLayout_2->insertWidget(index + 1, cbDisableStdout);
+
     // [Log level]
+    ui->comboBox_logLevel->clear();
+    ui->comboBox_logLevel->addItems({"Error", "Warning", "Info", "Debug", "Trace"});
     ui->comboBox_logLevel->setCurrentIndex(conf()->get(Config::logLevel).toInt());
+
     connect(ui->comboBox_logLevel, QOverload<int>::of(&QComboBox::currentIndexChanged), [](int index){
        conf()->set(Config::logLevel, index);
-       qDebug() << "Log level changed to:" << index;
+       qInfo() << "Log level changed to:" << index;
        if (!conf()->get(Config::disableLogging).toBool()) {
            WalletManager::instance()->setLogLevel(index);
        }

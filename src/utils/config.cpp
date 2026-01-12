@@ -93,6 +93,7 @@ static const QHash<Config::ConfigKey, ConfigDirective> configStrings = {
         {Config::hideNotifications, {QS("hideNotifications"), false}},
         {Config::hideUpdateNotifications, {QS("hideUpdateNotifications"), false}},
         {Config::disableLogging, {QS("disableLogging"), true}},
+        {Config::disableLoggingStdout, {QS("disableLoggingStdout"), false}},
         {Config::writeStackTraceToDisk, {QS("writeStackTraceToDisk"), true}},
         {Config::writeRecentlyOpenedWallets, {QS("writeRecentlyOpenedWallets"), true}},
 

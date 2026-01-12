@@ -94,6 +94,7 @@ public:
         // Storage -> Logging
         writeStackTraceToDisk,
         disableLogging,
+        disableLoggingStdout,
         logLevel,
 
         // Storage -> Misc

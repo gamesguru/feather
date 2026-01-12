@@ -211,9 +211,8 @@ void MainWindow::initStatusBar() {
     QAction *fullSyncAction = new QAction(tr("Full Sync"), this);
     m_statusLabelStatus->addAction(fullSyncAction);
 
-    QAction *scanTxAction = new QAction(tr("Scan Transaction"), this);
+    QAction *scanTxAction = new QAction(tr("Import Transaction"), this);
     m_statusLabelStatus->addAction(scanTxAction);
-    ui->menuTools->addAction(scanTxAction);
 
     connect(pauseSyncAction, &QAction::toggled, this, [this](bool checked) {
         qInfo() << "Pause Sync toggled. Checked =" << checked;
@@ -1537,11 +1536,9 @@ void MainWindow::changeEvent(QEvent* event)
                 bool showTray = conf()->get(Config::showTrayIcon).toBool();
                 bool minimizeToTray = conf()->get(Config::minimizeToTray).toBool();
                 if (showTray && minimizeToTray) {
-                // Hide all widgets and dialogs, not just MainWindow
+                    // Hide all widgets and dialogs, not just MainWindow
                     for (const auto &widget : QApplication::topLevelWidgets()) {
-                        if (widget->isVisible() && !widget->windowFlags().testFlag(Qt::Popup) && !widget->windowFlags().testFlag(Qt::ToolTip)) {
-                            widget->hide();
-                        }
+                        widget->hide();
                     }
                 }
             }
