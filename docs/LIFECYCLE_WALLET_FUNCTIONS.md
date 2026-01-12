@@ -80,6 +80,38 @@ These functions control the core synchronization logic, blockchain scanning, and
 - Clears `m_rangeSyncActive`.
 - Triggers rescan.
 
+### `set_refresh_from_block_height(uint64_t height)`
+**Class:** `tools::wallet2` (via `m_walletImpl` in `Wallet.cpp`)
+**Role:** Sets the starting block height for the wallet refresh synchronization.
+**Details:**
+- Crucial for "Skip Sync" or restoring from a specific date.
+- Instructs the lower-level wallet library to ignore blocks before `height`.
+
+### `daemonBlockChainHeight()`
+**Class:** `Wallet` (`src/libwalletqt/Wallet.cpp`)
+**Role:** Returns the current block height of the connected daemon (node).
+**Usage:**
+- Used to calculate "blocks behind" (Daemon Height - Wallet Height).
+- Fetched during the refresh loop or immediately after `initAsync`.
+
+### `daemonBlockChainTargetHeight()`
+**Class:** `Wallet` (`src/libwalletqt/Wallet.cpp`)
+**Role:** Returns the target height the daemon is syncing towards.
+**Usage:**
+- If the daemon itself is still syncing, this will be > `daemonBlockChainHeight()`.
+- Used to show the true "Network Tip" in tooltips.
+
+### Debug Log: Refresh Loop
+**Location:** `src/libwalletqt/Wallet.cpp` (inside `startRefreshThread`)
+**Code:**
+```cpp
+qInfo() << "Calling m_walletImpl->refresh(). Wallet height:" << walletHeight << "Daemon height:" << daemonHeight << "Target:" << targetHeight;
+```
+**Purpose:**
+- Provides visibility into the background refresh cycle.
+- Logs the exact state *before* triggering the potentially blocking `refresh()` call.
+- **Info Level:** Escalated from Debug to Info to allow users to verify sync progress without a debug build.
+
 ## UI Tweaks & Event Handling
 
 These functions handle user interaction, window management, and visual feedback based on backend state.
