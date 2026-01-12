@@ -106,7 +106,7 @@ void WindowManager::close() {
 
     // Wait for all threads in the global thread pool with timeout to prevent indefinite blocking
     if (!QThreadPool::globalInstance()->waitForDone(15000)) {
-        qCritical() << "WindowManager: Thread pool tasks did not complete within 30s timeout. "
+        qCritical() << "WindowManager: Thread pool tasks did not complete within 15s timeout. "
                     << "Forcing exit to prevent use-after-free.";
         std::_Exit(1);  // Fast exit without cleanup - threads may still hold resources
     }

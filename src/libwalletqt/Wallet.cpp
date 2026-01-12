@@ -574,6 +574,7 @@ void Wallet::skipToTip() {
         return;
     uint64_t tip = m_wallet2->get_blockchain_current_height();
     if (tip > 0) {
+        QMutexLocker locker(&m_asyncMutex);
         // Log previous height for debugging
         uint64_t prevHeight = m_wallet2->get_refresh_from_block_height();
         qInfo() << "Skip Sync triggered. Head moving from" << prevHeight << "to:" << tip;
@@ -599,10 +600,12 @@ void Wallet::syncDateRange(const QDate &start, const QDate &end) {
     if (startHeight >= endHeight)
         return;
 
-    m_stopHeight = endHeight;
-    m_rangeSyncActive = true;
-
-    m_wallet2->set_refresh_from_block_height(startHeight);
+    {
+        QMutexLocker locker(&m_asyncMutex);
+        m_stopHeight = endHeight;
+        m_rangeSyncActive = true;
+        m_wallet2->set_refresh_from_block_height(startHeight);
+    }
     pauseRefresh();
     startRefresh();
 }
@@ -627,13 +630,12 @@ void Wallet::fullSync() {
                    << ". This may miss transactions if skipToTip() was previously used.";
     }
 
-    m_wallet2->set_refresh_from_block_height(originalHeight);
+    {
+        QMutexLocker locker(&m_asyncMutex);
+        m_wallet2->set_refresh_from_block_height(originalHeight);
+    }
     // Trigger rescan
     pauseRefresh();
-
-    // Optional: Clear transaction cache to ensure fresh view
-    // m_wallet2->clearCache();
-
     startRefresh();
 
     qInfo() << "Full Sync triggered. Rescanning from original restore height:" << originalHeight;
