@@ -532,8 +532,8 @@ private:
     QTimer *m_storeTimer = nullptr;
     std::set<std::string> m_selectedInputs;
 
-    uint64_t m_stopHeight = 0;
-    bool m_rangeSyncActive = false;
+    std::atomic<quint64> m_stopHeight{0};
+    std::atomic<bool> m_rangeSyncActive{false};
 };
 
 #endif // FEATHER_WALLET_H

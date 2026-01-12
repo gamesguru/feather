@@ -277,13 +277,7 @@ void MainWindow::initStatusBar() {
         auto *fromDateEdit = new QDateEdit(QDate::currentDate().addDays(-defaultDays));
         fromDateEdit->setCalendarPopup(true);
         fromDateEdit->setDisplayFormat("yyyy-MM-dd");
-        fromDateEdit->setCalendarPopup(true);
-        fromDateEdit->setDisplayFormat("yyyy-MM-dd");
         fromDateEdit->setToolTip(tr("Calculated from 'End date' and day span."));
-
-
-        toDateEdit->setCalendarPopup(true);
-        toDateEdit->setDisplayFormat("yyyy-MM-dd");
 
         auto *infoLabel = new QLabel;
         infoLabel->setWordWrap(true);
@@ -994,17 +988,19 @@ void MainWindow::onSyncStatus(quint64 height, quint64 target, bool daemonSync) {
     } else {
         // Calculate depth
         quint64 blocksLeft = (target > height) ? (target - height) : 0;
-        // Estimate download size in MB: assuming 500 MB for full history,
-        // and we are blocksLeft behind out of (target-1) total blocks (since block 0 is genesis)
-        double approximateSizeMB = 0.0;
+        // Estimate download size
+        QString sizeText;
         if (target > 1) {
              quint64 estimatedBytes = Utils::estimateSyncDataSize(blocksLeft);
              sizeText = Utils::formatBytes(estimatedBytes);
         }
         QString statusMsg = Utils::formatSyncStatus(height, target, daemonSync);
-        // Shows "# blocks remaining (approx. X MB)" to sync
-        // Shows "Wallet sync: # blocks remaining (approx. X MB)"
-        this->setStatusText(QString("%1 (approx. %2)").arg(statusMsg).arg(sizeText));
+        // Show size estimate only if available
+        if (!sizeText.isEmpty()) {
+            this->setStatusText(QString("%1 (approx. %2)").arg(statusMsg).arg(sizeText));
+        } else {
+            this->setStatusText(statusMsg);
+        }
     }
     m_statusLabelStatus->setToolTip(QString("Wallet Height: %1 | Network Tip: %2").arg(height).arg(target));
 }

@@ -752,6 +752,7 @@ QString getPausedSyncStatus(Wallet *wallet, Nodes *nodes, QString *tooltip) {
         if (tooltip) {
             *tooltip = QString("Wallet Height: %1 | Network Tip: %2").arg(walletHeight).arg(daemonHeight);
         }
+        quint64 blocksBehind = (daemonHeight > startHeight) ? (daemonHeight - startHeight) : 0;
         if (blocksBehind == 0) {
             return "[PAUSED] Sync paused";
         }

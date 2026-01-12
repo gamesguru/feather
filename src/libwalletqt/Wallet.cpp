@@ -592,10 +592,9 @@ void Wallet::syncDateRange(const QDate &start, const QDate &end) {
     cryptonote::network_type nettype = m_wallet2->nettype();
     QString filename = Utils::getRestoreHeightFilename(static_cast<NetworkType::Type>(nettype));
 
-    auto lookup = RestoreHeightLookup::fromFile(filename, static_cast<NetworkType::Type>(nettype));
+    std::unique_ptr<RestoreHeightLookup> lookup(RestoreHeightLookup::fromFile(filename, static_cast<NetworkType::Type>(nettype)));
     uint64_t startHeight = lookup->dateToHeight(start.startOfDay().toSecsSinceEpoch());
     uint64_t endHeight = lookup->dateToHeight(end.startOfDay().toSecsSinceEpoch());
-    delete lookup;
 
     if (startHeight >= endHeight)
         return;
@@ -621,9 +620,11 @@ void Wallet::fullSync() {
     if (!storedHeight.isEmpty()) {
         originalHeight = storedHeight.toULongLong();
     } else {
-        // Fallback (dangerous if skipped, but better than 0)
+        // Fallback: if skipToTip() was used, this may be the current tip, missing all transactions
         originalHeight = m_wallet2->get_refresh_from_block_height();
->>>>>>> 43ee0e4e (Implement Skip Sync and Data Saving features)
+        qWarning() << "fullSync: No stored creation height found (feather.creation_height). "
+                   << "Falling back to current refresh height:" << originalHeight
+                   << ". This may miss transactions if skipToTip() was previously used.";
     }
 
     m_wallet2->set_refresh_from_block_height(originalHeight);
@@ -672,6 +673,7 @@ bool Wallet::importTransaction(const QString &txid) {
         m_wallet2->scan_tx(txids);
         qInfo() << "Successfully imported transaction:" << txid;
         this->updateBalance();
+        this->history()->refresh();
         return true;
     } catch (const std::exception &e) {
         qWarning() << "Failed to import transaction: " << txid << ", error: " << e.what();
