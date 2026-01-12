@@ -1018,9 +1018,9 @@ void MainWindow::onConnectionStatusChanged(int status)
             || status == Wallet::ConnectionStatus_Synchronized 
             || status == Wallet::ConnectionStatus_Connecting) {
             this->setPausedSyncStatus();
+            icon = icons()->icon("status_lagging.svg");
         }
     }
-
     m_statusBtnConnectionStatusIndicator->setIcon(icon);
 }
 
