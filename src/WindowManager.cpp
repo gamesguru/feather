@@ -164,6 +164,7 @@ void WindowManager::close() {
 void WindowManager::closeWindow(MainWindow *window) {
     qDebug() << "WindowManager: closing Window";
     m_windows.removeOne(window);
+    this->buildTrayMenu();
 
     // Move Wallet to a different thread for cleanup, so it doesn't block GUI thread
     window->m_wallet->moveToThread(m_cleanupThread);

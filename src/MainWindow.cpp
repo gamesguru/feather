@@ -1489,7 +1489,6 @@ void MainWindow::closeEvent(QCloseEvent *event) {
 
         // Wallet signal may fire after AppContext is gone, causing segv
         m_wallet->disconnect();
-        this->disconnect();
 
         this->saveGeo();
         m_windowManager->closeWindow(this);
