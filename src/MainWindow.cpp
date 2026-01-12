@@ -1014,7 +1014,9 @@ void MainWindow::onConnectionStatusChanged(int status)
     }
 
     if (conf()->get(Config::syncPaused).toBool() && !conf()->get(Config::offlineMode).toBool()) {
-        if (status == Wallet::ConnectionStatus_Synchronizing || status == Wallet::ConnectionStatus_Synchronized) {
+        if (status == Wallet::ConnectionStatus_Synchronizing 
+            || status == Wallet::ConnectionStatus_Synchronized 
+            || status == Wallet::ConnectionStatus_Connecting) {
             this->setPausedSyncStatus();
         }
     }
