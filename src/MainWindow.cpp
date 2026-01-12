@@ -375,9 +375,8 @@ void MainWindow::initStatusBar() {
 
     connect(scanTxAction, &QAction::triggered, this, [this](){
         if (m_wallet) {
-            QDialog dialog(this);
-            dialog.setWindowTitle("Scan Transaction");
-            dialog.setWindowIcon(QIcon(":/assets/images/appicons/64x64.png"));
+            TxImportDialog dialog(this, m_wallet);
+            dialog.exec();
 
             auto *layout = new QVBoxLayout(&dialog);
             layout->addWidget(new QLabel("Enter transaction ID:"));
