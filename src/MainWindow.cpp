@@ -649,16 +649,16 @@ void MainWindow::initOffline() {
             ui->radio_airgapUR->setChecked(true);
     }
 
-    connect(m_updateNetworkInfoAction, &QAction::triggered, this, [this](){
+    connect(m_updateNetworkInfoAction, &QAction::triggered, this, [this]() {
         if (!m_wallet) return;
         m_wallet->updateNetworkStatus();
     });
 
-    connect(m_wallet, &Wallet::heightsRefreshed, this, [this](bool success, quint64 daemonHeight, quint64 targetHeight){
-         if (conf()->get(Config::syncPaused).toBool()) {
-             qInfo() << "Heights refreshed (Paused): Daemon" << daemonHeight << "Target" << targetHeight;
-             this->setPausedSyncStatus();
-         }
+    connect(m_wallet, &Wallet::heightsRefreshed, this, [this](bool success, quint64 daemonHeight, quint64 targetHeight) {
+        if (conf()->get(Config::syncPaused).toBool()) {
+            qInfo() << "Heights refreshed (Paused): Daemon" << daemonHeight << "Target" << targetHeight;
+            this->setPausedSyncStatus();
+        }
     });
 
     // We do NOT want to start syncing yet here, wait for wallet to be opened
@@ -865,9 +865,9 @@ void MainWindow::setPausedSyncStatus() {
 
     // Log variables for debugging 149 vs 814k discrepancy
     if (m_wallet) {
-         qWarning() << "Paused Status Calc: WalletHeight:" << m_wallet->blockChainHeight() 
-                    << "DaemonHeight:" << m_wallet->daemonBlockChainHeight() 
-                    << "TargetHeight:" << m_wallet->daemonBlockChainTargetHeight();
+        qWarning() << "Paused Status Calc: WalletHeight:" << m_wallet->blockChainHeight()
+                   << "DaemonHeight:" << m_wallet->daemonBlockChainHeight()
+                   << "TargetHeight:" << m_wallet->daemonBlockChainTargetHeight();
     }
 
     this->setStatusText(status);
