@@ -97,18 +97,19 @@ void WalletKeysFilesModel::findWallets() {
 
         if (Utils::fileExists(basePath + ".address.txt")) {
             QFile file(basePath + ".address.txt");
-            if (!file.open(QFile::ReadOnly | QFile::Text))
-                continue;
-            const QString _address = QString::fromUtf8(file.readAll());
+            if (file.open(QFile::ReadOnly | QFile::Text)) {
+                const QString _address = QString::fromUtf8(file.readAll());
 
-            if (!_address.isEmpty()) {
-                addr = _address;
-                if (addr.startsWith("5") || addr.startsWith("7"))
-                    networkType = NetworkType::STAGENET;
-                else if (addr.startsWith("9") || addr.startsWith("B"))
-                    networkType = NetworkType::TESTNET;
+                if (!_address.isEmpty()) {
+                    addr = _address;
+                    if (addr.startsWith("5") || addr.startsWith("7"))
+                        networkType = NetworkType::STAGENET;
+                    else if (addr.startsWith("9") || addr.startsWith("B"))
+                        networkType = NetworkType::TESTNET;
+                }
+                file.close();
             }
-            file.close();
+            // If file can't be opened, just proceed without the cached address
         }
 
         this->addWalletKeysFile(WalletKeysFile(fileInfo, networkType, std::move(addr)));
