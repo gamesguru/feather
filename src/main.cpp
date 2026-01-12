@@ -180,7 +180,7 @@ if (AttachConsole(ATTACH_PARENT_PROCESS)) {
 
     conf()->set(Config::restartRequired, false);
 
-    if (!quiet) {
+    if (!quiet && !conf()->get(Config::disableLogging).toBool()) {
         QList<QPair<QString, QString>> info;
         info.emplace_back("Feather", FEATHER_VERSION);
         info.emplace_back("Monero", MONERO_VERSION);
@@ -189,6 +189,7 @@ if (AttachConsole(ATTACH_PARENT_PROCESS)) {
         info.emplace_back("SSL", QSslSocket::sslLibraryVersionString());
         info.emplace_back("Mode", stagenet ? "Stagenet" : (testnet ? "Testnet" : "Mainnet"));
         info.emplace_back("Network", conf()->get(Config::syncPaused).toBool() ? "PAUSED" : "ACTIVE");
+        info.emplace_back("Config dir", configDir);
 
         for (const auto &k: info) {
             qWarning().nospace().noquote() << QString("%1: %2").arg(k.first, k.second);
@@ -220,6 +221,6 @@ if (AttachConsole(ATTACH_PARENT_PROCESS)) {
     wm->setEventFilter(&filter);
 
     int exitCode = Application::exec();
-    qDebug() << "Application::exec() returned with exit code:" << exitCode;
+    qWarning() << "Application::exec() returned with exit code:" << exitCode;
     return exitCode;
 }

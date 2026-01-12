@@ -246,9 +246,7 @@ QDir Config::defaultConfigDir() {
 #elif defined(Q_OS_MACOS)
     return QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation));
 #else
-    QDir path(QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + "/feather");
-    qDebug() << "Config path resolved to: " << path.absolutePath();
-    return path;
+    return QDir(QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + "/feather");
 #endif
 }
 

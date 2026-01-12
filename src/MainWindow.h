@@ -234,6 +234,7 @@ private:
     CoinsWidget *m_coinsWidget = nullptr;
 
     QPointer<QAction> m_clearRecentlyOpenAction;
+    QPointer<QAction> m_updateNetworkInfoAction;
 
     // lower status bar
     QPushButton *m_statusUpdateAvailable;

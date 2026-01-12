@@ -214,6 +214,9 @@ void MainWindow::initStatusBar() {
     QAction *scanTxAction = new QAction(tr("Import Transaction"), this);
     m_statusLabelStatus->addAction(scanTxAction);
 
+    m_updateNetworkInfoAction = new QAction(tr("Update Network Info"), this);
+    m_statusLabelStatus->addAction(m_updateNetworkInfoAction);
+
     connect(pauseSyncAction, &QAction::toggled, this, [this](bool checked) {
         qInfo() << "Pause Sync toggled. Checked =" << checked;
         conf()->set(Config::syncPaused, checked);
@@ -646,6 +649,19 @@ void MainWindow::initOffline() {
             ui->radio_airgapUR->setChecked(true);
     }
 
+    connect(m_updateNetworkInfoAction, &QAction::triggered, this, [this](){
+        if (!m_wallet) return;
+        m_wallet->updateNetworkStatus();
+    });
+
+    connect(m_wallet, &Wallet::heightsRefreshed, this, [this](bool success, quint64 daemonHeight, quint64 targetHeight){
+         if (conf()->get(Config::syncPaused).toBool()) {
+             qInfo() << "Heights refreshed (Paused): Daemon" << daemonHeight << "Target" << targetHeight;
+             this->setPausedSyncStatus();
+         }
+    });
+
+    // We do NOT want to start syncing yet here, wait for wallet to be opened
     // We can't use rich text for radio buttons
     connect(ui->label_airgapUR, &ClickableLabel::clicked, [this] {
         ui->radio_airgapUR->setChecked(true);
@@ -843,15 +859,28 @@ void MainWindow::onBalanceUpdated(quint64 balance, quint64 spendable) {
 }
 
 void MainWindow::setPausedSyncStatus() {
-    qInfo() << "setPausedSyncStatus called. Sync paused:" << conf()->get(Config::syncPaused).toBool();
+    qWarning() << "setPausedSyncStatus called. Sync paused:" << conf()->get(Config::syncPaused).toBool();
     QString tooltip;
     QString status = Utils::getPausedSyncStatus(m_wallet, m_nodes, &tooltip);
+
+    // Log variables for debugging 149 vs 814k discrepancy
+    if (m_wallet) {
+         qWarning() << "Paused Status Calc: WalletHeight:" << m_wallet->blockChainHeight() 
+                    << "DaemonHeight:" << m_wallet->daemonBlockChainHeight() 
+                    << "TargetHeight:" << m_wallet->daemonBlockChainTargetHeight();
+    }
+
     this->setStatusText(status);
     if (!tooltip.isEmpty())
         m_statusLabelStatus->setToolTip(tooltip);
 }
 
 void MainWindow::setStatusText(const QString &text, bool override, int timeout) {
+    // Log to qWarning as requested for debugging
+    if (text != m_statusText) {
+        qWarning() << "Setting status text:" << text;
+    }
+
     if (override) {
         m_statusOverrideActive = true;
         m_statusLabelStatus->setText(text);
@@ -961,7 +990,7 @@ void MainWindow::onMultiBroadcast(const QMap<QString, QString> &txHexMap) {
 }
 
 void MainWindow::onSyncStatus(quint64 height, quint64 target, bool daemonSync) {
-    qInfo() << "onSyncStatus: Height" << height << "Target" << target << "DaemonSync" << daemonSync;
+    qWarning() << "onSyncStatus: Height" << height << "Target" << target << "DaemonSync" << daemonSync;
     if (height >= (target - 1) && target > 0) {
         this->updateNetStats();
         this->setStatusText(QString("Synchronized (%1)").arg(QLocale().toString(height)));
