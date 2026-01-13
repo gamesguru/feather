@@ -10,6 +10,10 @@ jobs:
     name: Windows (MSYS2)
     runs-on: windows-latest
     steps:
+    env:
+      CCACHE_DIR: ~/.ccache
+
+    steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -37,11 +41,20 @@ jobs:
             mingw-w64-x86_64-qt6-websockets
             mingw-w64-x86_64-qt6-multimedia
             mingw-w64-x86_64-zxing-cpp
+            mingw-w64-x86_64-ccache
+
+      - name: Setup ccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: win-ccache-${{ github.sha }}
+          restore-keys: |
+            win-ccache-
 
       - name: Build
         shell: msys2 {0}
         run: |
-          cmake -G "MinGW Makefiles" -S . -B build -DCMAKE_BUILD_TYPE=Release -DWITH_SCANNER=OFF
+          cmake -G "MinGW Makefiles" -S . -B build -DCMAKE_BUILD_TYPE=Release -DWITH_SCANNER=OFF -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
           cmake --build build -j $(nproc)
 
       - name: Validate Version
