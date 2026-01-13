@@ -1,0 +1,50 @@
+name: Windows CI
+
+on:
+  push:
+    tags:
+      - "windows-2.8.1-*"
+
+jobs:
+  build:
+    name: Windows (MSYS2)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          update: true
+          install: >-
+            git
+            base-devel
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-boost
+            mingw-w64-x86_64-openssl
+            mingw-w64-x86_64-libzip
+            mingw-w64-x86_64-libhidapi
+            mingw-w64-x86_64-protobuf
+            mingw-w64-x86_64-libsodium
+            mingw-w64-x86_64-libunbound
+            mingw-w64-x86_64-qrencode
+            mingw-w64-x86_64-qt6-base
+            mingw-w64-x86_64-qt6-svg
+            mingw-w64-x86_64-qt6-websockets
+            mingw-w64-x86_64-qt6-multimedia
+            mingw-w64-x86_64-qt6-wayland
+            mingw-w64-x86_64-zxing-cpp
+
+      - name: Build
+        shell: msys2 {0}
+        run: |
+          cmake -G "MinGW Makefiles" -S . -B build -DCMAKE_BUILD_TYPE=Release -DWITH_SCANNER=OFF
+          cmake --build build -j $(nproc)
+
+      - name: Validate Version
+        shell: msys2 {0}
+        run: ./build/bin/feather.exe --version

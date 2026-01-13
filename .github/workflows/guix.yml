@@ -112,7 +112,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: "logs"
-          path: '**/logs/**'
+          path: "**/logs/**"
 
   codesigning:
     runs-on: ubuntu-24.04
@@ -139,10 +139,10 @@ jobs:
       - uses: signpath/github-action-submit-signing-request@v1
         name: "request signature"
         with:
-          api-token: '${{ secrets.SIGNPATH_API_KEY }}'
-          organization-id: 'd3e94749-9c69-44e9-82de-c65cb3832869'
-          project-slug: 'feather'
-          signing-policy-slug: 'release-signing'
+          api-token: "${{ secrets.SIGNPATH_API_KEY }}"
+          organization-id: "d3e94749-9c69-44e9-82de-c65cb3832869"
+          project-slug: "feather"
+          signing-policy-slug: "release-signing"
           artifact-configuration-slug: ${{ env.ARTIFACT_SLUG }}
           github-artifact-id: ${{ env.ARTIFACT_ID }}
           wait-for-completion: true

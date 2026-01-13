@@ -1,0 +1,30 @@
+name: macOS CI
+
+on:
+  push:
+    tags:
+      - "macos-2.8.1-*"
+
+jobs:
+  build:
+    name: macOS (brew)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          brew update
+          brew install --quiet qt libsodium libzip qrencode unbound cmake boost hidapi openssl expat libunwind-headers protobuf pkg-config
+
+      - name: Configure CMake
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DWITH_SCANNER=OFF
+
+      - name: Build
+        run: cmake --build build -j $(sysctl -n hw.ncpu)
+
+      - name: Validate Version
+        run: ./build/bin/feather.app/Contents/MacOS/feather --version

@@ -1,0 +1,36 @@
+name: Linux CI
+
+on:
+  push:
+    tags:
+      - "linux-2.8.1-*"
+
+jobs:
+  build:
+    name: Ubuntu 24.04
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:24.04
+    steps:
+      - name: Install dependencies
+        run: |
+          apt update
+          apt -y install git cmake build-essential ccache libssl-dev libunbound-dev libboost-all-dev \
+                         libqrencode-dev qt6-base-dev qt6-svg-dev qt6-websockets-dev qt6-multimedia-dev \
+                         qt6-wayland-dev libzip-dev libsodium-dev libgcrypt20-dev libx11-xcb-dev \
+                         protobuf-compiler libprotobuf-dev libhidapi-dev libzxing-dev libusb-dev \
+                         libusb-1.0-0-dev
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure CMake
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build -j $(nproc)
+
+      - name: Validate Version
+        run: ./build/bin/feather --version
