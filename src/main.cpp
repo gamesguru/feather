@@ -85,7 +85,11 @@ if (AttachConsole(ATTACH_PARENT_PROCESS)) {
 
     for (int i = 1; i < argc; i++) {
         if (QString(argv[i]) == "--version" || QString(argv[i]) == "-v") {
+#ifdef FEATHER_BUILD_TAG
+            qInfo() << QObject::tr("Feather Wallet") << FEATHER_VERSION << FEATHER_BUILD_TAG;
+#else
             qInfo() << QObject::tr("Feather Wallet") << FEATHER_VERSION;
+#endif
             return 0;
         }
     }
