@@ -275,6 +275,10 @@ void Nodes::autoConnect(bool forceReconnect) {
         return;
     }
 
+    if (conf()->get(Config::syncPaused).toBool() && conf()->get(Config::syncPausedAlsoDisconnectNode).toBool()) {
+        return;
+    }
+
     // this function is responsible for automatically connecting to a daemon.
     if (m_wallet == nullptr || !m_enableAutoconnect) {
         return;
