@@ -18,7 +18,7 @@ jobs:
       - name: Install dependencies
         run: |
           brew update
-          brew install --quiet qt libsodium libzip qrencode unbound cmake boost hidapi openssl expat libunwind-headers protobuf pkg-config
+          brew install --quiet qt libsodium libzip qrencode unbound cmake boost hidapi openssl expat protobuf pkg-config
 
       - name: Configure CMake
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DWITH_SCANNER=OFF
