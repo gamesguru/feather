@@ -249,7 +249,9 @@ void MainWindow::initStatusBar() {
                 m_wallet->setSyncPaused(true);
 
                 if (m_actionDisconnectNodeOnPause->isChecked()) {
+                     qInfo() << "Disconnecting from node (Pause Sync enabled)";
                      m_nodes->disconnect();
+                     this->onConnectionStatusChanged(Wallet::ConnectionStatus_Disconnected);
                 }
 
                 if (m_actionDisconnectWebSocketOnPause->isChecked()) {
