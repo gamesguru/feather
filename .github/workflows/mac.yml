@@ -12,6 +12,7 @@ jobs:
     steps:
     env:
       CCACHE_DIR: /Users/runner/Library/Caches/ccache
+      HOMEBREW_NO_AUTO_UPDATE: 1
 
     steps:
       - name: Checkout repository
@@ -21,8 +22,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          brew update
-          brew install --quiet qt libsodium libzip qrencode unbound cmake boost hidapi openssl expat protobuf pkg-config ccache
+          brew install --quiet qt libsodium libzip qrencode unbound cmake boost hidapi openssl expat protobuf pkg-config ccache ninja
 
       - name: Setup ccache
         uses: actions/cache@v4
@@ -33,10 +33,10 @@ jobs:
             macos-ccache-
 
       - name: Configure CMake
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DWITH_SCANNER=OFF -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+        run: cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release -DWITH_SCANNER=OFF -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       - name: Build
-        run: cmake --build build -j $(sysctl -n hw.ncpu)
+        run: cmake --build build
 
       - name: Validate Version
         run: ./build/bin/feather.app/Contents/MacOS/feather --version
