@@ -1054,6 +1054,10 @@ void MainWindow::onConnectionStatusChanged(int status)
 
     qDebug() << "Wallet connection status changed " << Utils::QtEnumToString(static_cast<Wallet::ConnectionStatus>(status));
 
+    if (m_updateNetworkInfoAction) {  // Maybe not initialized on first function call
+        m_updateNetworkInfoAction->setEnabled(status != Wallet::ConnectionStatus_Disconnected);
+    }
+
     // Update connection info in status bar.
 
     QIcon icon;
