@@ -307,6 +307,7 @@ endif()
 if (WITH_SCANNER)
     include(CheckCXXSourceCompiles)
     set(CMAKE_REQUIRED_LIBRARIES ${ZXING_LIBRARIES})
+    set(CMAKE_REQUIRED_INCLUDES ${ZXING_INCLUDE_DIRS})
 
     check_cxx_source_compiles("
     #include <ZXing/ReadBarcode.h>
