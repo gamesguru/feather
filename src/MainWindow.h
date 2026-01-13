@@ -235,6 +235,8 @@ private:
 
     QPointer<QAction> m_clearRecentlyOpenAction;
     QPointer<QAction> m_updateNetworkInfoAction;
+    QPointer<QAction> m_actionDisconnectNodeOnPause;
+    QPointer<QAction> m_actionDisconnectWebSocketOnPause;
 
     QDateTime m_lastSyncStatusUpdate;
 

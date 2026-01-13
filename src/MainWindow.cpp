@@ -202,6 +202,26 @@ void MainWindow::initStatusBar() {
     pauseSyncAction->setChecked(conf()->get(Config::syncPaused).toBool());
     m_statusLabelStatus->addAction(pauseSyncAction);
 
+    m_actionDisconnectNodeOnPause = new QAction(tr("Disconnect from Node"), this);
+    m_actionDisconnectNodeOnPause->setCheckable(true);
+    m_actionDisconnectNodeOnPause->setChecked(conf()->get(Config::syncPausedAlsoDisconnectNode).toBool());
+    m_actionDisconnectNodeOnPause->setEnabled(pauseSyncAction->isChecked());
+    m_statusLabelStatus->addAction(m_actionDisconnectNodeOnPause);
+
+    m_actionDisconnectWebSocketOnPause = new QAction(tr("Disconnect from WebSocket"), this);
+    m_actionDisconnectWebSocketOnPause->setCheckable(true);
+    m_actionDisconnectWebSocketOnPause->setChecked(conf()->get(Config::syncPausedAlsoDisconnectWebSocket).toBool());
+    m_actionDisconnectWebSocketOnPause->setEnabled(pauseSyncAction->isChecked());
+    m_statusLabelStatus->addAction(m_actionDisconnectWebSocketOnPause);
+
+    connect(m_actionDisconnectNodeOnPause, &QAction::toggled, this, [](bool checked){
+        conf()->set(Config::syncPausedAlsoDisconnectNode, checked);
+    });
+
+    connect(m_actionDisconnectWebSocketOnPause, &QAction::toggled, this, [](bool checked){
+        conf()->set(Config::syncPausedAlsoDisconnectWebSocket, checked);
+    });
+
     QAction *skipSyncAction = new QAction(tr("Skip Sync"), this);
     m_statusLabelStatus->addAction(skipSyncAction);
 
@@ -220,14 +240,27 @@ void MainWindow::initStatusBar() {
     connect(pauseSyncAction, &QAction::toggled, this, [this](bool checked) {
         qInfo() << "Pause Sync toggled. Checked =" << checked;
         conf()->set(Config::syncPaused, checked);
+
+        m_actionDisconnectNodeOnPause->setEnabled(checked);
+        m_actionDisconnectWebSocketOnPause->setEnabled(checked);
+
         if (m_wallet) {
             if (checked) {
                 m_wallet->setSyncPaused(true);
-                websocketNotifier()->websocketClient->stop();
+
+                if (m_actionDisconnectNodeOnPause->isChecked()) {
+                     m_nodes->disconnect();
+                }
+
+                if (m_actionDisconnectWebSocketOnPause->isChecked()) {
+                    websocketNotifier()->websocketClient->stop();
+                }
 
                 this->setPausedSyncStatus();
             } else {
+                // Ensure we reconnect everything when unpausing
                 m_wallet->setSyncPaused(false);
+                m_nodes->connectToNode();
                 websocketNotifier()->websocketClient->restart();
                 this->setStatusText(tr("Resuming sync..."));
             }
