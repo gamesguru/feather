@@ -247,7 +247,7 @@ void Settings::setupStorageTab() {
 
     // [Log level]
     ui->comboBox_logLevel->clear();
-    ui->comboBox_logLevel->addItems({"Error", "Warning", "Info", "Debug", "Trace"});
+    ui->comboBox_logLevel->addItems({"Fatal", "Warning", "Info", "Debug"});
     ui->comboBox_logLevel->setCurrentIndex(conf()->get(Config::logLevel).toInt());
 
     connect(ui->comboBox_logLevel, QOverload<int>::of(&QComboBox::currentIndexChanged), [](int index){
@@ -329,7 +329,7 @@ void Settings::setupDisplayTab() {
     connect(ui->checkBox_showTrayIcon, &QCheckBox::toggled, [this](bool toggled) {
         conf()->set(Config::showTrayIcon, toggled);
         ui->checkBox_minimizeToTray->setEnabled(toggled);
-        ui->checkBox_trayLeftClickToggles->setEnabled(toggled);
+        ui->checkBox_trayLeftClickTogglesFocus->setEnabled(toggled);
         emit showTrayIcon(toggled);
     });
 
@@ -341,11 +341,10 @@ void Settings::setupDisplayTab() {
     });
 
     // [Left click system tray icon to toggle focus]
-    ui->checkBox_trayLeftClickToggles->setEnabled(ui->checkBox_showTrayIcon->isChecked());
-    ui->checkBox_trayLeftClickToggles->setChecked(conf()->get(Config::trayLeftClickToggles).toBool());
-    connect(ui->checkBox_trayLeftClickToggles, &QCheckBox::toggled, [this](bool toggled) {
-        conf()->set(Config::trayLeftClickToggles, toggled);
-    });
+    ui->checkBox_trayLeftClickTogglesFocus->setEnabled(ui->checkBox_showTrayIcon->isChecked());
+    ui->checkBox_trayLeftClickTogglesFocus->setChecked(conf()->get(Config::trayLeftClickTogglesFocus).toBool());
+    connect(ui->checkBox_trayLeftClickTogglesFocus, &QCheckBox::toggled,
+            [this](bool toggled) { conf()->set(Config::trayLeftClickTogglesFocus, toggled); });
 }
 
 void Settings::setupMemoryTab() {

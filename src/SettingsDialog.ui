@@ -857,7 +857,7 @@
                  </spacer>
                 </item>
                 <item>
-                 <widget class="QCheckBox" name="checkBox_trayLeftClickToggles">
+                 <widget class="QCheckBox" name="checkBox_trayLeftClickTogglesFocus">
                   <property name="enabled">
                    <bool>false</bool>
                   </property>

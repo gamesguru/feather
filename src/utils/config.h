@@ -110,7 +110,7 @@ public:
         lockOnMinimize,
         showTrayIcon,
         minimizeToTray,
-        trayLeftClickToggles,
+        trayLeftClickTogglesFocus,
 
         // Transactions
         multiBroadcast,

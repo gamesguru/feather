@@ -49,7 +49,7 @@ WindowManager::WindowManager(QObject *parent)
 
     connect(m_tray, &QSystemTrayIcon::activated, [this](QSystemTrayIcon::ActivationReason reason) {
         if (reason == QSystemTrayIcon::Trigger) {
-            if (conf()->get(Config::trayLeftClickToggles).toBool()) {
+            if (conf()->get(Config::trayLeftClickTogglesFocus).toBool()) {
                 for (const auto &window : m_windows) {
                     if (window->isVisible()) {
                         window->hide();
