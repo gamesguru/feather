@@ -4,7 +4,9 @@
 #include "QrCodeScanWidget.h"
 #include "ui_QrCodeScanWidget.h"
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
 #include <QPermission>
+#endif
 #include <QMediaDevices>
 #include <QComboBox>
 
@@ -73,6 +75,7 @@ void QrCodeScanWidget::startCapture(bool scan_ur) {
     ui->progressBar_UR->setVisible(m_scan_ur);
     ui->progressBar_UR->setFormat("Progress: %v%");
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
     QCameraPermission cameraPermission;
     switch (qApp->checkPermission(cameraPermission)) {
         case Qt::PermissionStatus::Undetermined:
@@ -89,6 +92,10 @@ void QrCodeScanWidget::startCapture(bool scan_ur) {
             qDebug() << "Camera permission granted";
             break;
     }
+#else
+    // For Qt < 6.5, we rely on the backend (e.g., V4L2) to fail or QCamera::errorOccurred 
+    // to report issues if permission is missing. There is no explicit QPermission API.
+#endif
 
     if (ui->combo_camera->count() < 1) {
         ui->frame_error->setText("No cameras found. Attach a camera and press 'Refresh'.");

@@ -1067,7 +1067,7 @@ void MainWindow::onConnectionStatusChanged(int status)
     } else {
         switch(status){
             case Wallet::ConnectionStatus_Disconnected:
-                icon = icons()->icon("status_disconnected.svg");
+                icon = icons()->icon("status_offline.svg");
                 this->setStatusText("Disconnected");
                 break;
             case Wallet::ConnectionStatus_Connecting:
