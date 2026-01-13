@@ -83,7 +83,7 @@ if (AttachConsole(ATTACH_PARENT_PROCESS)) {
     QApplication::setHighDpiScaleFactorRoundingPolicy(Qt::HighDpiScaleFactorRoundingPolicy::Round);
 #endif
 
-    for (int i = 0; i < argc; i++) {
+    for (int i = 1; i < argc; i++) {
         if (QString(argv[i]) == "--version" || QString(argv[i]) == "-v") {
             qInfo() << QObject::tr("Feather Wallet") << FEATHER_VERSION;
             return 0;
