@@ -63,7 +63,7 @@ void WebsocketClient::start() {
         return;
     }
 
-    if (conf()->get(Config::syncPaused).toBool()) {
+    if (conf()->get(Config::syncPaused).toBool() && conf()->get(Config::syncPausedAlsoDisconnectWebSocket).toBool()) {
         return;
     }
 
