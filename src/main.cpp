@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: The Monero Project
 
 #include <QSslSocket>
+#include <iostream>
 
 #include "Application.h"
 #include "constants.h"
@@ -86,9 +87,14 @@ if (AttachConsole(ATTACH_PARENT_PROCESS)) {
     for (int i = 1; i < argc; i++) {
         if (QString(argv[i]) == "--version" || QString(argv[i]) == "-v") {
 #ifdef FEATHER_BUILD_TAG
-            qInfo() << QObject::tr("Feather Wallet") << FEATHER_VERSION << FEATHER_BUILD_TAG;
+            QString buildTag = QString(FEATHER_BUILD_TAG).replace("\"", "");
+            QString versionTag = QString(FEATHER_VERSION) + "-";
+            if (buildTag.startsWith(versionTag)) {
+                buildTag.remove(0, versionTag.length());
+            }
+            std::cout << "Feather Wallet " << FEATHER_VERSION << " (build " << buildTag.toStdString() << ")" << std::endl;
 #else
-            qInfo() << QObject::tr("Feather Wallet") << FEATHER_VERSION;
+            std::cout << "Feather Wallet " << FEATHER_VERSION << std::endl;
 #endif
             return 0;
         }

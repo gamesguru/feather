@@ -155,13 +155,23 @@ void MainWindow::initStatusBar() {
     m_statusUpdateAvailable->hide();
     this->statusBar()->addPermanentWidget(m_statusUpdateAvailable);
 
-    m_statusLabelBalance = new ClickableLabel(this);
-    m_statusLabelBalance->setText("Balance: 0 XMR");
+    QLabel *balancePrefix = new QLabel("Balance:", this);
+    this->statusBar()->addPermanentWidget(balancePrefix);
+
+    m_statusLabelBalance = new QLabel(this);
+    m_statusLabelBalance->setText("0");
     m_statusLabelBalance->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    m_statusLabelBalance->setCursor(Qt::PointingHandCursor);
-    m_statusLabelBalance->setCursor(Qt::PointingHandCursor);
     m_statusLabelBalance->setContextMenuPolicy(Qt::ActionsContextMenu);
     this->statusBar()->addPermanentWidget(m_statusLabelBalance);
+
+    m_statusLabelBalanceSuffix = new QLabel("XMR", this);
+    this->statusBar()->addPermanentWidget(m_statusLabelBalanceSuffix);
+
+    QAction *copyBalanceAction = new QAction(tr("Copy"), this);
+    connect(copyBalanceAction, &QAction::triggered, this, [this](){
+        QApplication::clipboard()->setText(m_statusLabelBalance->text());
+    });
+    m_statusLabelBalance->addAction(copyBalanceAction);
 
     QAction *showBalanceAction = new QAction(tr("Show details"), this);
     connect(showBalanceAction, &QAction::triggered, this, &MainWindow::showBalanceDialog);
@@ -876,18 +886,22 @@ void MainWindow::onBalanceUpdated(quint64 balance, quint64 spendable) {
     int displaySetting = conf()->get(Config::balanceDisplay).toInt();
     int decimals = conf()->get(Config::amountPrecision).toInt();
 
-    QString balance_str = "Balance: ";
+    QString valueStr;
+    QString suffixStr;
+
     if (hide) {
-        balance_str += "HIDDEN";
+        valueStr = "HIDDEN";
     }
     else if (displaySetting == Config::totalBalance) {
-        balance_str += QString("%1 XMR").arg(WalletManager::displayAmount(balance, false, decimals));
+        valueStr = WalletManager::displayAmount(balance, false, decimals);
+        suffixStr = " XMR";
     }
     else if (displaySetting == Config::spendable || displaySetting == Config::spendablePlusUnconfirmed) {
-        balance_str += QString("%1 XMR").arg(WalletManager::displayAmount(spendable, false, decimals));
+        valueStr = WalletManager::displayAmount(spendable, false, decimals);
+        suffixStr = " XMR";
 
         if (displaySetting == Config::spendablePlusUnconfirmed && balance > spendable) {
-            balance_str += QString(" (+%1 XMR unconfirmed)").arg(WalletManager::displayAmount(balance - spendable, false, decimals));
+            suffixStr += QString(" (+%1 XMR unconfirmed)").arg(WalletManager::displayAmount(balance - spendable, false, decimals));
         }
     }
 
@@ -895,14 +909,15 @@ void MainWindow::onBalanceUpdated(quint64 balance, quint64 spendable) {
         QString fiatCurrency = conf()->get(Config::preferredFiatCurrency).toString();
         double balanceFiatAmount = appData()->prices.convert("XMR", fiatCurrency, balance / constants::cdiv);
         if (balance > 0 && balanceFiatAmount == 0.0) {
-            balance_str += " (---)";
+            suffixStr += " (---)";
         } else {
-            balance_str += QString(" (%1)").arg(Utils::amountToCurrencyString(balanceFiatAmount, fiatCurrency));
+            suffixStr += QString(" (%1)").arg(Utils::amountToCurrencyString(balanceFiatAmount, fiatCurrency));
         }
     }
 
     m_statusLabelBalance->setToolTip("Click for details");
-    m_statusLabelBalance->setText(balance_str);
+    m_statusLabelBalance->setText(valueStr);
+    m_statusLabelBalanceSuffix->setText(suffixStr);
 }
 
 void MainWindow::setPausedSyncStatus() {
@@ -1066,38 +1081,41 @@ void MainWindow::onConnectionStatusChanged(int status)
     qDebug() << "Wallet connection status changed " << Utils::QtEnumToString(static_cast<Wallet::ConnectionStatus>(status));
 
     if (m_updateNetworkInfoAction) {  // Maybe not initialized on first function call
-        bool syncPaused = conf()->get(Config::syncPaused).toBool();
-        m_updateNetworkInfoAction->setEnabled(status != Wallet::ConnectionStatus_Disconnected && !syncPaused);
+        m_updateNetworkInfoAction->setEnabled(status != Wallet::ConnectionStatus_Disconnected);
     }
 
     // Update connection info in status bar.
 
     QIcon icon;
+    QString statusStr;
     if (conf()->get(Config::offlineMode).toBool()) {
         icon = icons()->icon("status_offline.svg");
-        this->setStatusText("Offline mode");
+        statusStr = "Offline mode";
     } else {
         switch(status){
             case Wallet::ConnectionStatus_Disconnected:
                 icon = icons()->icon("status_offline.svg");
-                this->setStatusText("Disconnected");
+                statusStr = "Disconnected";
                 break;
             case Wallet::ConnectionStatus_Connecting:
                 icon = icons()->icon("status_lagging.svg");
-                this->setStatusText("Connecting to node");
+                statusStr = "Connecting to node";
                 break;
             case Wallet::ConnectionStatus_WrongVersion:
                 icon = icons()->icon("status_disconnected.svg");
-                this->setStatusText("Incompatible node");
+                statusStr = "Node Incompatible";
                 break;
             case Wallet::ConnectionStatus_Synchronizing:
                 icon = icons()->icon("status_waiting.svg");
+                statusStr = "Synchronizing";
                 break;
             case Wallet::ConnectionStatus_Synchronized:
                 icon = icons()->icon("status_connected.svg");
+                statusStr = "Synchronized";
                 break;
             default:
                 icon = icons()->icon("status_disconnected.svg");
+                statusStr = "Disconnected";
                 break;
         }
     }
