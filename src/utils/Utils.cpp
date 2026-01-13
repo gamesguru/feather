@@ -717,6 +717,10 @@ void clearLayout(QLayout* layout, bool deleteWidgets)
     }
 }
 
+quint64 blocksBehind(quint64 height, quint64 target) {
+    return (target > height) ? (target - height) : 0;
+}
+
 QString formatSyncStatus(quint64 height, quint64 target, bool daemonSync) {
     if (height < (target - 1)) {
         QString blocks = (target >= height) ? QString::number(target - height) : "?";
@@ -775,7 +779,7 @@ QString getPausedSyncStatus(Wallet *wallet, Nodes *nodes, QString *tooltip) {
         if (tooltip) {
             *tooltip = QObject::tr("Wallet Height: %1 | Network Tip: %2").arg(walletHeight).arg(daemonHeight);
         }
-        quint64 blocksBehind = (daemonHeight > startHeight) ? (daemonHeight - startHeight) : 0;
+        quint64 blocksBehind = Utils::blocksBehind(startHeight, daemonHeight);
         if (blocksBehind == 0) {
             return QObject::tr("[PAUSED] Sync paused");
         }

@@ -864,9 +864,15 @@ void MainWindow::setPausedSyncStatus() {
     QString status = Utils::getPausedSyncStatus(m_wallet, m_nodes, &tooltip);
 
     if (m_wallet) {
-        qDebug() << "Paused Status Calc: WalletHeight:" << m_wallet->blockChainHeight()
-                 << "DaemonHeight:" << m_wallet->daemonBlockChainHeight()
-                 << "TargetHeight:" << m_wallet->daemonBlockChainTargetHeight();
+        quint64 daemonHeight = m_wallet->daemonBlockChainHeight();
+        quint64 walletHeight = m_wallet->blockChainHeight();
+        quint64 targetHeight = m_wallet->daemonBlockChainTargetHeight();
+        quint64 blocksBehind = Utils::blocksBehind(walletHeight, targetHeight);
+
+        qDebug() << "Paused Status Calc: WalletHeight:" << walletHeight
+                 << "DaemonHeight:" << daemonHeight
+                 << "TargetHeight:" << targetHeight
+                 << "BlocksBehind:" << blocksBehind;
     }
 
     this->setStatusText(status);
@@ -990,9 +996,9 @@ void MainWindow::onSyncStatus(quint64 height, quint64 target, bool daemonSync) {
         this->updateNetStats();
         this->setStatusText(QString("Synchronized (%1)").arg(QLocale().toString(height)));
     } else {
-        quint64 blocksLeft = (target > height) ? (target - height) : 0;
+        quint64 blocksBehind = Utils::blocksBehind(height, target);
         QString type = daemonSync ? tr("Blockchain") : tr("Wallet");
-        QString blocksStr = QLocale().toString(blocksLeft);
+        QString blocksStr = QLocale().toString(blocksBehind);
         this->setStatusText(tr("%1 sync: %2 blocks behind").arg(type, blocksStr));
     }
     m_statusLabelStatus->setToolTip(tr("Wallet Height: %1 | Network Tip: %2")
