@@ -49,7 +49,9 @@ set(COPYRIGHT_YEAR "2025")
 set(COPYRIGHT_HOLDERS "The Monero Project")
 
 cmake_policy(SET CMP0074 NEW)
-cmake_policy(SET CMP0148 OLD)
+if(POLICY CMP0148)
+    cmake_policy(SET CMP0148 OLD)
+endif()
 
 # Configurable options
 option(STATIC "Link libraries statically, requires static Qt" OFF)
