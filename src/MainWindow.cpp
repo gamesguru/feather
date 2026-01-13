@@ -159,8 +159,13 @@ void MainWindow::initStatusBar() {
     m_statusLabelBalance->setText("Balance: 0 XMR");
     m_statusLabelBalance->setTextInteractionFlags(Qt::TextSelectableByMouse);
     m_statusLabelBalance->setCursor(Qt::PointingHandCursor);
+    m_statusLabelBalance->setCursor(Qt::PointingHandCursor);
+    m_statusLabelBalance->setContextMenuPolicy(Qt::ActionsContextMenu);
     this->statusBar()->addPermanentWidget(m_statusLabelBalance);
-    connect(m_statusLabelBalance, &ClickableLabel::clicked, this, &MainWindow::showBalanceDialog);
+
+    QAction *showBalanceAction = new QAction(tr("Show details"), this);
+    connect(showBalanceAction, &QAction::triggered, this, &MainWindow::showBalanceDialog);
+    m_statusLabelBalance->addAction(showBalanceAction);
 
     m_statusBtnConnectionStatusIndicator = new StatusBarButton(icons()->icon("status_disconnected.svg"), "Connection status", this);
     connect(m_statusBtnConnectionStatusIndicator, &StatusBarButton::clicked, [this](){
@@ -235,6 +240,7 @@ void MainWindow::initStatusBar() {
     m_statusLabelStatus->addAction(scanTxAction);
 
     m_updateNetworkInfoAction = new QAction(tr("Update Network Info"), this);
+    m_updateNetworkInfoAction->setEnabled(!pauseSyncAction->isChecked());
     m_statusLabelStatus->addAction(m_updateNetworkInfoAction);
 
     connect(pauseSyncAction, &QAction::toggled, this, [this](bool checked) {
@@ -243,6 +249,7 @@ void MainWindow::initStatusBar() {
 
         m_actionDisconnectNodeOnPause->setEnabled(checked);
         m_actionDisconnectWebSocketOnPause->setEnabled(checked);
+        m_updateNetworkInfoAction->setEnabled(!checked);
 
         if (m_wallet) {
             if (checked) {
@@ -887,7 +894,11 @@ void MainWindow::onBalanceUpdated(quint64 balance, quint64 spendable) {
     if (conf()->get(Config::balanceShowFiat).toBool() && !hide) {
         QString fiatCurrency = conf()->get(Config::preferredFiatCurrency).toString();
         double balanceFiatAmount = appData()->prices.convert("XMR", fiatCurrency, balance / constants::cdiv);
-        balance_str += QString(" (%1)").arg(Utils::amountToCurrencyString(balanceFiatAmount, fiatCurrency));
+        if (balance > 0 && balanceFiatAmount == 0.0) {
+            balance_str += " (---)";
+        } else {
+            balance_str += QString(" (%1)").arg(Utils::amountToCurrencyString(balanceFiatAmount, fiatCurrency));
+        }
     }
 
     m_statusLabelBalance->setToolTip("Click for details");

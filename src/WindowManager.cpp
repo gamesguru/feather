@@ -737,7 +737,7 @@ void WindowManager::onProxySettingsChanged() {
         getNetworkSocks5()->setProxy(proxy);
     }
 
-    qWarning() << "Proxy: " << proxy.hostName() << " " << proxy.port();
+    qInfo() << "Proxy: " << proxy.hostName() << " " << proxy.port();
 
     // Switch websocket to new proxy and update URL
     websocketNotifier()->websocketClient->stop();
