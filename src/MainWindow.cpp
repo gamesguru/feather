@@ -250,7 +250,7 @@ void MainWindow::initStatusBar() {
 
                 if (m_actionDisconnectNodeOnPause->isChecked()) {
                      qInfo() << "Disconnecting from node (Pause Sync enabled)";
-                     m_nodes->disconnect();
+                     m_nodes->disconnectCurrentNode();
                      this->onConnectionStatusChanged(Wallet::ConnectionStatus_Disconnected);
                 }
 

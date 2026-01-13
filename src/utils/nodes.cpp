@@ -207,6 +207,21 @@ void Nodes::connectToNode(const FeatherNode &node) {
     if (!node.isValid()) {
         return;
     }
+}
+
+void Nodes::disconnectCurrentNode() {
+    if (!m_wallet) return;
+
+    // Stop any ongoing connection attempt
+    m_connection.isActive = false;
+    m_connection.isConnecting = false;
+
+    // Connect to empty "node" effectively disconnects
+    m_wallet->initAsync("", false, 0);
+
+    this->resetLocalState();
+    this->updateModels();
+}
 
     if (conf()->get(Config::offlineMode).toBool()) {
         return;

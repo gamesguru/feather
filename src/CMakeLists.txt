@@ -305,6 +305,21 @@ if(DEVICE_TREZOR_READY)
 endif()
 
 if (WITH_SCANNER)
+    include(CheckCXXSourceCompiles)
+    set(CMAKE_REQUIRED_LIBRARIES ${ZXING_LIBRARIES})
+
+    check_cxx_source_compiles("
+    #include <ZXing/ReadBarcode.h>
+    int main() {
+        auto fmt = ZXing::ImageFormat::BGRA;
+        return 0;
+    }
+    " HAVE_ZXING_BGRA)
+
+    if (HAVE_ZXING_BGRA)
+        target_compile_definitions(feather PRIVATE HAVE_ZXING_BGRA)
+    endif()
+
     target_link_libraries(feather PRIVATE
             Qt::Multimedia
             Qt::MultimediaWidgets
