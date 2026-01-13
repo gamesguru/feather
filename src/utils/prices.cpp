@@ -31,6 +31,7 @@ void Prices::cryptoPricesReceived(const QJsonArray &data) {
         this->markets.insert(ms.symbol.toUpper(), ms);
     }
 
+    this->lastUpdateTime = QDateTime::currentDateTime();
     emit cryptoPricesUpdated();
 }
 

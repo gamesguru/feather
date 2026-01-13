@@ -910,8 +910,17 @@ void MainWindow::onBalanceUpdated(quint64 balance, quint64 spendable) {
     if (conf()->get(Config::balanceShowFiat).toBool() && !hide) {
         QString fiatCurrency = conf()->get(Config::preferredFiatCurrency).toString();
         double balanceFiatAmount = appData()->prices.convert("XMR", fiatCurrency, balance / constants::cdiv);
-        if (balance > 0 && balanceFiatAmount == 0.0) {
-            suffixStr += " (unknown)";
+        bool isCacheFresh = appData()->prices.lastUpdateTime.isValid() &&
+                            appData()->prices.lastUpdateTime.secsTo(QDateTime::currentDateTime()) < 3600;
+
+        if (balance > 0 && (balanceFiatAmount == 0.0 || !isCacheFresh)) {
+            if (conf()->get(Config::offlineMode).toBool() || m_wallet->connectionStatus() == Wallet::ConnectionStatus_Disconnected) {
+                suffixStr += " (offline)";
+            } else if (!appData()->prices.markets.contains("XMR")) {
+                suffixStr += " (connecting)";
+            } else {
+                suffixStr += " (unknown)";
+            }
         } else {
             suffixStr += QString(" (%1)").arg(Utils::amountToCurrencyString(balanceFiatAmount, fiatCurrency));
         }
