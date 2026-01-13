@@ -424,7 +424,11 @@ void Nodes::onWalletRefreshed() {
         if (m_connection.isOnion())
             return;
 
-        this->autoConnect(true);
+        // If want onion node but aren't connected to one, reconnect used to blindly fire.
+        // We should check if we actually intend to switch.
+        if (this->useOnionNodes()) {
+            this->autoConnect(true);
+        }
     }
 }
 

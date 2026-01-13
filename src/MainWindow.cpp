@@ -863,7 +863,6 @@ void MainWindow::setPausedSyncStatus() {
     QString tooltip;
     QString status = Utils::getPausedSyncStatus(m_wallet, m_nodes, &tooltip);
 
-    // Log variables for debugging 149 vs 814k discrepancy
     if (m_wallet) {
         qDebug() << "Paused Status Calc: WalletHeight:" << m_wallet->blockChainHeight()
                  << "DaemonHeight:" << m_wallet->daemonBlockChainHeight()
@@ -876,10 +875,6 @@ void MainWindow::setPausedSyncStatus() {
 }
 
 void MainWindow::setStatusText(const QString &text, bool override, int timeout) {
-    // Log to qWarning as requested for debugging
-    if (text != m_statusText) {
-        qTrace() << "Setting status text:" << text;
-    }
 
     if (override) {
         m_statusOverrideActive = true;
@@ -1541,7 +1536,6 @@ void MainWindow::changeEvent(QEvent* event)
     if (event->type() == QEvent::WindowStateChange) {
         qDebug() << "changeEvent: WindowStateChange. State:" << this->windowState() << " isMinimized:" << this->isMinimized();
         if (this->isMinimized()) {
-             // ... existing logic ...
             if (conf()->get(Config::lockOnMinimize).toBool()) {
                 this->lockWallet();
             }
@@ -1569,6 +1563,7 @@ void MainWindow::changeEvent(QEvent* event)
                 bool minimizeToTray = conf()->get(Config::minimizeToTray).toBool();
                 if (showTray && minimizeToTray) {
                     // Hide all widgets and dialogs, not just MainWindow
+                    // TODO: Implement better logic here
                     for (const auto &widget : QApplication::topLevelWidgets()) {
                         widget->hide();
                     }

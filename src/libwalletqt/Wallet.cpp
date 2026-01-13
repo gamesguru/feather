@@ -511,6 +511,12 @@ void Wallet::startRefreshThread()
                     // Don't call refresh function if we don't have the daemon and target height
                     // We do this to prevent to UI from getting confused about the amount of blocks that are still remaining
                     if (haveHeights) {
+                        // Prevent background network usage when sync is paused
+                        if (m_syncPaused) {
+                           last = std::chrono::steady_clock::now();
+                           continue;
+                        }
+
                         QMutexLocker locker(&m_asyncMutex);
 
                         if (m_newWallet) {
