@@ -7,6 +7,8 @@
 #include <QFileDialog>
 #include <QInputDialog>
 #include <QMessageBox>
+#include <QClipboard>
+#include <QLocale>
 #include <QCheckBox>
 #include <QFormLayout>
 #include <QSpinBox>
@@ -909,7 +911,7 @@ void MainWindow::onBalanceUpdated(quint64 balance, quint64 spendable) {
         QString fiatCurrency = conf()->get(Config::preferredFiatCurrency).toString();
         double balanceFiatAmount = appData()->prices.convert("XMR", fiatCurrency, balance / constants::cdiv);
         if (balance > 0 && balanceFiatAmount == 0.0) {
-            suffixStr += " (---)";
+            suffixStr += " (unknown)";
         } else {
             suffixStr += QString(" (%1)").arg(Utils::amountToCurrencyString(balanceFiatAmount, fiatCurrency));
         }
@@ -1119,6 +1121,23 @@ void MainWindow::onConnectionStatusChanged(int status)
                 break;
         }
     }
+
+    this->setStatusText(statusStr);
+
+    if (m_wallet) {
+        quint64 walletHeight = m_wallet->blockChainHeight();
+        quint64 daemonHeight = m_wallet->daemonBlockChainHeight();
+        quint64 targetHeight = m_wallet->daemonBlockChainTargetHeight();
+
+        if (walletHeight > 0) {
+            statusStr += QString("\nWallet %1. Daemon %2. Network %3")
+                    .arg(QLocale::system().toString(walletHeight))
+                    .arg(QLocale::system().toString(daemonHeight))
+                    .arg(QLocale::system().toString(targetHeight));
+        }
+    }
+
+    m_statusBtnConnectionStatusIndicator->setToolTip(statusStr);
 
     if (conf()->get(Config::syncPaused).toBool() && !conf()->get(Config::offlineMode).toBool()) {
         if (status == Wallet::ConnectionStatus_Synchronizing 

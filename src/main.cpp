@@ -3,6 +3,8 @@
 
 #include <QSslSocket>
 #include <iostream>
+#include <QIcon>
+#include <QGuiApplication>
 
 #include "Application.h"
 #include "constants.h"
@@ -104,6 +106,12 @@ if (AttachConsole(ATTACH_PARENT_PROCESS)) {
 
     QApplication::setApplicationName("FeatherWallet");
     QApplication::setApplicationVersion(FEATHER_VERSION);
+
+#if defined(Q_OS_LINUX)
+    QGuiApplication::setDesktopFileName("feather");
+#endif
+
+    QApplication::setWindowIcon(QIcon(":/assets/images/appicons/64x64.png"));
 
     QCommandLineParser parser;
     parser.setApplicationDescription("Feather - a free Monero desktop wallet");
