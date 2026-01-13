@@ -1563,7 +1563,7 @@ void MainWindow::changeEvent(QEvent* event)
         }
     } else if (event->type() == QEvent::ActivationChange) {
         qDebug() << "changeEvent: ActivationChange. Active:" << this->isActiveWindow();
-        QTimer::singleShot(500, this, [this](){
+        QTimer::singleShot(350, this, [this](){
             auto handle = this->windowHandle();
             if (handle && !handle->isExposed()) {
             qDebug() << "ActivationChange (delayed): Window not exposed -> Hiding to tray";
