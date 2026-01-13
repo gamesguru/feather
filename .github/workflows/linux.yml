@@ -9,33 +9,36 @@ on:
 jobs:
   build:
     name: ${{ matrix.distro }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runs_on }}
+    container: ${{ matrix.container }}
     strategy:
       fail-fast: false
       matrix:
-        distro: [ubuntu-24.04, ubuntu-22.04, ubuntu-20.04, fedora-latest, archlinux-latest]
         include:
           - distro: ubuntu-24.04
-            container: ubuntu:24.04
+            runs_on: ubuntu-24.04
+            container:
             install_cmd: |
               export DEBIAN_FRONTEND=noninteractive
-              apt update
-              apt -y install git cmake build-essential ccache ninja-build libssl-dev libunbound-dev libboost-all-dev \
+              sudo apt update
+              sudo apt -y install git cmake build-essential ccache ninja-build libssl-dev libunbound-dev libboost-all-dev \
                              libqrencode-dev qt6-base-dev qt6-svg-dev qt6-websockets-dev qt6-multimedia-dev \
                              qt6-wayland-dev libzip-dev libsodium-dev libgcrypt20-dev libx11-xcb-dev \
                              protobuf-compiler libprotobuf-dev libhidapi-dev libzxing-dev libusb-dev \
                              libusb-1.0-0-dev pkg-config
           - distro: ubuntu-22.04
-            container: ubuntu:22.04
+            runs_on: ubuntu-22.04
+            container:
             install_cmd: |
               export DEBIAN_FRONTEND=noninteractive
-              apt update
-              apt -y install git cmake build-essential ccache ninja-build libssl-dev libunbound-dev libboost-all-dev \
+              sudo apt update
+              sudo apt -y install git cmake build-essential ccache ninja-build libssl-dev libunbound-dev libboost-all-dev \
                              libqrencode-dev qt6-base-dev qt6-svg-dev qt6-websockets-dev qt6-multimedia-dev \
                              qt6-wayland-dev libzip-dev libsodium-dev libgcrypt20-dev libx11-xcb-dev \
                              protobuf-compiler libprotobuf-dev libhidapi-dev libzxing-dev libusb-dev \
                              libusb-1.0-0-dev pkg-config
           - distro: ubuntu-20.04
+            runs_on: ubuntu-22.04 # 20.04 runner deprecated/slow, run in container on 22.04
             container: ubuntu:20.04
             install_cmd: |
               export DEBIAN_FRONTEND=noninteractive
@@ -49,6 +52,7 @@ jobs:
                              protobuf-compiler libprotobuf-dev libhidapi-dev libzxing-dev libusb-dev \
                              libusb-1.0-0-dev pkg-config
           - distro: fedora-latest
+            runs_on: ubuntu-latest
             container: fedora:latest
             install_cmd: |
               dnf -y update
@@ -58,15 +62,13 @@ jobs:
                              libgcrypt-devel libxcb-devel protobuf-compiler protobuf-devel hidapi-devel \
                              zxing-cpp-devel libusb1-devel systemd-devel
           - distro: archlinux-latest
+            runs_on: ubuntu-latest
             container: archlinux:latest
             install_cmd: |
               pacman -Syu --noconfirm
               pacman -S --noconfirm git cmake base-devel ccache ninja openssl libunbound boost qrencode \
                                     qt6-base qt6-svg qt6-websockets qt6-multimedia qt6-wayland \
                                     libzip libsodium libgcrypt libxcb protobuf hidapi zxing-cpp libusb
-
-    container:
-      image: ${{ matrix.container }}
 
     env:
       CCACHE_DIR: /github/home/.ccache
