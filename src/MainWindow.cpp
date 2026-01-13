@@ -1002,9 +1002,14 @@ void MainWindow::onSyncStatus(quint64 height, quint64 target, bool daemonSync) {
         QString blocksStr = QLocale().toString(blocksBehind);
         this->setStatusText(tr("%1 sync: %2 blocks behind").arg(type, blocksStr));
     }
-    m_statusLabelStatus->setToolTip(tr("Wallet Height: %1 | Network Tip: %2")
+    m_lastSyncStatusUpdate = QDateTime::currentDateTime();
+    QString tooltip = tr("Wallet Height: %1 | Network Tip: %2\nLast updated: %3")
         .arg(QLocale().toString(height))
-        .arg(QLocale().toString(target)));
+        .arg(QLocale().toString(target))
+        .arg(m_lastSyncStatusUpdate.toString("HH:mm:ss"));
+
+    qDebug() << "Setting Status Tooltip:" << tooltip;
+    m_statusLabelStatus->setToolTip(tooltip);
 }
 
 void MainWindow::onConnectionStatusChanged(int status)

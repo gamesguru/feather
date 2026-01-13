@@ -236,6 +236,8 @@ private:
     QPointer<QAction> m_clearRecentlyOpenAction;
     QPointer<QAction> m_updateNetworkInfoAction;
 
+    QDateTime m_lastSyncStatusUpdate;
+
     // lower status bar
     QPushButton *m_statusUpdateAvailable;
     ClickableLabel *m_statusLabelBalance;
