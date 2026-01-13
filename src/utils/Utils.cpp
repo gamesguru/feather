@@ -619,6 +619,32 @@ QFont relativeFont(int delta) {
     return font;
 }
 
+QString timeAgo(const QDateTime &dt) {
+    qint64 diff = dt.secsTo(QDateTime::currentDateTime());
+
+    if (diff < 0) return "in the future";
+    if (diff < 60) return QString("%1 second%2 ago").arg(diff).arg(diff == 1 ? "" : "s");
+
+    diff /= 60; // minutes
+    if (diff < 60) return QString("%1 minute%2 ago").arg(diff).arg(diff == 1 ? "" : "s");
+
+    qint64 minutes = diff % 60;
+    diff /= 60; // hours
+    if (diff < 24) {
+        if (minutes > 0)
+            return QString("%1 hour%2 %3 minute%4 ago").arg(diff).arg(diff == 1 ? "" : "s").arg(minutes).arg(minutes == 1 ? "" : "s");
+        return QString("%1 hour%2 ago").arg(diff).arg(diff == 1 ? "" : "s");
+    }
+
+    diff /= 24; // days
+    if (diff < 30) return QString("%1 day%2 ago").arg(diff).arg(diff == 1 ? "" : "s");
+
+    diff /= 30; // months (approx)
+    if (diff < 12) return QString("%1 month%2 ago").arg(diff).arg(diff == 1 ? "" : "s");
+
+    return QString("%1 year%2 ago").arg(diff / 12).arg((diff / 12) == 1 ? "" : "s");
+}
+
 bool isLocalUrl(const QUrl &url) {
     QRegularExpression localNetwork(R"((^127\.)|(^10\.)|(^172\.1[6-9]\.)|(^172\.2[0-9]\.)|(^172\.3[0-1]\.)|(^192\.168\.))");
     return (localNetwork.match(url.host()).hasMatch() || url.host() == "localhost");

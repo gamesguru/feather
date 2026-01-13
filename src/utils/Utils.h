@@ -98,6 +98,7 @@ namespace Utils
 
     QFont getMonospaceFont();
     QFont relativeFont(int delta);
+    QString timeAgo(const QDateTime &dt);
 
     void applicationLogHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg);
     QString barrayToString(const QByteArray &data);

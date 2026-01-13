@@ -74,9 +74,22 @@ void BalanceTickerWidget::updateDisplay() {
     double balance = (m_totalBalance ? m_wallet->balanceAll() : m_wallet->balance()) / constants::cdiv;
     QString fiatCurrency = conf()->get(Config::preferredFiatCurrency).toString();
     double balanceFiatAmount = appData()->prices.convert("XMR", fiatCurrency, balance);
-    if (balanceFiatAmount < 0)
-        return;
-    this->setFiatText(balanceFiatAmount, fiatCurrency);
+
+    bool isCacheValid = appData()->prices.lastUpdateTime.isValid();
+    bool isCacheFresh = isCacheValid && appData()->prices.lastUpdateTime.secsTo(QDateTime::currentDateTime()) < 3600;
+
+    if (balanceFiatAmount == 0.0 || !isCacheValid) {
+        if (conf()->get(Config::offlineMode).toBool() || m_wallet->connectionStatus() == Wallet::ConnectionStatus_Disconnected) {
+            this->setDisplayText("offline");
+        } else if (!appData()->prices.markets.contains("XMR")) {
+            this->setDisplayText("connecting");
+        } else {
+            this->setDisplayText("unknown");
+        }
+    } else {
+        QString approx = isCacheFresh ? "" : "~ ";
+        this->setDisplayText(approx + Utils::amountToCurrencyString(balanceFiatAmount, fiatCurrency));
+    }
 }
 
 // PriceTickerWidget

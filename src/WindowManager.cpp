@@ -51,7 +51,7 @@ WindowManager::WindowManager(QObject *parent)
         if (reason == QSystemTrayIcon::Trigger) {
             if (conf()->get(Config::trayLeftClickTogglesFocus).toBool()) {
                 for (const auto &window : m_windows) {
-                    if (window->isVisible()) {
+                    if (window->isVisible() && window->isActiveWindow()) {
                         window->hide();
                     } else {
                         window->show();
@@ -737,7 +737,7 @@ void WindowManager::onProxySettingsChanged() {
         getNetworkSocks5()->setProxy(proxy);
     }
 
-    qInfo() << "Proxy: " << proxy.hostName() << " " << proxy.port();
+    qDebug() << "Proxy: " << proxy.hostName() << " " << proxy.port();
 
     // Switch websocket to new proxy and update URL
     websocketNotifier()->websocketClient->stop();

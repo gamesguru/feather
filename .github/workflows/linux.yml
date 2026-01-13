@@ -97,4 +97,4 @@ jobs:
         run: cmake --build build
 
       - name: Validate Version
-        run: ./build/bin/feather --version
+        run: ./build/bin/feather --version | grep "Feather Wallet"

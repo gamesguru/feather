@@ -9,6 +9,7 @@
 #include <QMessageBox>
 #include <QClipboard>
 #include <QLocale>
+#include <QHBoxLayout>
 #include <QCheckBox>
 #include <QFormLayout>
 #include <QSpinBox>
@@ -157,17 +158,24 @@ void MainWindow::initStatusBar() {
     m_statusUpdateAvailable->hide();
     this->statusBar()->addPermanentWidget(m_statusUpdateAvailable);
 
+    QWidget *balanceContainer = new QWidget(this);
+    QHBoxLayout *balanceLayout = new QHBoxLayout(balanceContainer);
+    balanceLayout->setContentsMargins(0, 0, 0, 0);
+    balanceLayout->setSpacing(0);
+
     QLabel *balancePrefix = new QLabel("Balance:", this);
-    this->statusBar()->addPermanentWidget(balancePrefix);
+    balanceLayout->addWidget(balancePrefix);
 
     m_statusLabelBalance = new QLabel(this);
     m_statusLabelBalance->setText("0");
     m_statusLabelBalance->setTextInteractionFlags(Qt::TextSelectableByMouse);
     m_statusLabelBalance->setContextMenuPolicy(Qt::ActionsContextMenu);
-    this->statusBar()->addPermanentWidget(m_statusLabelBalance);
+    balanceLayout->addWidget(m_statusLabelBalance);
 
     m_statusLabelBalanceSuffix = new QLabel("XMR", this);
-    this->statusBar()->addPermanentWidget(m_statusLabelBalanceSuffix);
+    balanceLayout->addWidget(m_statusLabelBalanceSuffix);
+
+    this->statusBar()->addPermanentWidget(balanceContainer);
 
     QAction *copyBalanceAction = new QAction(tr("Copy"), this);
     connect(copyBalanceAction, &QAction::triggered, this, [this](){
@@ -910,10 +918,10 @@ void MainWindow::onBalanceUpdated(quint64 balance, quint64 spendable) {
     if (conf()->get(Config::balanceShowFiat).toBool() && !hide) {
         QString fiatCurrency = conf()->get(Config::preferredFiatCurrency).toString();
         double balanceFiatAmount = appData()->prices.convert("XMR", fiatCurrency, balance / constants::cdiv);
-        bool isCacheFresh = appData()->prices.lastUpdateTime.isValid() &&
-                            appData()->prices.lastUpdateTime.secsTo(QDateTime::currentDateTime()) < 3600;
+        bool isCacheValid = appData()->prices.lastUpdateTime.isValid();
+        bool isCacheFresh = isCacheValid && appData()->prices.lastUpdateTime.secsTo(QDateTime::currentDateTime()) < 3; // TODO: 3600
 
-        if (balance > 0 && (balanceFiatAmount == 0.0 || !isCacheFresh)) {
+        if (balance > 0 && (balanceFiatAmount == 0.0 || !isCacheValid)) {
             if (conf()->get(Config::offlineMode).toBool() || m_wallet->connectionStatus() == Wallet::ConnectionStatus_Disconnected) {
                 suffixStr += " (offline)";
             } else if (!appData()->prices.markets.contains("XMR")) {
@@ -922,12 +930,18 @@ void MainWindow::onBalanceUpdated(quint64 balance, quint64 spendable) {
                 suffixStr += " (unknown)";
             }
         } else {
-            suffixStr += QString(" (%1)").arg(Utils::amountToCurrencyString(balanceFiatAmount, fiatCurrency));
+            QString approx = isCacheFresh ? "" : "~ ";
+            suffixStr += QString(" (%1%2)").arg(approx, Utils::amountToCurrencyString(balanceFiatAmount, fiatCurrency));
         }
     }
 
-    m_statusLabelBalance->setToolTip("Click for details");
+    QString toolTip = "Click for details";
+    if (appData()->prices.lastUpdateTime.isValid()) {
+        toolTip += QString("\nLast updated: %1").arg(Utils::timeAgo(appData()->prices.lastUpdateTime));
+    }
+    m_statusLabelBalance->setToolTip(toolTip);
     m_statusLabelBalance->setText(valueStr);
+    m_statusLabelBalanceSuffix->setToolTip(toolTip);
     m_statusLabelBalanceSuffix->setText(suffixStr);
 }
 
