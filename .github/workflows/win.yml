@@ -9,7 +9,6 @@ jobs:
   build:
     name: Windows (MSYS2)
     runs-on: windows-latest
-    steps:
     env:
       CCACHE_DIR: ~/.ccache
 

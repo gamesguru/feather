@@ -1,6 +1,9 @@
 name: ci/gh-actions/guix
 
-# on: [push, pull_request]
+on:
+  push:
+    tags:
+      - "guix-2.8.1-*"
 
 jobs:
   cache-sources:

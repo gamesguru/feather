@@ -920,7 +920,7 @@ void MainWindow::onBalanceUpdated(quint64 balance, quint64 spendable) {
         QString fiatCurrency = conf()->get(Config::preferredFiatCurrency).toString();
         double balanceFiatAmount = appData()->prices.convert("XMR", fiatCurrency, balance / constants::cdiv);
         bool isCacheValid = appData()->prices.lastUpdateTime.isValid();
-        bool isCacheFresh = isCacheValid && appData()->prices.lastUpdateTime.secsTo(QDateTime::currentDateTime()) < 3; // TODO: 3600
+        bool isCacheFresh = isCacheValid && appData()->prices.lastUpdateTime.secsTo(QDateTime::currentDateTime()) < 3600;
 
         if (balance > 0 && (balanceFiatAmount == 0.0 || !isCacheValid)) {
             if (conf()->get(Config::offlineMode).toBool() || m_wallet->connectionStatus() == Wallet::ConnectionStatus_Disconnected) {
@@ -936,7 +936,7 @@ void MainWindow::onBalanceUpdated(quint64 balance, quint64 spendable) {
         }
     }
 
-    QString toolTip = "Click for details";
+    QString toolTip = "Right-click for details";
     if (appData()->prices.lastUpdateTime.isValid()) {
         toolTip += QString("\nLast updated: %1").arg(Utils::timeAgo(appData()->prices.lastUpdateTime));
     }
@@ -1107,7 +1107,7 @@ void MainWindow::onConnectionStatusChanged(int status)
     qDebug() << "Wallet connection status changed " << Utils::QtEnumToString(static_cast<Wallet::ConnectionStatus>(status));
 
     if (m_updateNetworkInfoAction) {  // Maybe not initialized on first function call
-        m_updateNetworkInfoAction->setEnabled(status != Wallet::ConnectionStatus_Disconnected);
+        m_updateNetworkInfoAction->setEnabled(status != Wallet::ConnectionStatus_Disconnected && !conf()->get(Config::syncPaused).toBool());
     }
 
     // Update connection info in status bar.
