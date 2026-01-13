@@ -17,9 +17,8 @@ public:
 
 public slots:
     void setSearchFilter(const QString& searchString){
-        beginFilterChange();
         m_searchRegExp.setPattern(searchString);
-        endFilterChange();
+        invalidateFilter();
     }
 
 private:
