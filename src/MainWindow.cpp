@@ -159,6 +159,7 @@ void MainWindow::initStatusBar() {
     this->statusBar()->addPermanentWidget(m_statusUpdateAvailable);
 
     QWidget *balanceContainer = new QWidget(this);
+    balanceContainer->setAttribute(Qt::WA_TranslucentBackground);
     QHBoxLayout *balanceLayout = new QHBoxLayout(balanceContainer);
     balanceLayout->setContentsMargins(0, 0, 0, 0);
     balanceLayout->setSpacing(0);
