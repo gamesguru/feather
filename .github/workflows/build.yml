@@ -15,11 +15,11 @@ jobs:
       - name: update apt
         run: apt update
       - name: install dependencies
-        run:
-          apt -y install git cmake build-essential ccache libssl-dev libunbound-dev libboost-all-dev
-          libqrencode-dev qt6-base-dev qt6-svg-dev qt6-websockets-dev qt6-multimedia-dev
-          qt6-wayland-dev libzip-dev libsodium-dev libgcrypt20-dev libx11-xcb-dev
-          protobuf-compiler libprotobuf-dev libhidapi-dev libzxing-dev libusb-dev
+        run: |
+          apt -y install git cmake build-essential ccache libssl-dev libunbound-dev libboost-all-dev \
+          libqrencode-dev qt6-base-dev qt6-svg-dev qt6-websockets-dev qt6-multimedia-dev \
+          qt6-wayland-dev libzip-dev libsodium-dev libgcrypt20-dev libx11-xcb-dev \
+          protobuf-compiler libprotobuf-dev libhidapi-dev libzxing-dev libusb-dev \
           libusb-1.0-0-dev
       - name: configure git
         run: git config --global --add safe.directory '*'
@@ -42,12 +42,14 @@ jobs:
       - name: update apt
         run: apt update
       - name: install dependencies
-        run:
-          apt -y install git cmake build-essential ccache libssl-dev libunbound-dev libboost-all-dev
-          libqrencode-dev qt6-base-dev qt6-svg-dev qt6-websockets-dev qt6-multimedia-dev
-          libzip-dev libsodium-dev libgcrypt20-dev libx11-xcb-dev
-          protobuf-compiler libprotobuf-dev libhidapi-dev libusb-dev
-          libusb-1.0-0-dev
+        run: |
+          apt -y install software-properties-common
+          add-apt-repository universe
+          apt update
+          apt -y install git cmake build-essential ccache libssl-dev libunbound-dev \
+          libboost-all-dev libqrencode-dev qt6-base-dev qt6-svg-dev qt6-websockets-dev \
+          qt6-multimedia-dev libzip-dev libsodium-dev libgcrypt20-dev libx11-xcb-dev \
+          protobuf-compiler libprotobuf-dev libhidapi-dev libusb-dev libusb-1.0-0-dev
       - name: configure git
         run: git config --global --add safe.directory '*'
       - uses: actions/checkout@v4
@@ -112,7 +114,7 @@ jobs:
 
   build-macos:
     name: "macOS (brew)"
-    if: false # disabled for now due to performance reasons (too slow)
+    if: false
     runs-on: macos-latest
     env:
       CCACHE_DIR: /Users/runner/Library/Caches/ccache
