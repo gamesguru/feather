@@ -138,6 +138,8 @@ public:
     //! returns if view only wallet
     bool viewOnly() const;
 
+    QDateTime lastSyncTime() const;
+
     //! return true if deterministic keys
     bool isDeterministic() const;
 
@@ -504,6 +506,7 @@ private:
 
     quint64 m_daemonBlockChainHeight;
     quint64 m_daemonBlockChainTargetHeight;
+    QDateTime m_lastSyncTime;
 
     ConnectionStatus m_connectionStatus;
 

@@ -14,6 +14,7 @@
 #include <QFormLayout>
 #include <QSpinBox>
 #include <QDateEdit>
+#include <QComboBox>
 #include <QDialogButtonBox>
 
 #include "constants.h"
@@ -31,6 +32,7 @@
 #include "dialog/ViewOnlyDialog.h"
 #include "dialog/WalletInfoDialog.h"
 #include "dialog/WalletCacheDebugDialog.h"
+#include "dialog/SyncRangeDialog.h"
 #include "libwalletqt/AddressBook.h"
 #include "libwalletqt/rows/CoinsInfo.h"
 #include "libwalletqt/rows/Output.h"
@@ -119,6 +121,7 @@ MainWindow::MainWindow(WindowManager *windowManager, Wallet *wallet, QWidget *pa
 
     // Timers
     connect(&m_updateBytes, &QTimer::timeout, this, &MainWindow::updateNetStats);
+    connect(&m_updateBytes, &QTimer::timeout, this, &MainWindow::updateStatusToolTip);
     connect(&m_txTimer, &QTimer::timeout, [this]{
         QString text = "Constructing transaction" + this->statusDots();
         m_statusLabelStatus->setText(text);
@@ -291,99 +294,15 @@ void MainWindow::initStatusBar() {
     connect(syncRangeAction, &QAction::triggered, this, [this](){
         if (!m_wallet) return;
 
-        QDialog dialog(this);
-        dialog.setWindowTitle(tr("Sync Date Range"));
-        dialog.setWindowIcon(QIcon(":/assets/images/appicons/64x64.png"));
-        dialog.setWindowFlags(dialog.windowFlags() & ~Qt::WindowContextHelpButtonHint);
-        dialog.setWindowFlags(dialog.windowFlags() | Qt::MSWindowsFixedSizeDialogHint);
-
-        auto *layout = new QVBoxLayout(&dialog);
-
-        auto *formLayout = new QFormLayout;
-        formLayout->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
-
-        auto *toDateEdit = new QDateEdit(QDate::currentDate());
-        toDateEdit->setCalendarPopup(true);
-        toDateEdit->setDisplayFormat("yyyy-MM-dd");
-
-        // Load lookup for accurate block calculations
-        NetworkType::Type nettype = m_wallet->nettype();
-        QString filename = Utils::getRestoreHeightFilename(nettype);
-
-        std::unique_ptr<RestoreHeightLookup> lookup(RestoreHeightLookup::fromFile(filename, nettype));
-
-        int defaultDays = 7;
-
-        auto *daysSpinBox = new QSpinBox;
-        daysSpinBox->setRange(1, 3650); // 10 years
-        daysSpinBox->setValue(defaultDays);
-        daysSpinBox->setSuffix(tr(" days"));
-
-        auto *fromDateEdit = new QDateEdit(QDate::currentDate().addDays(-defaultDays));
-        fromDateEdit->setCalendarPopup(true);
-        fromDateEdit->setDisplayFormat("yyyy-MM-dd");
-        fromDateEdit->setToolTip(tr("Calculated from 'End date' and day span."));
-
-        auto *infoLabel = new QLabel;
-        infoLabel->setWordWrap(true);
-        infoLabel->setStyleSheet("QLabel { color: #888; font-size: 11px; }");
-
-        formLayout->addRow(tr("Day span:"), daysSpinBox);
-        formLayout->addRow(tr("Start date:"), fromDateEdit);
-        formLayout->addRow(tr("End date:"), toDateEdit);
-
-        layout->addLayout(formLayout);
-        layout->addWidget(infoLabel);
-
-        auto updateInfo = [=, &lookup]() {
-            QDate start = fromDateEdit->date();
-            QDate end = toDateEdit->date();
-
-            uint64_t startHeight = lookup->dateToHeight(start.startOfDay().toSecsSinceEpoch());
-            uint64_t endHeight = lookup->dateToHeight(end.endOfDay().toSecsSinceEpoch());
-
-            if (endHeight < startHeight) endHeight = startHeight;
-            quint64 blocks = endHeight - startHeight;
-            quint64 size = Utils::estimateSyncDataSize(blocks);
-
-            infoLabel->setText(tr("Scanning ~%1 blocks\nEst. download size: %2")
-                               .arg(blocks)
-                               .arg(Utils::formatBytes(size)));
-        };
-
-        auto updateFromDate = [=]() {
-            fromDateEdit->setDate(toDateEdit->date().addDays(-daysSpinBox->value()));
-            updateInfo();
-        };
-
-        connect(fromDateEdit, &QDateEdit::dateChanged, updateInfo);
-        connect(toDateEdit, &QDateEdit::dateChanged, updateFromDate);
-        connect(daysSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), updateFromDate);
-
-        // Init label
-        updateInfo();
-
-        auto *btnBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-        connect(btnBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-        connect(btnBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-        layout->addWidget(btnBox);
-
-        dialog.resize(320, dialog.height());
-
+        SyncRangeDialog dialog(this, m_wallet);
         if (dialog.exec() == QDialog::Accepted) {
-            m_wallet->syncDateRange(fromDateEdit->date(), toDateEdit->date());
-
-            // Re-calculate for status text
-            uint64_t startHeight = lookup->dateToHeight(fromDateEdit->date().startOfDay().toSecsSinceEpoch());
-            uint64_t endHeight = lookup->dateToHeight(toDateEdit->date().endOfDay().toSecsSinceEpoch());
-            quint64 blocks = (endHeight > startHeight) ? endHeight - startHeight : 0;
-            quint64 size = Utils::estimateSyncDataSize(blocks);
+            m_wallet->syncDateRange(dialog.fromDate(), dialog.toDate());
 
             this->setStatusText(tr("Syncing range %1 - %2 (~%3 blocks)\nEst. download size: %4")
-                                .arg(fromDateEdit->date().toString("yyyy-MM-dd"))
-                                .arg(toDateEdit->date().toString("yyyy-MM-dd"))
-                                .arg(QLocale().toString(blocks))
-                                .arg(Utils::formatBytes(size)));
+                                .arg(dialog.fromDate().toString("yyyy-MM-dd"))
+                                .arg(dialog.toDate().toString("yyyy-MM-dd"))
+                                .arg(QLocale().toString(dialog.estimatedBlocks()))
+                                .arg(Utils::formatBytes(dialog.estimatedSize())));
         }
     });
 
@@ -413,7 +332,11 @@ void MainWindow::initStatusBar() {
 
             if (QMessageBox::question(this, tr("Full Sync"), msg) == QMessageBox::Yes) {
                 m_wallet->fullSync();
-                this->setStatusText(tr("Full sync started (%1 blocks)...").arg(estBlocks));
+                if (estBlocks.startsWith("Unknown")) {
+                    this->setStatusText(tr("Full sync started..."));
+                } else {
+                    this->setStatusText(tr("Full sync started (%1 blocks)...").arg(estBlocks));
+                }
             }
         }
     });
@@ -897,11 +820,8 @@ void MainWindow::onBalanceUpdated(quint64 balance, quint64 spendable) {
         }
     }
 
-    QString toolTip = "Right-click for details";
-    if (appData()->prices.lastUpdateTime.isValid()) {
-        toolTip += QString("\nLast updated: %1").arg(Utils::timeAgo(appData()->prices.lastUpdateTime));
-    }
-    m_statusLabelBalance->setToolTip(toolTip);
+    this->updateStatusToolTip();
+
 
     QString finalText = "Balance: " + valueStr + suffixStr;
     qDebug() << "Setting balance label text:" << finalText;
@@ -910,6 +830,16 @@ void MainWindow::onBalanceUpdated(quint64 balance, quint64 spendable) {
     m_statusLabelBalance->setProperty("copyableValue", valueStr);
 }
 
+void MainWindow::updateStatusToolTip() {
+    QString toolTip = "Right-click for details";
+    if (appData()->prices.lastUpdateTime.isValid()) {
+        toolTip += QString("\nPrice updated: %1").arg(Utils::timeAgo(appData()->prices.lastUpdateTime));
+    }
+    if (m_wallet->lastSyncTime().isValid()) {
+        toolTip += QString("\nWallet synced: %1").arg(Utils::timeAgo(m_wallet->lastSyncTime()));
+    }
+    m_statusLabelBalance->setToolTip(toolTip);
+}
 
 void MainWindow::setStatusText(const QString &text, bool override, int timeout) {
 
@@ -1028,19 +958,24 @@ void MainWindow::onMultiBroadcast(const QMap<QString, QString> &txHexMap) {
 
 void MainWindow::onSyncStatus(quint64 height, quint64 target, bool daemonSync) {
     qDebug() << "onSyncStatus: Height" << height << "Target" << target << "DaemonSync" << daemonSync;
+
+    quint64 blocksBehind = Utils::blocksBehind(height, target);
+    m_lastSyncStatusUpdate = QDateTime::currentDateTime();
+
     if (height >= (target - 1) && target > 0) {
         this->updateNetStats();
         this->setStatusText(QString("Synchronized (%1)").arg(QLocale().toString(height)));
     } else {
-        quint64 blocksBehind = Utils::blocksBehind(height, target);
         QString type = daemonSync ? tr("Blockchain") : tr("Wallet");
         QString blocksStr = QLocale().toString(blocksBehind);
         this->setStatusText(tr("%1 sync: %2 blocks behind").arg(type, blocksStr));
     }
-    m_lastSyncStatusUpdate = QDateTime::currentDateTime();
-    QString tooltip = tr("Wallet Height: %1 | Network Tip: %2\nLast updated: %3")
+
+    QString syncStatus = blocksBehind > 0 ? tr("%1 blocks behind").arg(QLocale().toString(blocksBehind)) : tr("Synchronized");
+    QString tooltip = tr("Wallet Height: %1 | Network Tip: %2\n%3\nLast updated: %4")
         .arg(QLocale().toString(height))
         .arg(QLocale().toString(target))
+        .arg(syncStatus)
         .arg(m_lastSyncStatusUpdate.toString("HH:mm:ss"));
 
     qDebug() << "Setting Status Tooltip:" << tooltip;

@@ -1,6 +1,8 @@
 name: ci/gh-actions/build
 
-on: [pull_request]
+on:
+  push: [master, main, dev]
+  pull_request:
 
 jobs:
   build-ubuntu-without-scanner:
@@ -25,6 +27,65 @@ jobs:
           submodules: recursive
       - name: build
         run: |
+          mkdir build
+          cd build
+          cmake -DWITH_SCANNER=OFF ..
+          cmake --build . -j $(nproc)
+
+  build-ubuntu-22:
+    name: "Ubuntu 22.04"
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:22.04
+    steps:
+      - name: update apt
+        run: apt update
+      - name: install dependencies
+        run:
+          apt -y install git cmake build-essential ccache libssl-dev libunbound-dev libboost-all-dev
+          libqrencode-dev qt6-base-dev qt6-svg-dev qt6-websockets-dev qt6-multimedia-dev
+          libzip-dev libsodium-dev libgcrypt20-dev libx11-xcb-dev
+          protobuf-compiler libprotobuf-dev libhidapi-dev libusb-dev
+          libusb-1.0-0-dev
+      - name: configure git
+        run: git config --global --add safe.directory '*'
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: build
+        run: |
+          mkdir build
+          cd build
+          cmake -DWITH_SCANNER=OFF ..
+          cmake --build . -j $(nproc)
+
+  build-ubuntu-20:
+    name: "Ubuntu 20.04"
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:20.04
+    env:
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      - name: update apt
+        run: apt update
+      - name: install dependencies
+        run: |
+          apt -y install software-properties-common
+          add-apt-repository -y ppa:beineri/opt-qt-5.15.2-focal
+          apt update
+          apt -y install git cmake build-essential ccache libssl-dev libunbound-dev libboost-all-dev \
+          libqrencode-dev qt515base qt515svg qt515websockets qt515multimedia \
+          libzip-dev libsodium-dev libgcrypt20-dev libx11-xcb-dev \
+          protobuf-compiler libprotobuf-dev libhidapi-dev libusb-dev libusb-1.0-0-dev
+      - name: configure git
+        run: git config --global --add safe.directory '*'
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: build
+        run: |
+          source /opt/qt515/bin/qt515-env.sh
           mkdir build
           cd build
           cmake -DWITH_SCANNER=OFF ..

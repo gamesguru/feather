@@ -418,6 +418,15 @@ void Wallet::setDaemonLogin(const QString &daemonUsername, const QString &daemon
 void Wallet::initAsync(const QString &daemonAddress, bool trustedDaemon, quint64 upperTransactionLimit, const QString &proxyAddress)
 {
     qDebug() << "initAsync: " + daemonAddress;
+
+    if (daemonAddress.isEmpty()) {
+        m_scheduler.run([this] {
+            m_wallet2->set_offline(true);
+        });
+        setConnectionStatus(Wallet::ConnectionStatus_Disconnected);
+        return;
+    }
+
     const auto future = m_scheduler.run([this, daemonAddress, trustedDaemon, upperTransactionLimit, proxyAddress] {
         // Beware! This code does not run in the GUI thread.
 
@@ -567,6 +576,10 @@ void Wallet::onHeightsRefreshed(bool success, quint64 daemonHeight, quint64 targ
     } else {
         setConnectionStatus(ConnectionStatus_Disconnected);
     }
+
+    if (success) {
+        m_lastSyncTime = QDateTime::currentDateTime();
+    }
 }
 
 quint64 Wallet::blockChainHeight() const {
@@ -589,6 +602,10 @@ void Wallet::setSyncPaused(bool paused) {
     } else {
         startRefresh();
     }
+}
+
+QDateTime Wallet::lastSyncTime() const {
+    return m_lastSyncTime;
 }
 
 void Wallet::skipToTip() {

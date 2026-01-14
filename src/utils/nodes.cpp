@@ -551,7 +551,9 @@ void Nodes::resetLocalState() {
 }
 
 void Nodes::exhausted() {
-    // Do nothing
+    // All nodes have been tried and failed - clear the failure list to allow a new retry cycle
+    qInfo() << "All nodes exhausted, clearing recent failures to retry";
+    m_recentFailures.clear();
 }
 
 QList<FeatherNode> Nodes::nodes() {

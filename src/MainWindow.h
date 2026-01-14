@@ -207,6 +207,7 @@ private:
     void fillSendTab(const QString &address, const QString &description);
     void userActivity();
     void checkUserActivity();
+    void updateStatusToolTip();
     void lockWallet();
     void unlockWallet(const QString &password);
     void closeQDialogChildren(QObject *object);
