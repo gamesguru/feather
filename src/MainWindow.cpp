@@ -102,6 +102,7 @@ MainWindow::MainWindow(WindowManager *windowManager, Wallet *wallet, QWidget *pa
 
     connect(m_windowManager, &WindowManager::proxySettingsChanged, this, &MainWindow::onProxySettingsChangedConnect);
     connect(m_windowManager, &WindowManager::updateBalance, m_wallet, &Wallet::updateBalance);
+    connect(m_windowManager, &WindowManager::websocketStatusChanged, m_wallet, &Wallet::updateBalance);
     connect(m_windowManager, &WindowManager::offlineMode, this, &MainWindow::onOfflineMode);
     connect(m_windowManager, &WindowManager::manualFeeSelectionEnabled, this, &MainWindow::onManualFeeSelectionEnabled);
     connect(m_windowManager, &WindowManager::subtractFeeFromAmountEnabled, this, &MainWindow::onSubtractFeeFromAmountEnabled);
@@ -753,6 +754,7 @@ void MainWindow::initWalletContext() {
         // Order is important, first inform UI about a potential disconnect, then reconnect
         this->onConnectionStatusChanged(status);
         m_nodes->autoConnect();
+        this->updateBalance();
     });
 
     connect(m_wallet, &Wallet::heightsRefreshed, this, [this](bool success, quint64 daemonHeight, quint64 targetHeight) {
@@ -915,7 +917,7 @@ void MainWindow::onBalanceUpdated(quint64 balance, quint64 spendable) {
         bool isCacheValid = appData()->prices.lastUpdateTime.isValid();
 
         if (balance > 0 && (balanceFiatAmount == 0.0 || !isCacheValid)) {
-            if (conf()->get(Config::offlineMode).toBool() || m_wallet->connectionStatus() == Wallet::ConnectionStatus_Disconnected) {
+            if (conf()->get(Config::offlineMode).toBool() || conf()->get(Config::disableWebsocket).toBool() || m_wallet->connectionStatus() == Wallet::ConnectionStatus_Disconnected) {
                 suffixStr += " (offline)";
             } else if (!appData()->prices.markets.contains("XMR")) {
                 suffixStr += " (connecting)";

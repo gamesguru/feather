@@ -79,7 +79,7 @@ void BalanceTickerWidget::updateDisplay() {
     bool isCacheFresh = isCacheValid && appData()->prices.lastUpdateTime.secsTo(QDateTime::currentDateTime()) < 3600;
 
     if (balanceFiatAmount == 0.0 || !isCacheValid) {
-        if (conf()->get(Config::offlineMode).toBool() || m_wallet->connectionStatus() == Wallet::ConnectionStatus_Disconnected) {
+        if (conf()->get(Config::offlineMode).toBool() || conf()->get(Config::disableWebsocket).toBool() || m_wallet->connectionStatus() == Wallet::ConnectionStatus_Disconnected) {
             this->setDisplayText("offline");
         } else if (!appData()->prices.markets.contains("XMR")) {
             this->setDisplayText("connecting");

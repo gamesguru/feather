@@ -427,6 +427,10 @@ void Wallet::initAsync(const QString &daemonAddress, bool trustedDaemon, quint64
             success = m_walletImpl->init(daemonAddress.toStdString(), upperTransactionLimit, m_daemonUsername.toStdString(), m_daemonPassword.toStdString(), m_useSSL, false, proxyAddress.toStdString());
         }
 
+        if (m_scheduler.stopping()) {
+            return;
+        }
+
         setTrustedDaemon(trustedDaemon);
 
         if (success) {
@@ -1627,6 +1631,9 @@ Wallet::~Wallet()
 
     pauseRefresh();
     m_walletImpl->stop();
+    // Stop the wallet2 instance to interrupt any blocking network calls (e.g. init)
+    if (m_wallet2)
+        m_wallet2->stop();
 
     m_scheduler.shutdownWaitForFinished();
 
