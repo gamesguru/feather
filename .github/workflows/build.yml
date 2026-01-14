@@ -34,7 +34,7 @@ jobs:
           cmake --build . -j $(nproc)
 
   build-ubuntu-22:
-    name: "Ubuntu 22.04"
+    name: "Ubuntu 22.04 (Qt 5.15)"
     runs-on: ubuntu-latest
     container:
       image: ubuntu:22.04
@@ -42,13 +42,11 @@ jobs:
       - name: update apt
         run: apt update
       - name: install dependencies
+        # FIXED: Switched to native Qt5 packages because Qt6 is incomplete on 22.04
         run: |
-          apt -y install software-properties-common
-          add-apt-repository universe
-          apt update
           apt -y install git cmake build-essential ccache libssl-dev libunbound-dev \
-          libboost-all-dev libqrencode-dev qt6-base-dev qt6-svg-dev qt6-websockets-dev \
-          qt6-multimedia-dev libzip-dev libsodium-dev libgcrypt20-dev libx11-xcb-dev \
+          libboost-all-dev libqrencode-dev qtbase5-dev libqt5svg5-dev libqt5websockets5-dev \
+          qtmultimedia5-dev libzip-dev libsodium-dev libgcrypt20-dev libx11-xcb-dev \
           protobuf-compiler libprotobuf-dev libhidapi-dev libusb-dev libusb-1.0-0-dev
       - name: configure git
         run: git config --global --add safe.directory '*'
