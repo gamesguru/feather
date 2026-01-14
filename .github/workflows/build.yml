@@ -61,7 +61,7 @@ jobs:
           cmake --build . -j $(nproc)
 
   build-ubuntu-20:
-    name: "Ubuntu 20.04"
+    name: "Ubuntu 20.04 (Default Qt 5.12)"
     runs-on: ubuntu-latest
     container:
       image: ubuntu:20.04
@@ -72,12 +72,9 @@ jobs:
         run: apt update
       - name: install dependencies
         run: |
-          apt -y install software-properties-common
-          add-apt-repository -y ppa:beineri/opt-qt-5.15.2-focal
-          apt update
-          apt -y install git cmake build-essential ccache libssl-dev libunbound-dev libboost-all-dev \
-          libqrencode-dev qt515base qt515svg qt515websockets qt515multimedia \
-          libzip-dev libsodium-dev libgcrypt20-dev libx11-xcb-dev \
+          apt -y install git cmake build-essential ccache libssl-dev libunbound-dev \
+          libboost-all-dev libqrencode-dev qtbase5-dev libqt5svg5-dev libqt5websockets5-dev \
+          qtmultimedia5-dev libzip-dev libsodium-dev libgcrypt20-dev libx11-xcb-dev \
           protobuf-compiler libprotobuf-dev libhidapi-dev libusb-dev libusb-1.0-0-dev
       - name: configure git
         run: git config --global --add safe.directory '*'
@@ -86,7 +83,6 @@ jobs:
           submodules: recursive
       - name: build
         run: |
-          . /opt/qt515/bin/qt515-env.sh
           mkdir build
           cd build
           cmake -DWITH_SCANNER=OFF ..
