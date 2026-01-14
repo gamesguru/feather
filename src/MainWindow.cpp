@@ -162,11 +162,14 @@ void MainWindow::initStatusBar() {
     m_statusLabelBalance = new ClickableLabel(this);
     m_statusLabelBalance->setText("Balance: 0 XMR");
     m_statusLabelBalance->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    m_statusLabelBalance->setCursor(Qt::PointingHandCursor);
     m_statusLabelBalance->setContextMenuPolicy(Qt::ActionsContextMenu);
     this->statusBar()->addPermanentWidget(m_statusLabelBalance);
 
-    connect(m_statusLabelBalance, &ClickableLabel::clicked, this, &MainWindow::showBalanceDialog);
+    connect(m_statusLabelBalance, &ClickableLabel::clicked, this, [this](){
+        QMenu menu;
+        menu.addActions(m_statusLabelBalance->actions());
+        menu.exec(QCursor::pos());
+    });
 
     QAction *copyBalanceAction = new QAction(tr("Copy amount"), this);
     connect(copyBalanceAction, &QAction::triggered, this, [this](){
@@ -1656,7 +1659,7 @@ void MainWindow::changeEvent(QEvent* event)
 
 // In changeEvent:
     if (event->type() == QEvent::WindowStateChange) {
-        qDebug() << "changeEvent: WindowStateChange. State:" << this->windowState() << " isMinimized:" << this->isMinimized();
+        // qDebug() << "changeEvent: WindowStateChange. State:" << this->windowState() << " isMinimized:" << this->isMinimized();
         if (this->isMinimized()) {
             if (conf()->get(Config::lockOnMinimize).toBool()) {
                 this->lockWallet();
@@ -1664,32 +1667,25 @@ void MainWindow::changeEvent(QEvent* event)
 
             bool showTray = conf()->get(Config::showTrayIcon).toBool();
             bool minimizeToTray = conf()->get(Config::minimizeToTray).toBool();
-
-            qInfo() << "WindowStateChange: minimized. Tray=" << showTray << " MinToTray=" << minimizeToTray;
-
-            if (showTray && minimizeToTray) {
+            if (showTray && minimizeToTray)
                 this->hide();
-            }
         }
     } else if (event->type() == QEvent::ActivationChange) {
-        qDebug() << "changeEvent: ActivationChange. Active:" << this->isActiveWindow();
-        QTimer::singleShot(350, this, [this](){
+        // qDebug() << "changeEvent: ActivationChange. Active:" << this->isActiveWindow();
+        // Workaround for some window managers (e.g. GNOME) where isExposed() or isMinimized()
+        // state doesn't update immediately upon minimization animation start.
+        QTimer::singleShot(350, this, [this]() {
             auto handle = this->windowHandle();
             if (handle && !handle->isExposed()) {
-            qDebug() << "ActivationChange (delayed): Window not exposed -> Hiding to tray";
-                if (conf()->get(Config::lockOnMinimize).toBool()) {
+                if (conf()->get(Config::lockOnMinimize).toBool())
                     this->lockWallet();
-                }
 
                 bool showTray = conf()->get(Config::showTrayIcon).toBool();
                 bool minimizeToTray = conf()->get(Config::minimizeToTray).toBool();
-                if (showTray && minimizeToTray) {
-                    // Hide all widgets and dialogs, not just MainWindow
-                    // TODO: Implement better logic here
-                    for (const auto &widget : QApplication::topLevelWidgets()) {
+                // TODO: Implement better logic here to hide all widgets and dialogs
+                if (showTray && minimizeToTray)
+                    for (const auto &widget : QApplication::topLevelWidgets())
                         widget->hide();
-                    }
-                }
             }
         });
     }
