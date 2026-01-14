@@ -86,7 +86,7 @@ jobs:
           submodules: recursive
       - name: build
         run: |
-          source /opt/qt515/bin/qt515-env.sh
+          . /opt/qt515/bin/qt515-env.sh
           mkdir build
           cd build
           cmake -DWITH_SCANNER=OFF ..
