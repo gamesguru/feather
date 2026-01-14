@@ -51,6 +51,7 @@ CalcWidget::CalcWidget(QWidget *parent)
     QPixmap warningIcon = QPixmap(":/assets/images/warning.png");
     ui->icon_warning->setPixmap(warningIcon.scaledToWidth(32, Qt::SmoothTransformation));
 
+    this->onPricesReceived();
     this->updateStatus();
 }
 
@@ -154,12 +155,29 @@ void CalcWidget::setupComboBox(QComboBox *comboBox, const QStringList &crypto, c
 }
 
 void CalcWidget::updateStatus() {
+    QString warningText;
+    if (conf()->get(Config::disableWebsocket).toBool()) {
+        warningText = "Websocket is disabled.";
+    }
+    else if (conf()->get(Config::offlineMode).toBool()) {
+        warningText = "Offline mode is enabled.";
+    }
+    else if (conf()->get(Config::syncPaused).toBool() && conf()->get(Config::syncPausedAlsoDisconnectWebSocket).toBool()) {
+        warningText = "Sync is paused.";
+    }
+
     if (!m_comboBoxInit) {
-        ui->label_warning->setText("Waiting on exchange data.");
+        if (warningText.isEmpty())
+            warningText = "Waiting on exchange data.";
+
+        ui->label_warning->setText(warningText);
         ui->frame_warning->show();
     }
     else if (websocketNotifier()->stale(10)) {
-        ui->label_warning->setText("No new exchange rates received for over 10 minutes.");
+        if (warningText.isEmpty())
+            warningText = "No new exchange rates received for over 10 minutes.";
+
+        ui->label_warning->setText(warningText);
         ui->frame_warning->show();
     }
     else {
