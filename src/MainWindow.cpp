@@ -119,7 +119,8 @@ MainWindow::MainWindow(WindowManager *windowManager, Wallet *wallet, QWidget *pa
     // Timers
     connect(&m_updateBytes, &QTimer::timeout, this, &MainWindow::updateNetStats);
     connect(&m_txTimer, &QTimer::timeout, [this]{
-        m_statusLabelStatus->setText("Constructing transaction" + this->statusDots());
+        QString text = "Constructing transaction" + this->statusDots();
+        m_statusLabelStatus->setText(text);
     });
 
     conf()->set(Config::firstRun, false);
@@ -234,18 +235,26 @@ void MainWindow::initStatusBar() {
     m_actionDisconnectNodeOnPause->setEnabled(pauseSyncAction->isChecked());
     m_statusLabelStatus->addAction(m_actionDisconnectNodeOnPause);
 
-    m_actionDisconnectWebSocketOnPause = new QAction(tr("Disconnect from WebSocket"), this);
-    m_actionDisconnectWebSocketOnPause->setCheckable(true);
-    m_actionDisconnectWebSocketOnPause->setChecked(conf()->get(Config::syncPausedAlsoDisconnectWebSocket).toBool());
-    m_actionDisconnectWebSocketOnPause->setEnabled(pauseSyncAction->isChecked());
-    m_statusLabelStatus->addAction(m_actionDisconnectWebSocketOnPause);
+    m_actionDisconnectNodeOnPause->setEnabled(pauseSyncAction->isChecked());
+    m_statusLabelStatus->addAction(m_actionDisconnectNodeOnPause);
+
+    m_actionEnableWebsocket = new QAction(tr("Enable Websocket"), this);
+    m_actionEnableWebsocket->setCheckable(true);
+    m_actionEnableWebsocket->setChecked(!conf()->get(Config::disableWebsocket).toBool());
+    m_statusLabelStatus->addAction(m_actionEnableWebsocket);
+
+    connect(m_actionEnableWebsocket, &QAction::toggled, this, [](bool checked){
+        conf()->set(Config::disableWebsocket, !checked);
+        if (checked) {
+            websocketNotifier()->websocketClient->restart();
+        } else {
+            websocketNotifier()->websocketClient->stop();
+        }
+        WindowManager::instance()->onWebsocketStatusChanged(checked);
+    });
 
     connect(m_actionDisconnectNodeOnPause, &QAction::toggled, this, [](bool checked){
         conf()->set(Config::syncPausedAlsoDisconnectNode, checked);
-    });
-
-    connect(m_actionDisconnectWebSocketOnPause, &QAction::toggled, this, [](bool checked){
-        conf()->set(Config::syncPausedAlsoDisconnectWebSocket, checked);
     });
 
     QAction *skipSyncAction = new QAction(tr("Skip Sync"), this);
@@ -269,7 +278,6 @@ void MainWindow::initStatusBar() {
         conf()->set(Config::syncPaused, checked);
 
         m_actionDisconnectNodeOnPause->setEnabled(checked);
-        m_actionDisconnectWebSocketOnPause->setEnabled(checked);
         m_updateNetworkInfoAction->setEnabled(!checked);
 
         if (m_wallet) {
@@ -280,10 +288,6 @@ void MainWindow::initStatusBar() {
                      qInfo() << "Disconnecting from node (Pause Sync enabled)";
                      m_nodes->disconnectCurrentNode();
                      this->onConnectionStatusChanged(Wallet::ConnectionStatus_Disconnected);
-                }
-
-                if (m_actionDisconnectWebSocketOnPause->isChecked()) {
-                    websocketNotifier()->websocketClient->stop();
                 }
 
                 this->setPausedSyncStatus();
@@ -920,7 +924,6 @@ void MainWindow::onBalanceUpdated(quint64 balance, quint64 spendable) {
         QString fiatCurrency = conf()->get(Config::preferredFiatCurrency).toString();
         double balanceFiatAmount = appData()->prices.convert("XMR", fiatCurrency, balance / constants::cdiv);
         bool isCacheValid = appData()->prices.lastUpdateTime.isValid();
-        bool isCacheFresh = isCacheValid && appData()->prices.lastUpdateTime.secsTo(QDateTime::currentDateTime()) < 3600;
 
         if (balance > 0 && (balanceFiatAmount == 0.0 || !isCacheValid)) {
             if (conf()->get(Config::offlineMode).toBool() || m_wallet->connectionStatus() == Wallet::ConnectionStatus_Disconnected) {
@@ -931,7 +934,7 @@ void MainWindow::onBalanceUpdated(quint64 balance, quint64 spendable) {
                 suffixStr += " (unknown)";
             }
         } else {
-            QString approx = isCacheFresh ? "" : "~ ";
+            QString approx = !conf()->get(Config::disableWebsocket).toBool() ? "" : "~ ";
             suffixStr += QString(" (%1%2)").arg(approx, Utils::amountToCurrencyString(balanceFiatAmount, fiatCurrency));
         }
     }
@@ -972,6 +975,7 @@ void MainWindow::setStatusText(const QString &text, bool override, int timeout) 
 
     if (override) {
         m_statusOverrideActive = true;
+        qDebug() << "STATUS (override):" << text;
         m_statusLabelStatus->setText(text);
         QTimer::singleShot(timeout, [this]{
             m_statusOverrideActive = false;
@@ -983,6 +987,7 @@ void MainWindow::setStatusText(const QString &text, bool override, int timeout) 
     m_statusText = text;
 
     if (!m_statusOverrideActive && !m_constructingTransaction) {
+        qDebug() << "STATUS:" << text; // adding this since the label has complex handlers now
         m_statusLabelStatus->setText(text);
     }
 }
@@ -997,6 +1002,9 @@ void MainWindow::tryStoreWallet() {
 }
 
 void MainWindow::onWebsocketStatusChanged(bool enabled) {
+    if (m_actionEnableWebsocket) {
+        m_actionEnableWebsocket->setChecked(enabled);
+    }
     ui->actionShow_Home->setVisible(enabled);
 
     QStringList enabledTabs = conf()->get(Config::enabledTabs).toStringList();
