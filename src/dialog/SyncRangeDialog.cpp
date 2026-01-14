@@ -120,6 +120,12 @@ void SyncRangeDialog::updateInfo() {
     NetworkType::Type nettype = m_wallet->nettype();
     QString filename = Utils::getRestoreHeightFilename(nettype);
     std::unique_ptr<RestoreHeightLookup> lookup(RestoreHeightLookup::fromFile(filename, nettype));
+    if (!lookup || lookup->data.isEmpty()) {
+        m_infoLabel->setText(tr("Unable to estimate - restore height data unavailable"));
+        m_estimatedBlocks = 0;
+        m_estimatedSize = 0;
+        return;
+    }
 
     QDate start = m_fromDateEdit->date();
     QDate end = m_toDateEdit->date();

@@ -615,7 +615,7 @@ void MainWindow::initOffline() {
         if (!m_wallet) return;
         qDebug() << "Scanning wallet...";
         this->setStatusText(tr("Scanning..."));
-        QApplication::processEvents();  // Ensure status text is visible immediately
+        QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
         m_wallet->updateNetworkStatus();
     });
 
@@ -825,7 +825,6 @@ void MainWindow::onBalanceUpdated(quint64 balance, quint64 spendable) {
 
 
     QString finalText = "Balance: " + valueStr + suffixStr;
-    qDebug() << "Setting balance label text:" << finalText;
 
     m_statusLabelBalance->setText(finalText);
     m_statusLabelBalance->setProperty("copyableValue", valueStr);
@@ -836,7 +835,7 @@ void MainWindow::updateStatusToolTip() {
     if (appData()->prices.lastUpdateTime.isValid()) {
         toolTip += QString("\nPrice updated: %1").arg(Utils::timeAgo(appData()->prices.lastUpdateTime));
     }
-    if (m_wallet->lastSyncTime().isValid()) {
+    if (m_wallet && m_wallet->lastSyncTime().isValid()) {
         toolTip += QString("\nWallet synced: %1").arg(Utils::timeAgo(m_wallet->lastSyncTime()));
     }
     m_statusLabelBalance->setToolTip(toolTip);

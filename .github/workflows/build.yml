@@ -1,7 +1,8 @@
 name: ci/gh-actions/build
 
 on:
-  push: [master, main, dev]
+  push:
+    branches: [master, main, dev]
   pull_request:
 
 jobs:
