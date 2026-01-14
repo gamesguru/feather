@@ -161,7 +161,6 @@ void MainWindow::initStatusBar() {
 
     m_statusLabelBalance = new ClickableLabel(this);
     m_statusLabelBalance->setText("Balance: 0 XMR");
-    m_statusLabelBalance->setTextInteractionFlags(Qt::TextSelectableByMouse);
     m_statusLabelBalance->setContextMenuPolicy(Qt::ActionsContextMenu);
     this->statusBar()->addPermanentWidget(m_statusLabelBalance);
 
