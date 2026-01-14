@@ -83,7 +83,8 @@ void WebsocketClient::restart() {
 void WebsocketClient::stop() {
     qDebug() << Q_FUNC_INFO;
     m_stopped = true;
-    webSocket->close();
+    webSocket->disconnect();
+    webSocket->abort();
     m_connectionTimeout.stop();
     m_pingTimer.stop();
 }
