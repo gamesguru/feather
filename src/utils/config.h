@@ -146,6 +146,8 @@ public:
         // Sync & data saver
         syncPaused,
         syncPausedAlsoDisconnectWebSocket,
+        lastKnownNetworkHeight,
+        lastSyncTimestamp,
     };
 
     enum PrivacyLevel {

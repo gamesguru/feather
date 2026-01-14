@@ -965,17 +965,26 @@ void MainWindow::onSyncStatus(quint64 height, quint64 target, bool daemonSync) {
     if (height >= (target - 1) && target > 0) {
         this->updateNetStats();
         this->setStatusText(QString("Synchronized (%1)").arg(QLocale().toString(height)));
+
+        // Persist sync state for next boot
+        conf()->set(Config::lastKnownNetworkHeight, static_cast<qulonglong>(target));
+        conf()->set(Config::lastSyncTimestamp, QDateTime::currentSecsSinceEpoch());
     } else {
         QString type = daemonSync ? tr("Blockchain") : tr("Wallet");
         QString blocksStr = QLocale().toString(blocksBehind);
         this->setStatusText(tr("%1 sync: %2 blocks behind").arg(type, blocksStr));
     }
 
-    // Blocks behind info is shown in status bar text, tooltip just shows basic info
-    QString tooltip = tr("Wallet Height: %1 | Network Tip: %2\nLast updated: %3")
+    // Update tooltip with consistent format
+    QString tooltip = tr("Wallet Height: %1 | Network Tip: %2")
         .arg(QLocale().toString(height))
-        .arg(QLocale().toString(target))
-        .arg(m_lastSyncStatusUpdate.toString("HH:mm:ss"));
+        .arg(QLocale().toString(target));
+
+    tooltip += tr("\nLast updated: %1").arg(Utils::timeAgo(m_lastSyncStatusUpdate));
+
+    if (blocksBehind > 0) {
+        tooltip += tr("\n~%1 blocks behind").arg(QLocale().toString(blocksBehind));
+    }
 
     qDebug() << "Setting Status Tooltip:" << tooltip;
     m_statusLabelStatus->setToolTip(tooltip);
@@ -1046,6 +1055,11 @@ void MainWindow::onConnectionStatusChanged(int status)
         quint64 walletHeight = m_wallet->blockChainHeight();
         quint64 targetHeight = m_wallet->daemonBlockChainTargetHeight();
 
+        // Fall back to persisted network height if current is 0
+        if (targetHeight == 0) {
+            targetHeight = conf()->get(Config::lastKnownNetworkHeight).toULongLong();
+        }
+
         QString tooltip;
         if (targetHeight > 0) {
             tooltip = tr("Wallet Height: %1 | Network Tip: %2")
@@ -1055,10 +1069,18 @@ void MainWindow::onConnectionStatusChanged(int status)
             tooltip = tr("Wallet Height: %1").arg(QLocale().toString(walletHeight));
         }
 
-        // Use lastSyncTime if valid, otherwise fall back to m_lastSyncStatusUpdate
+        // Use lastSyncTime, then m_lastSyncStatusUpdate, then persisted timestamp
         QDateTime lastSync = m_wallet->lastSyncTime().isValid()
             ? m_wallet->lastSyncTime()
             : m_lastSyncStatusUpdate;
+
+        // Fall back to persisted timestamp if still invalid
+        if (!lastSync.isValid()) {
+            qint64 persistedTimestamp = conf()->get(Config::lastSyncTimestamp).toLongLong();
+            if (persistedTimestamp > 0) {
+                lastSync = QDateTime::fromSecsSinceEpoch(persistedTimestamp);
+            }
+        }
 
         if (lastSync.isValid()) {
             qint64 secsSinceSync = lastSync.secsTo(QDateTime::currentDateTime());
