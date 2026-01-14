@@ -184,7 +184,11 @@ if (AttachConsole(ATTACH_PARENT_PROCESS)) {
     }
 
     if (parser.isSet("quiet") || conf()->get(Config::disableLogging).toBool()) {
-        qWarning() << "Logging is disabled";
+        if (conf()->get(Config::disableLogging).toBool()) {
+            qWarning() << "Logging is disabled via configuration";
+        } else {
+            qWarning() << "Logging is disabled via --quiet flag";
+        }
         WalletManager::instance()->setLogLevel(-1);
     }
     else if (logLevel >= 0 && logLevel <= Monero::WalletManagerFactory::LogLevel_Max) {

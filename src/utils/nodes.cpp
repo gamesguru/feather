@@ -285,6 +285,10 @@ void Nodes::autoConnect(bool forceReconnect) {
     }
 
     Wallet::ConnectionStatus status = m_wallet->connectionStatus();
+    if (status == Wallet::ConnectionStatus_Connecting && !forceReconnect) {
+        return;
+    }
+
     bool wsMode = (this->source() == NodeSource::websocket);
 
     if (wsMode && !m_wsNodesReceived && websocketNodes().count() == 0) {
