@@ -170,7 +170,6 @@ void MainWindow::initStatusBar() {
 
     m_statusLabelBalance = new QLabel(this);
     m_statusLabelBalance->setText("0");
-    m_statusLabelBalance->setTextInteractionFlags(Qt::TextSelectableByMouse);
     m_statusLabelBalance->setContextMenuPolicy(Qt::ActionsContextMenu);
     balanceLayout->addWidget(m_statusLabelBalance);
 
@@ -179,7 +178,7 @@ void MainWindow::initStatusBar() {
 
     this->statusBar()->addPermanentWidget(balanceContainer);
 
-    QAction *copyBalanceAction = new QAction(tr("Copy"), this);
+    QAction *copyBalanceAction = new QAction(tr("Copy Amount"), this);
     connect(copyBalanceAction, &QAction::triggered, this, [this](){
         QApplication::clipboard()->setText(m_statusLabelBalance->text());
     });
@@ -232,9 +231,6 @@ void MainWindow::initStatusBar() {
     m_actionDisconnectNodeOnPause = new QAction(tr("Disconnect from Node"), this);
     m_actionDisconnectNodeOnPause->setCheckable(true);
     m_actionDisconnectNodeOnPause->setChecked(conf()->get(Config::syncPausedAlsoDisconnectNode).toBool());
-    m_actionDisconnectNodeOnPause->setEnabled(pauseSyncAction->isChecked());
-    m_statusLabelStatus->addAction(m_actionDisconnectNodeOnPause);
-
     m_actionDisconnectNodeOnPause->setEnabled(pauseSyncAction->isChecked());
     m_statusLabelStatus->addAction(m_actionDisconnectNodeOnPause);
 
