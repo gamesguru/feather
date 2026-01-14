@@ -159,28 +159,18 @@ void MainWindow::initStatusBar() {
     m_statusUpdateAvailable->hide();
     this->statusBar()->addPermanentWidget(m_statusUpdateAvailable);
 
-    QWidget *balanceContainer = new QWidget(this);
-    balanceContainer->setAttribute(Qt::WA_TranslucentBackground);
-    QHBoxLayout *balanceLayout = new QHBoxLayout(balanceContainer);
-    balanceLayout->setContentsMargins(0, 0, 0, 0);
-    balanceLayout->setSpacing(0);
-
-    QLabel *balancePrefix = new QLabel("Balance:", this);
-    balanceLayout->addWidget(balancePrefix);
-
-    m_statusLabelBalance = new QLabel(this);
-    m_statusLabelBalance->setText("0");
+    m_statusLabelBalance = new ClickableLabel(this);
+    m_statusLabelBalance->setText("Balance: 0 XMR");
+    m_statusLabelBalance->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    m_statusLabelBalance->setCursor(Qt::PointingHandCursor);
     m_statusLabelBalance->setContextMenuPolicy(Qt::ActionsContextMenu);
-    balanceLayout->addWidget(m_statusLabelBalance);
+    this->statusBar()->addPermanentWidget(m_statusLabelBalance);
 
-    m_statusLabelBalanceSuffix = new QLabel("XMR", this);
-    balanceLayout->addWidget(m_statusLabelBalanceSuffix);
+    connect(m_statusLabelBalance, &ClickableLabel::clicked, this, &MainWindow::showBalanceDialog);
 
-    this->statusBar()->addPermanentWidget(balanceContainer);
-
-    QAction *copyBalanceAction = new QAction(tr("Copy Amount"), this);
+    QAction *copyBalanceAction = new QAction(tr("Copy amount"), this);
     connect(copyBalanceAction, &QAction::triggered, this, [this](){
-        QApplication::clipboard()->setText(m_statusLabelBalance->text());
+        QApplication::clipboard()->setText(m_statusLabelBalance->property("copyableValue").toString());
     });
     m_statusLabelBalance->addAction(copyBalanceAction);
 
@@ -916,6 +906,7 @@ void MainWindow::onBalanceUpdated(quint64 balance, quint64 spendable) {
         }
     }
 
+    // Show fiat currency if configured and balance is not hidden or spendable only.
     if (conf()->get(Config::balanceShowFiat).toBool() && !hide) {
         QString fiatCurrency = conf()->get(Config::preferredFiatCurrency).toString();
         double balanceFiatAmount = appData()->prices.convert("XMR", fiatCurrency, balance / constants::cdiv);
@@ -940,9 +931,12 @@ void MainWindow::onBalanceUpdated(quint64 balance, quint64 spendable) {
         toolTip += QString("\nLast updated: %1").arg(Utils::timeAgo(appData()->prices.lastUpdateTime));
     }
     m_statusLabelBalance->setToolTip(toolTip);
-    m_statusLabelBalance->setText(valueStr);
-    m_statusLabelBalanceSuffix->setToolTip(toolTip);
-    m_statusLabelBalanceSuffix->setText(suffixStr);
+
+    QString finalText = "Balance: " + valueStr + suffixStr;
+    qDebug() << "Setting balance label text:" << finalText;
+
+    m_statusLabelBalance->setText(finalText);
+    m_statusLabelBalance->setProperty("copyableValue", valueStr);
 }
 
 void MainWindow::setPausedSyncStatus() {

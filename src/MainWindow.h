@@ -242,8 +242,7 @@ private:
 
     // lower status bar
     QPushButton *m_statusUpdateAvailable;
-    QLabel *m_statusLabelBalance;
-    QLabel *m_statusLabelBalanceSuffix;
+    ClickableLabel *m_statusLabelBalance;
     QLabel *m_statusLabelStatus;
     QLabel *m_statusLabelNetStats;
     StatusBarButton *m_statusAccountSwitcher;
