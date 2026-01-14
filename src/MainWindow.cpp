@@ -227,7 +227,6 @@ void MainWindow::initStatusBar() {
     m_actionEnableWebsocket = new QAction(tr("Enable Websocket"), this);
     m_actionEnableWebsocket->setCheckable(true);
     m_actionEnableWebsocket->setChecked(!conf()->get(Config::disableWebsocket).toBool());
-    m_statusLabelStatus->addAction(m_actionEnableWebsocket);
 
     connect(m_actionEnableWebsocket, &QAction::toggled, this, [](bool checked){
         conf()->set(Config::disableWebsocket, !checked);
@@ -252,7 +251,7 @@ void MainWindow::initStatusBar() {
     QAction *scanTxAction = new QAction(tr("Import Transaction"), this);
     m_statusLabelStatus->addAction(scanTxAction);
 
-    m_updateNetworkInfoAction = new QAction(tr("Update Network Info"), this);
+    m_updateNetworkInfoAction = new QAction(tr("Scan Now"), this);
     m_updateNetworkInfoAction->setEnabled(!pauseSyncAction->isChecked());
     m_statusLabelStatus->addAction(m_updateNetworkInfoAction);
 
@@ -614,7 +613,9 @@ void MainWindow::initOffline() {
 
     connect(m_updateNetworkInfoAction, &QAction::triggered, this, [this]() {
         if (!m_wallet) return;
-        this->setStatusText(tr("Scanning (Fetching network info)..."));
+        qDebug() << "Scanning wallet...";
+        this->setStatusText(tr("Scanning..."));
+        QApplication::processEvents();  // Ensure status text is visible immediately
         m_wallet->updateNetworkStatus();
     });
 

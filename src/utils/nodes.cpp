@@ -298,6 +298,15 @@ void Nodes::autoConnect(bool forceReconnect) {
     }
 
     if (status == Wallet::ConnectionStatus_Disconnected || forceReconnect) {
+        // If we had a working connection and it dropped (transient disconnect),
+        // try reconnecting to the same node instead of picking a new one
+        if (m_connection.isValid() && m_connection.isActive && !forceReconnect) {
+            qDebug() << "Transient disconnect, reconnecting to same node:" << m_connection.toAddress();
+            this->connectToNode(m_connection);
+            return;
+        }
+
+        // Otherwise, mark the failed node and pick a new one
         if (m_connection.isValid() && !forceReconnect) {
             m_recentFailures << m_connection.toAddress();
         }
