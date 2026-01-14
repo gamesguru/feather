@@ -777,44 +777,6 @@ quint64 estimateSyncDataSize(quint64 blocks) {
     return blocks * 30 * 1024;
 }
 
-QString formatPausedSyncStatus(quint64 blocks) {
-    QString blocksStr = QLocale().toString(blocks);
-    return QObject::tr("[PAUSED] %1 blocks behind").arg(blocksStr);
-}
-
-QString getPausedSyncStatus(Wallet *wallet, Nodes *nodes, QString *tooltip) {
-    if (!wallet) return QObject::tr("[PAUSED] Sync paused");
-
-    quint64 walletHeight = wallet->blockChainHeight();
-    quint64 creationHeight = wallet->getWalletCreationHeight();
-    quint64 startHeight = (walletHeight > creationHeight) ? walletHeight : creationHeight;
-    quint64 daemonHeight = wallet->daemonBlockChainTargetHeight();
-    if (daemonHeight == 0) {
-        daemonHeight = wallet->daemonBlockChainHeight();
-    }
-
-    // If sync is paused or wallet just started, Wallet's internal height might be 0.
-    // If the daemon is connected, use its target_height or height to determine the latest tip.
-    if (daemonHeight == 0 && nodes) {
-        auto connection = nodes->connection();
-        if (connection.target_height > 0) daemonHeight = connection.target_height;
-        else if (connection.height > 0) daemonHeight = connection.height;
-    }
-
-    if (daemonHeight > 0) {
-        if (tooltip) {
-            *tooltip = QObject::tr("Wallet Height: %1 | Network Tip: %2").arg(walletHeight).arg(daemonHeight);
-        }
-        quint64 blocksBehind = Utils::blocksBehind(startHeight, daemonHeight);
-        if (blocksBehind == 0) {
-            return QObject::tr("[PAUSED] Sync paused");
-        }
-        return formatPausedSyncStatus(blocksBehind);
-    } 
-    
-    return QObject::tr("[PAUSED] Sync paused");
-}
-
 QString formatRestoreHeight(quint64 height) {
     const QDateTime restoreDate = appData()->restoreHeights[constants::networkType]->heightToDate(height);
     return QString("%1  (%2)").arg(QString::number(height), restoreDate.toString("yyyy-MM-dd"));

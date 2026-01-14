@@ -211,7 +211,6 @@ private:
     void unlockWallet(const QString &password);
     void closeQDialogChildren(QObject *object);
     int findTab(const QString &title);
-    void setPausedSyncStatus();
 
     QIcon hardwareDevicePairedIcon();
     QIcon hardwareDeviceUnpairedIcon();
@@ -235,7 +234,6 @@ private:
 
     QPointer<QAction> m_clearRecentlyOpenAction;
     QPointer<QAction> m_updateNetworkInfoAction;
-    QPointer<QAction> m_actionDisconnectNodeOnPause;
     QPointer<QAction> m_actionEnableWebsocket;
 
     QDateTime m_lastSyncStatusUpdate;

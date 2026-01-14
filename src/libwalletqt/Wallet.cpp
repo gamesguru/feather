@@ -550,20 +550,6 @@ void Wallet::onHeightsRefreshed(bool success, quint64 daemonHeight, quint64 targ
     m_daemonBlockChainHeight = daemonHeight;
     m_daemonBlockChainTargetHeight = targetHeight;
 
-    if (conf()->get(Config::syncPaused).toBool()) {
-        if (success) {
-            quint64 walletHeight = blockChainHeight();
-            if (walletHeight < (targetHeight - 1)) {
-                setConnectionStatus(ConnectionStatus_Synchronizing);
-            } else {
-                setConnectionStatus(ConnectionStatus_Synchronized);
-            }
-        } else {
-             setConnectionStatus(ConnectionStatus_Disconnected);
-        }
-        return;
-    }
-
     if (success) {
         quint64 walletHeight = blockChainHeight();
 
@@ -720,7 +706,7 @@ bool Wallet::importTransaction(const QString &txid) {
 }
 
 void Wallet::onNewBlock(uint64_t walletHeight) {
-    if (conf()->get(Config::syncPaused).toBool()) {
+    if (m_syncPaused) {
         return;
     }
     // Called whenever a new block gets scanned by the wallet

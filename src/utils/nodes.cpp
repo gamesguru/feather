@@ -275,7 +275,7 @@ void Nodes::autoConnect(bool forceReconnect) {
         return;
     }
 
-    if (conf()->get(Config::syncPaused).toBool() && conf()->get(Config::syncPausedAlsoDisconnectNode).toBool()) {
+    if (conf()->get(Config::syncPaused).toBool()) {
         return;
     }
 

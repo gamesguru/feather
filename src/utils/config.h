@@ -145,7 +145,6 @@ public:
 
         // Sync & data saver
         syncPaused,
-        syncPausedAlsoDisconnectNode,
         syncPausedAlsoDisconnectWebSocket,
     };
 

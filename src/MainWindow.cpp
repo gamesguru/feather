@@ -221,12 +221,6 @@ void MainWindow::initStatusBar() {
     pauseSyncAction->setChecked(conf()->get(Config::syncPaused).toBool());
     m_statusLabelStatus->addAction(pauseSyncAction);
 
-    m_actionDisconnectNodeOnPause = new QAction(tr("Disconnect from Node"), this);
-    m_actionDisconnectNodeOnPause->setCheckable(true);
-    m_actionDisconnectNodeOnPause->setChecked(conf()->get(Config::syncPausedAlsoDisconnectNode).toBool());
-    m_actionDisconnectNodeOnPause->setEnabled(pauseSyncAction->isChecked());
-    m_statusLabelStatus->addAction(m_actionDisconnectNodeOnPause);
-
     m_actionEnableWebsocket = new QAction(tr("Enable Websocket"), this);
     m_actionEnableWebsocket->setCheckable(true);
     m_actionEnableWebsocket->setChecked(!conf()->get(Config::disableWebsocket).toBool());
@@ -242,9 +236,6 @@ void MainWindow::initStatusBar() {
         WindowManager::instance()->onWebsocketStatusChanged(checked);
     });
 
-    connect(m_actionDisconnectNodeOnPause, &QAction::toggled, this, [](bool checked){
-        conf()->set(Config::syncPausedAlsoDisconnectNode, checked);
-    });
 
     QAction *skipSyncAction = new QAction(tr("Skip Sync"), this);
     m_statusLabelStatus->addAction(skipSyncAction);
@@ -266,20 +257,13 @@ void MainWindow::initStatusBar() {
         qInfo() << "Pause Sync toggled. Checked =" << checked;
         conf()->set(Config::syncPaused, checked);
 
-        m_actionDisconnectNodeOnPause->setEnabled(checked);
         m_updateNetworkInfoAction->setEnabled(!checked);
 
         if (m_wallet) {
             if (checked) {
                 m_wallet->setSyncPaused(true);
-
-                if (m_actionDisconnectNodeOnPause->isChecked()) {
-                     qInfo() << "Disconnecting from node (Pause Sync enabled)";
-                     m_nodes->disconnectCurrentNode();
-                     this->onConnectionStatusChanged(Wallet::ConnectionStatus_Disconnected);
-                }
-
-                this->setPausedSyncStatus();
+                m_nodes->disconnectCurrentNode();
+                this->onConnectionStatusChanged(Wallet::ConnectionStatus_Disconnected);
             } else {
                 // Ensure we reconnect everything when unpausing
                 m_wallet->setSyncPaused(false);
@@ -711,12 +695,6 @@ void MainWindow::initOffline() {
         m_wallet->updateNetworkStatus();
     });
 
-    connect(m_wallet, &Wallet::heightsRefreshed, this, [this](bool success, quint64 daemonHeight, quint64 targetHeight) {
-        if (conf()->get(Config::syncPaused).toBool()) {
-            qDebug() << "Heights refreshed (Paused): Daemon" << daemonHeight << "Target" << targetHeight;
-            this->setPausedSyncStatus();
-        }
-    });
 
     // We do NOT want to start syncing yet here, wait for wallet to be opened
     // We can't use rich text for radio buttons
@@ -757,16 +735,6 @@ void MainWindow::initWalletContext() {
         this->updateBalance();
     });
 
-    connect(m_wallet, &Wallet::heightsRefreshed, this, [this](bool success, quint64 daemonHeight, quint64 targetHeight) {
-        // When paused, we might get success=false because wallet->refresh() is skipped,
-        // preventing strict cache updates. We should attempt to fallback to m_nodes info.
-        if (!success && !conf()->get(Config::syncPaused).toBool()) return;
-
-        // Update sync estimate if paused
-        if (conf()->get(Config::syncPaused).toBool()) {
-             this->setPausedSyncStatus();
-        }
-    });
     connect(m_wallet, &Wallet::currentSubaddressAccountChanged, this, &MainWindow::updateTitle);
     connect(m_wallet, &Wallet::walletPassphraseNeeded, this, &MainWindow::onWalletPassphraseNeeded);
 
@@ -871,7 +839,6 @@ void MainWindow::onWalletOpened() {
     if (!conf()->get(Config::disableAutoRefresh).toBool()) {
         if (conf()->get(Config::syncPaused).toBool()) {
             m_wallet->setSyncPaused(true);
-            this->setPausedSyncStatus();
         }
         m_nodes->connectToNode();
     }
@@ -943,27 +910,6 @@ void MainWindow::onBalanceUpdated(quint64 balance, quint64 spendable) {
     m_statusLabelBalance->setProperty("copyableValue", valueStr);
 }
 
-void MainWindow::setPausedSyncStatus() {
-    qDebug() << "setPausedSyncStatus called. Sync paused:" << conf()->get(Config::syncPaused).toBool();
-    QString tooltip;
-    QString status = Utils::getPausedSyncStatus(m_wallet, m_nodes, &tooltip);
-
-    if (m_wallet) {
-        quint64 daemonHeight = m_wallet->daemonBlockChainHeight();
-        quint64 walletHeight = m_wallet->blockChainHeight();
-        quint64 targetHeight = m_wallet->daemonBlockChainTargetHeight();
-        quint64 blocksBehind = Utils::blocksBehind(walletHeight, targetHeight);
-
-        qDebug() << "Paused Status Calc: WalletHeight:" << walletHeight
-                 << "DaemonHeight:" << daemonHeight
-                 << "TargetHeight:" << targetHeight
-                 << "BlocksBehind:" << blocksBehind;
-    }
-
-    this->setStatusText(status);
-    if (!tooltip.isEmpty())
-        m_statusLabelStatus->setToolTip(tooltip);
-}
 
 void MainWindow::setStatusText(const QString &text, bool override, int timeout) {
 
@@ -1165,14 +1111,6 @@ void MainWindow::onConnectionStatusChanged(int status)
 
     m_statusBtnConnectionStatusIndicator->setToolTip(statusStr);
 
-    if (conf()->get(Config::syncPaused).toBool() && !conf()->get(Config::offlineMode).toBool()) {
-        if (status == Wallet::ConnectionStatus_Synchronizing 
-            || status == Wallet::ConnectionStatus_Synchronized 
-            || status == Wallet::ConnectionStatus_Connecting) {
-            this->setPausedSyncStatus();
-            icon = icons()->icon("status_lagging.svg");
-        }
-    }
     m_statusBtnConnectionStatusIndicator->setIcon(icon);
 }
 
@@ -1875,7 +1813,6 @@ void MainWindow::onDeviceError(const QString &error, quint64 errorCode) {
         }
     }
     m_statusBtnHwDevice->setIcon(this->hardwareDevicePairedIcon());
-    m_wallet->setSyncPaused(conf()->get(Config::syncPaused).toBool());
     m_showDeviceError = false;
 }
 
