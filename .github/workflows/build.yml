@@ -50,17 +50,26 @@ jobs:
 
   build-macos:
     name: "macOS (brew)"
+    if: false # disabled for now due to performance reasons (too slow)
     runs-on: macos-latest
+    env:
+      CCACHE_DIR: /Users/runner/Library/Caches/ccache
+      HOMEBREW_NO_AUTO_UPDATE: 1
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
       - name: install dependencies
         run: |
-          brew uninstall cmake
-          brew update
-          brew install --quiet qt libsodium libzip qrencode unbound cmake boost hidapi openssl expat libunwind-headers protobuf pkgconfig
+          brew install --quiet qt libsodium libzip qrencode unbound cmake boost hidapi openssl expat protobuf pkg-config ccache ninja
+      - name: Setup ccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: macos-ccache-${{ github.sha }}
+          restore-keys: |
+            macos-ccache-
       - name: build
         run: |
-          cmake -S . -B build -DWITH_SCANNER=Off
-          cmake --build build -j $(nproc)
+          cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release -DWITH_SCANNER=Off -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          cmake --build build
