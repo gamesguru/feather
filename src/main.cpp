@@ -171,9 +171,11 @@ if (AttachConsole(ATTACH_PARENT_PROCESS)) {
     }
 
     // Setup logging
-    QString logPath = QString("%1/libwallet.log").arg(configDir);
+    QString logPath = conf()->get(Config::disableLogging).toBool() ? "" : QString("%1/libwallet.log").arg(configDir);
+    bool consoleLogging = !conf()->get(Config::disableLoggingStdout).toBool();
+
     Monero::Utils::onStartup();
-    Monero::Wallet::init("", "feather", logPath.toStdString(), true);
+    Monero::Wallet::init("", "feather", logPath.toStdString(), consoleLogging);
 
     bool logLevelFromEnv;
     int logLevel = qEnvironmentVariableIntValue("MONERO_LOG_LEVEL", &logLevelFromEnv);
@@ -183,11 +185,12 @@ if (AttachConsole(ATTACH_PARENT_PROCESS)) {
         logLevel = conf()->get(Config::logLevel).toInt();
     }
 
-    if (parser.isSet("quiet") || conf()->get(Config::disableLogging).toBool()) {
-        if (conf()->get(Config::disableLogging).toBool()) {
-            qWarning() << "Logging is disabled via configuration";
-        } else {
+    bool disableEverything = parser.isSet("quiet") || (conf()->get(Config::disableLogging).toBool() && conf()->get(Config::disableLoggingStdout).toBool());
+    if (disableEverything) {
+        if (parser.isSet("quiet")) {
             qWarning() << "Logging is disabled via --quiet flag";
+        } else {
+            qWarning() << "Logging is disabled via configuration";
         }
         WalletManager::instance()->setLogLevel(-1);
     }

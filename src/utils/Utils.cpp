@@ -559,7 +559,7 @@ QTextCharFormat addressTextFormat(const SubaddressIndex &index, quint64 amount) 
 }
 
 void applicationLogHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg) {
-    if (conf()->get(Config::disableLoggingStdout).toBool() || conf()->get(Config::disableLogging).toBool())
+    if (conf()->get(Config::disableLoggingStdout).toBool())
         return;
 
     int level = conf()->get(Config::logLevel).toInt();
