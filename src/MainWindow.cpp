@@ -971,11 +971,10 @@ void MainWindow::onSyncStatus(quint64 height, quint64 target, bool daemonSync) {
         this->setStatusText(tr("%1 sync: %2 blocks behind").arg(type, blocksStr));
     }
 
-    QString syncStatus = blocksBehind > 0 ? tr("%1 blocks behind").arg(QLocale().toString(blocksBehind)) : tr("Synchronized");
-    QString tooltip = tr("Wallet Height: %1 | Network Tip: %2\n%3\nLast updated: %4")
+    // Blocks behind info is shown in status bar text, tooltip just shows basic info
+    QString tooltip = tr("Wallet Height: %1 | Network Tip: %2\nLast updated: %3")
         .arg(QLocale().toString(height))
         .arg(QLocale().toString(target))
-        .arg(syncStatus)
         .arg(m_lastSyncStatusUpdate.toString("HH:mm:ss"));
 
     qDebug() << "Setting Status Tooltip:" << tooltip;
@@ -1003,9 +1002,20 @@ void MainWindow::onConnectionStatusChanged(int status)
     } else {
         switch(status){
             case Wallet::ConnectionStatus_Disconnected:
+            {
                 icon = icons()->icon("status_offline.svg");
+                // Estimate blocks behind based on time since last sync
+                if (m_wallet && m_wallet->lastSyncTime().isValid()) {
+                    qint64 secsSinceLastSync = m_wallet->lastSyncTime().secsTo(QDateTime::currentDateTime());
+                    quint64 estimatedBlocksBehind = secsSinceLastSync / 120; // ~2 min per block
+                    if (estimatedBlocksBehind > 0) {
+                        statusStr = tr("~%1 blocks behind").arg(QLocale().toString(estimatedBlocksBehind));
+                        break;
+                    }
+                }
                 statusStr = "Disconnected";
                 break;
+            }
             case Wallet::ConnectionStatus_Connecting:
                 icon = icons()->icon("status_lagging.svg");
                 statusStr = "Connecting to node";
@@ -1030,6 +1040,36 @@ void MainWindow::onConnectionStatusChanged(int status)
     }
 
     this->setStatusText(statusStr);
+
+    // Update tooltip with wallet/network heights and time since last sync
+    if (m_wallet) {
+        quint64 walletHeight = m_wallet->blockChainHeight();
+        quint64 targetHeight = m_wallet->daemonBlockChainTargetHeight();
+
+        QString tooltip;
+        if (targetHeight > 0) {
+            tooltip = tr("Wallet Height: %1 | Network Tip: %2")
+                .arg(QLocale().toString(walletHeight))
+                .arg(QLocale().toString(targetHeight));
+        } else {
+            tooltip = tr("Wallet Height: %1").arg(QLocale().toString(walletHeight));
+        }
+
+        // Use lastSyncTime if valid, otherwise fall back to m_lastSyncStatusUpdate
+        QDateTime lastSync = m_wallet->lastSyncTime().isValid()
+            ? m_wallet->lastSyncTime()
+            : m_lastSyncStatusUpdate;
+
+        if (lastSync.isValid()) {
+            qint64 secsSinceSync = lastSync.secsTo(QDateTime::currentDateTime());
+            quint64 blocksBehind = secsSinceSync / 120; // ~2 min per block
+            tooltip += tr("\nLast updated: %1").arg(Utils::timeAgo(lastSync));
+            if (blocksBehind > 0) {
+                tooltip += tr("\n~%1 blocks behind").arg(QLocale().toString(blocksBehind));
+            }
+        }
+        m_statusLabelStatus->setToolTip(tooltip);
+    }
 
     if (m_wallet) {
         quint64 walletHeight = m_wallet->blockChainHeight();
