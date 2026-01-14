@@ -193,6 +193,7 @@ private:
     bool m_enableAutoconnect = true;
 
     bool m_allowConnection = false;
+    bool m_privacySwitchDone = false;  // Tracks if allTorExceptInitSync switch has fired
 
     FeatherNode pickEligibleNode();
 

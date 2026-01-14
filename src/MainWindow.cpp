@@ -614,7 +614,7 @@ void MainWindow::initOffline() {
 
     connect(m_updateNetworkInfoAction, &QAction::triggered, this, [this]() {
         if (!m_wallet) return;
-        this->setStatusText(tr("Fetching network info..."));
+        this->setStatusText(tr("Scanning (Fetching network info)..."));
         m_wallet->updateNetworkStatus();
     });
 

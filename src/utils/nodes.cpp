@@ -438,6 +438,10 @@ void Nodes::setCustomNodes(const QList<FeatherNode> &nodes) {
 
 void Nodes::onWalletRefreshed() {
     if (conf()->get(Config::proxy) == Config::Proxy::Tor && conf()->get(Config::torPrivacyLevel).toInt() == Config::allTorExceptInitSync) {
+        // Privacy switch already triggered this session, don't repeat
+        if (m_privacySwitchDone)
+            return;
+
         // Don't reconnect if we're connected to a local node (traffic will not be routed through Tor)
         if (m_connection.isLocal())
             return;
@@ -446,9 +450,10 @@ void Nodes::onWalletRefreshed() {
         if (m_connection.isOnion())
             return;
 
-        // If want onion node but aren't connected to one, reconnect used to blindly fire.
-        // We should check if we actually intend to switch.
+        // If want onion node but aren't connected to one, trigger the switch
         if (this->useOnionNodes()) {
+            qInfo() << "Privacy switch: switching from clearnet to onion after initial sync";
+            m_privacySwitchDone = true;
             this->autoConnect(true);
         }
     }
