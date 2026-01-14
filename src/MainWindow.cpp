@@ -904,15 +904,15 @@ void MainWindow::onBalanceUpdated(quint64 balance, quint64 spendable) {
         valueStr = "HIDDEN";
     }
     else if (displaySetting == Config::totalBalance) {
-        valueStr = WalletManager::displayAmount(balance, false, decimals);
+        valueStr = WalletManager::displayAmount(balance, true, decimals);
         suffixStr = " XMR";
     }
     else if (displaySetting == Config::spendable || displaySetting == Config::spendablePlusUnconfirmed) {
-        valueStr = WalletManager::displayAmount(spendable, false, decimals);
+        valueStr = WalletManager::displayAmount(spendable, true, decimals);
         suffixStr = " XMR";
 
         if (displaySetting == Config::spendablePlusUnconfirmed && balance > spendable) {
-            suffixStr += QString(" (+%1 XMR unconfirmed)").arg(WalletManager::displayAmount(balance - spendable, false, decimals));
+            suffixStr += QString(" (+%1 XMR unconfirmed)").arg(WalletManager::displayAmount(balance - spendable, true, decimals));
         }
     }
 
