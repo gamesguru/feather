@@ -520,12 +520,12 @@ void WindowManager::handleDeviceError(const QString &error, Utils::Message &msg)
     // Ledger
     if (error.contains("No device found")) {
         msg.description = "No Ledger device found.";
-        msg.helpItems = {"Make sure the Monero app is open on the device.", "If the problem persists, try restarting Feather."};
+        msg.helpItems = QStringList{"Make sure the Monero app is open on the device.", "If the problem persists, try restarting Feather."};
         msg.doc = "create_wallet_hardware_device";
     }
     else if (error.contains("Unable to open device")) {
         msg.description = "Unable to open device.";
-        msg.helpItems = {"The device might be in use by a different application."};
+        msg.helpItems = QStringList{"The device might be in use by a different application."};
 #if defined(Q_OS_LINUX)
         msg.helpItems.append("On Linux you may need to follow the instructions in the link below before the device can be opened:\n"
                          "https://support.ledger.com/hc/en-us/articles/115005165269-Fix-connection-issues");
@@ -536,15 +536,15 @@ void WindowManager::handleDeviceError(const QString &error, Utils::Message &msg)
     // Trezor
     else if (error.contains("Unable to claim libusb device")) {
         msg.description = "Unable to claim Trezor device";
-        msg.helpItems = {"Please make sure the device is not used by another program, like Trezor Suite or trezord, and try again."};
+        msg.helpItems = QStringList{"Please make sure the device is not used by another program, like Trezor Suite or trezord, and try again."};
     }
     else if (error.contains("Cannot get a device address")) {
         msg.description = "Cannot get a device address";
-        msg.helpItems = {"Reattach the Trezor device and try again"};
+        msg.helpItems = QStringList{"Reattach the Trezor device and try again"};
     }
     else if (error.contains("Could not connect to the device Trezor") || error.contains("Device connect failed")) {
         msg.description = "Could not connect to the Trezor device";
-        msg.helpItems = {"Make sure the device is connected to your computer and unlocked."};
+        msg.helpItems = QStringList{"Make sure the device is connected to your computer and unlocked."};
 #if defined(Q_OS_LINUX)
         msg.helpItems.append("On Linux you may need to follow the instructions in the link below before the device can be opened:\n"
                          "https://wiki.trezor.io/Udev_rules");
@@ -552,17 +552,17 @@ void WindowManager::handleDeviceError(const QString &error, Utils::Message &msg)
 #endif
     }
     else if (error.contains("Failed to acquire device")) {
-        msg.helpItems = {"Make sure Trezor Suite and trezord are closed."};
+        msg.helpItems = QStringList{"Make sure Trezor Suite and trezord are closed."};
     }
     else if (error.contains("SW_CLIENT_NOT_SUPPORTED")) {
-        msg.helpItems = {"Upgrade your Ledger device firmware to the latest version using Ledger Live.\n"
+        msg.helpItems = QStringList{"Upgrade your Ledger device firmware to the latest version using Ledger Live.\n"
                      "Then upgrade the Monero app for the Ledger device to the latest version."};
     }
     else if (error.contains("Wrong Device Status")) {
-        msg.helpItems = {"The device may need to be unlocked."};
+        msg.helpItems = QStringList{"The device may need to be unlocked."};
     }
     else if (error.contains("Wrong Channel")) {
-        msg.helpItems = {"Restart the hardware device and try again."};
+        msg.helpItems = QStringList{"Restart the hardware device and try again."};
     }
     else {
         msg.doc = "report_an_issue";

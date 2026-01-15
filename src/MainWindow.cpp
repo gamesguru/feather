@@ -1188,19 +1188,19 @@ void MainWindow::onTransactionCreated(PendingTransaction *tx, const QVector<QStr
             }
             catch (const tools::error::daemon_busy &e) {
                 message.description = QString("Node was unable to respond. Failed request: %1").arg(QString::fromStdString(e.request()));
-                message.helpItems = {"Try sending the transaction again.", "If this keeps happening, connect to a different node."};
+                message.helpItems = QStringList{"Try sending the transaction again.", "If this keeps happening, connect to a different node."};
             }
             catch (const tools::error::no_connection_to_daemon &e) {
                 message.description = QString("Connection to node lost. Failed request: %1").arg(QString::fromStdString(e.request()));
-                message.helpItems = {"Try sending the transaction again.", "If this keeps happening, connect to a different node."};
+                message.helpItems = QStringList{"Try sending the transaction again.", "If this keeps happening, connect to a different node."};
             }
             catch (const tools::error::wallet_rpc_error &e) {
                 message.description = QString("RPC error: %1").arg(QString::fromStdString(e.to_string()));
-                message.helpItems = {"Try sending the transaction again.", "If this keeps happening, connect to a different node."};
+                message.helpItems = QStringList{"Try sending the transaction again.", "If this keeps happening, connect to a different node."};
             }
             catch (const tools::error::get_outs_error &e) {
                 message.description = "Failed to get enough decoy outputs from node";
-                message.helpItems = {"Your transaction has too many inputs. Try sending a lower amount."};
+                message.helpItems = QStringList{"Your transaction has too many inputs. Try sending a lower amount."};
             }
             catch (const tools::error::not_enough_unlocked_money &e) {
                 QString error;
@@ -1211,19 +1211,19 @@ void MainWindow::onTransactionCreated(PendingTransaction *tx, const QVector<QStr
                     error = QString("Spendable balance insufficient to pay for transaction.\n\nSpendable balance: %1\nTransaction needs: %2").arg(WalletManager::displayAmount(e.available()), WalletManager::displayAmount(e.tx_amount() + e.fee()));
                 }
                 message.description = error;
-                message.helpItems = {"Wait for more balance to unlock.", "Click 'Help' to learn more about how balance works."};
+                message.helpItems = QStringList{"Wait for more balance to unlock.", "Click 'Help' to learn more about how balance works."};
                 message.doc = "balance";
             }
             catch (const tools::error::not_enough_money &e) {
                 message.description = QString("Not enough money to transfer\n\nTotal balance: %1\nTransaction amount: %2").arg(WalletManager::displayAmount(e.available()), WalletManager::displayAmount(e.tx_amount()));
-                message.helpItems = {"If you are trying to send your entire balance, click 'Max'."};
+                message.helpItems = QStringList{"If you are trying to send your entire balance, click 'Max'."};
                 message.doc = "balance";
             }
             catch (const tools::error::tx_not_possible &e) {
                 message.description = QString("Not enough money to transfer. Transaction amount + fee exceeds available balance.\n\n"
                                               "Spendable balance: %1\n"
                                               "Transaction needs: %2").arg(WalletManager::displayAmount(e.available()), WalletManager::displayAmount(e.tx_amount() + e.fee()));
-                message.helpItems = {"If you're trying to send your entire balance, click 'Max'."};
+                message.helpItems = QStringList{"If you're trying to send your entire balance, click 'Max'."};
                 message.doc = "balance";
             }
             catch (const tools::error::not_enough_outs_to_mix &e) {
@@ -1231,7 +1231,7 @@ void MainWindow::onTransactionCreated(PendingTransaction *tx, const QVector<QStr
             }
             catch (const tools::error::tx_not_constructed&) {
                 message.description = "Transaction was not constructed";
-                message.helpItems = {"You have found a bug. Please contact the developers."};
+                message.helpItems = QStringList{"You have found a bug. Please contact the developers."};
                 message.doc = "report_an_issue";
             }
             catch (const tools::error::tx_rejected &e) {
@@ -1240,26 +1240,26 @@ void MainWindow::onTransactionCreated(PendingTransaction *tx, const QVector<QStr
             }
             catch (const tools::error::tx_sum_overflow &e) {
                 message.description = "Transaction tries to spend an unrealistic amount of XMR";
-                message.helpItems = {"You have found a bug. Please contact the developers."};
+                message.helpItems = QStringList{"You have found a bug. Please contact the developers."};
                 message.doc = "report_an_issue";
             }
             catch (const tools::error::zero_amount&) {
                 message.description = "Destination amount is zero";
-                message.helpItems = {"You have found a bug. Please contact the developers."};
+                message.helpItems = QStringList{"You have found a bug. Please contact the developers."};
                 message.doc = "report_an_issue";
             }
             catch (const tools::error::zero_destination&) {
                 message.description = "Transaction has no destination";
-                message.helpItems = {"You have found a bug. Please contact the developers."};
+                message.helpItems = QStringList{"You have found a bug. Please contact the developers."};
                 message.doc = "report_an_issue";
             }
             catch (const tools::error::tx_too_big &e) {
                 message.description = "Transaction too big";
-                message.helpItems = {"Try sending a smaller amount."};
+                message.helpItems = QStringList{"Try sending a smaller amount."};
             }
             catch (const tools::error::transfer_error &e) {
                 message.description = QString("Unknown transfer error: %1").arg(QString::fromStdString(e.what()));
-                message.helpItems = {"You have found a bug. Please contact the developers."};
+                message.helpItems = QStringList{"You have found a bug. Please contact the developers."};
                 message.doc = "report_an_issue";
             }
             catch (const tools::error::wallet_internal_error &e) {
@@ -1281,12 +1281,12 @@ void MainWindow::onTransactionCreated(PendingTransaction *tx, const QVector<QStr
                 }
                 if (msg.contains("Failed to get height") || msg.contains("Failed to get earliest fork height")) {
                     message.description = QString("RPC error: %1").arg(QString::fromStdString(e.to_string()));
-                    message.helpItems = {"Try sending the transaction again.", "If this keeps happening, connect to a different node."};
+                    message.helpItems = QStringList{"Try sending the transaction again.", "If this keeps happening, connect to a different node."};
                     bug = false;
                 }
 
                 if (bug) {
-                    message.helpItems = {"You have found a bug. Please contact the developers."};
+                    message.helpItems = QStringList{"You have found a bug. Please contact the developers."};
                     message.doc = "report_an_issue";
                 }
             }

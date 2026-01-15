@@ -5,6 +5,7 @@
 #define FEATHER_COINSMODEL_H
 
 #include <QAbstractTableModel>
+#include <QSet>  // For Qt5 compatibility
 
 class Coins;
 class CoinsInfo;

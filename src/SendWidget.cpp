@@ -190,10 +190,17 @@ void SendWidget::sendClicked() {
             amounts.push_back(output.amount);
         }
 
+    #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
         QtFuture::connect(m_wallet, &Wallet::preTransactionChecksComplete)
                 .then([this, addresses, amounts, description, subtractFeeFromAmount](int feeLevel){
                     m_wallet->createTransactionMultiDest(addresses, amounts, description, feeLevel, subtractFeeFromAmount);
                 });
+    #else
+        // Qt 5 Fallback
+        connect(m_wallet, &Wallet::preTransactionChecksComplete, this, [this, addresses, amounts, description, subtractFeeFromAmount](int feeLevel){
+            m_wallet->createTransactionMultiDest(addresses, amounts, description, feeLevel, subtractFeeFromAmount);
+        });
+    #endif
 
         m_wallet->preTransactionChecks(ui->combo_feePriority->currentIndex());
 
@@ -249,10 +256,17 @@ void SendWidget::sendClicked() {
         #endif
     }
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     QtFuture::connect(m_wallet, &Wallet::preTransactionChecksComplete)
-            .then([this, recipient, amount, description, sendAll, subtractFeeFromAmount](int feeLevel){
-                m_wallet->createTransaction(recipient, amount, description, sendAll, feeLevel, subtractFeeFromAmount);
-            });
+        .then([this, recipient, amount, description, sendAll, subtractFeeFromAmount](int feeLevel){
+            m_wallet->createTransaction(recipient, amount, description, sendAll, feeLevel, subtractFeeFromAmount);
+        });
+#else
+    // Qt 5 Fallback
+    connect(m_wallet, &Wallet::preTransactionChecksComplete, this, [this, recipient, amount, description, sendAll, subtractFeeFromAmount](int feeLevel){
+        m_wallet->createTransaction(recipient, amount, description, sendAll, feeLevel, subtractFeeFromAmount);
+    });
+#endif
 
     m_wallet->preTransactionChecks(ui->combo_feePriority->currentIndex());
 }

@@ -39,7 +39,8 @@ HistoryExportDialog::HistoryExportDialog(Wallet *wallet, QWidget *parent)
         ui->date_max->setDate(QDate::currentDate());
     });
 
-    connect(ui->spin_days, &QSpinBox::valueChanged, [this] {
+    // Works on Qt 5 and Qt 6
+    connect(ui->spin_days, QOverload<int>::of(&QSpinBox::valueChanged), [this] {
         ui->date_min->setDate(QDate::currentDate().addDays(-ui->spin_days->value() + 1));
         ui->date_max->setDate(QDate::currentDate());
     });

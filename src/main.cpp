@@ -214,14 +214,14 @@ if (AttachConsole(ATTACH_PARENT_PROCESS)) {
 
     if (!quiet && !conf()->get(Config::disableLogging).toBool()) {
         QList<QPair<QString, QString>> info;
-        info.emplace_back("Feather", FEATHER_VERSION);
-        info.emplace_back("Monero", MONERO_VERSION);
-        info.emplace_back("Qt", QT_VERSION_STR);
-        info.emplace_back("Tor", TOR_VERSION);
-        info.emplace_back("SSL", QSslSocket::sslLibraryVersionString());
-        info.emplace_back("Mode", stagenet ? "Stagenet" : (testnet ? "Testnet" : "Mainnet"));
-        info.emplace_back("Network", conf()->get(Config::syncPaused).toBool() ? "PAUSED" : "ACTIVE");
-        info.emplace_back("Config dir", configDir);
+        info.push_back({"Feather", FEATHER_VERSION});
+        info.push_back({"Monero", MONERO_VERSION});
+        info.push_back({"Qt", QT_VERSION_STR});
+        info.push_back({"Tor", TOR_VERSION});
+        info.push_back({"SSL", QSslSocket::sslLibraryVersionString()});
+        info.push_back({"Mode", stagenet ? "Stagenet" : (testnet ? "Testnet" : "Mainnet")});
+        info.push_back({"Network", conf()->get(Config::syncPaused).toBool() ? "PAUSED" : "ACTIVE"});
+        info.push_back({"Config dir", configDir});
 
         for (const auto &k: info) {
             qWarning().nospace().noquote() << QString("%1: %2").arg(k.first, k.second);
