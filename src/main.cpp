@@ -83,7 +83,10 @@ if (AttachConsole(ATTACH_PARENT_PROCESS)) {
 
 #if defined(Q_OS_LINUX)
     // PassThrough results in muddy text
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
     QApplication::setHighDpiScaleFactorRoundingPolicy(Qt::HighDpiScaleFactorRoundingPolicy::Round);
+#endif
+    // ---
 #endif
 
     for (int i = 1; i < argc; i++) {
