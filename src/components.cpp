@@ -110,7 +110,11 @@ InfoFrame::InfoFrame(QWidget *parent)
 
   m_infoLabel = new QLabel(this);
   m_infoLabel->setWordWrap(true);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
   m_infoLabel->setTextFormat(Qt::MarkdownText);
+#else
+  m_infoLabel->setTextFormat(Qt::AutoText); // Fallback for Qt 5.12 (Ubuntu 20.04)
+#endif
   m_infoLabel->setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::LinksAccessibleByMouse);
   layout->addWidget(m_infoLabel);
 }
