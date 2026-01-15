@@ -7,6 +7,7 @@
 #include <QComboBox>
 #include <QWidget>
 #include <QInputDialog>
+#include <QDebug>
 
 #include "dialog/MultiLineInputDialog.h"
 #include "utils/config.h"
@@ -28,7 +29,7 @@ void UrlListConfigureWidget::setup(const QString &what, Config::ConfigKey list, 
     this->setupComboBox();
 
     connect(ui->configure, &QPushButton::clicked, this, &UrlListConfigureWidget::onConfigureClicked);
-    connect(ui->comboBox, &QComboBox::currentIndexChanged, this, &UrlListConfigureWidget::onUrlSelected);
+    connect(ui->comboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &UrlListConfigureWidget::onUrlSelected);
 }
 
 void UrlListConfigureWidget::onConfigureClicked() {

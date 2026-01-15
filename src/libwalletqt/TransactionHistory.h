@@ -4,6 +4,7 @@
 #ifndef FEATHER_TRANSACTIONHISTORY_H
 #define FEATHER_TRANSACTIONHISTORY_H
 
+#include <QObject>
 #include <QReadWriteLock>
 
 #include "rows/TransactionRow.h"

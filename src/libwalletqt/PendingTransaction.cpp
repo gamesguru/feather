@@ -100,7 +100,7 @@ void PendingTransaction::refresh()
 
     m_pimpl->refresh();
     for (const auto i : m_pimpl->getAll()) {
-        m_pending_tx_info.emplace_back(i);
+        m_pending_tx_info.push_back(PendingTransactionInfo(i));
     }
 }
 

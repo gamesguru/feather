@@ -9,6 +9,8 @@
 #include "utils/AppData.h"
 #include "utils/Utils.h"
 #include "libwalletqt/rows/TransactionRow.h"
+#include <cmath>
+#include <QDebug>
 
 TransactionHistoryModel::TransactionHistoryModel(QObject *parent)
     : QAbstractTableModel(parent),

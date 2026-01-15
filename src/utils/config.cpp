@@ -7,6 +7,7 @@
 
 #include <QCoreApplication>
 #include <QStandardPaths>
+#include <QDebug>
 
 #include "utils/Utils.h"
 #include "utils/os/tails.h"

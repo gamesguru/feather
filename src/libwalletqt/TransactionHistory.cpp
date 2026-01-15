@@ -149,15 +149,15 @@ void TransactionHistory::refresh()
             // single output transaction might contain multiple transfers
             for (auto const &d: pd.m_dests)
             {
-                t.transfers.emplace_back(
+                t.transfers.push_back(Output(
                     d.amount,
-                    QString::fromStdString(d.address(m_wallet2->nettype(), pd.m_payment_id, !hasFakePaymentId)));
+                    QString::fromStdString(d.address(m_wallet2->nettype(), pd.m_payment_id, !hasFakePaymentId))));
             }
             for (auto const &r: pd.m_rings)
             {
-                t.rings.emplace_back(
+                t.rings.push_back(Ring(
                     QString::fromStdString(epee::string_tools::pod_to_hex(r.first)),
-                    cryptonote::relative_output_offsets_to_absolute(r.second));
+                    cryptonote::relative_output_offsets_to_absolute(r.second)));
             }
 
             m_rows.append(std::move(t));
@@ -204,15 +204,15 @@ void TransactionHistory::refresh()
 
             for (auto const &d: pd.m_dests)
             {
-                t.transfers.emplace_back(
+                t.transfers.push_back(Output(
                     d.amount,
-                    QString::fromStdString(d.address(m_wallet2->nettype(), pd.m_payment_id, !hasFakePaymentId)));
+                    QString::fromStdString(d.address(m_wallet2->nettype(), pd.m_payment_id, !hasFakePaymentId))));
             }
             for (auto const &r: pd.m_rings)
             {
-                t.rings.emplace_back(
+                t.rings.push_back(Ring(
                     QString::fromStdString(epee::string_tools::pod_to_hex(r.first)),
-                    cryptonote::relative_output_offsets_to_absolute(r.second));
+                    cryptonote::relative_output_offsets_to_absolute(r.second)));
             }
 
             m_rows.append(std::move(t));

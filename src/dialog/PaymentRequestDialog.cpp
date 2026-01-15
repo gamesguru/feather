@@ -53,7 +53,7 @@ PaymentRequestDialog::PaymentRequestDialog(QWidget *parent, Wallet *wallet, QStr
     ui->comboCurrency->addItem(preferredFiatCurrency);
     ui->comboCurrency->addItems(fiatSymbols);
     ui->comboCurrency->setCurrentIndex(0);
-    connect(ui->comboCurrency, &QComboBox::currentIndexChanged, [this] (int index){
+    connect(ui->comboCurrency, QOverload<int>::of(&QComboBox::currentIndexChanged), [this] (int index){
         calculateFiat();
     });
 

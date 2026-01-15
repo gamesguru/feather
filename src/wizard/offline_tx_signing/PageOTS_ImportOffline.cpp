@@ -28,7 +28,7 @@ void PageOTS_ImportOffline::importFromStr(const std::string &data) {
             QString error = m_wallet->errorString();
             message.description = error;
             if (error.contains("Failed to decrypt")) {
-                message.helpItems = {"You may have opened the wrong view-only wallet."};
+                message.helpItems = QStringList{"You may have opened the wrong view-only wallet."};
             }
             Utils::showMsg(message);
             m_scanWidget->reset();
@@ -48,7 +48,7 @@ void PageOTS_ImportOffline::importFromStr(const std::string &data) {
             QString error = m_wallet->errorString();
             message.description = error;
             if (error.contains("Failed to decrypt")) {
-                message.helpItems = {"You may have opened the wrong view-only wallet."};
+                message.helpItems = QStringList{"You may have opened the wrong view-only wallet."};
             }
             Utils::showMsg(message);
             m_scanWidget->reset();

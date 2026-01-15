@@ -18,11 +18,11 @@ void SubaddressAccount::refresh()
 
     for (uint32_t i = 0; i < m_wallet2->get_num_subaddress_accounts(); ++i)
     {
-        m_rows.emplace_back(
+        m_rows.push_back(AccountRow(
             QString::fromStdString(m_wallet2->get_subaddress_as_str({i,0})),
             QString::fromStdString(m_wallet2->get_subaddress_label({i,0})),
             m_wallet2->balance(i, false),
-            m_wallet2->unlocked_balance(i, false));
+            m_wallet2->unlocked_balance(i, false)));
     }
 
     emit refreshFinished();

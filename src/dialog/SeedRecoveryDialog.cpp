@@ -211,7 +211,8 @@ void SeedRecoveryDialog::checkSeed() {
 
     // Single threaded for now
     const auto future = m_scheduler.run([this, words, spkey, major, minor]{
-        QList<int> index(16, 0);
+        QList<int> index;
+        for (int k = 0; k < 16; ++k) index.append(0);
 
         qint64 i = 0;
 

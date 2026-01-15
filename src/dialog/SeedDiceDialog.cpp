@@ -42,7 +42,7 @@ SeedDiceDialog::SeedDiceDialog(QWidget *parent)
         ui->label_rolls->setText("Flips:");
     });
 
-    connect(ui->spin_sides, &QSpinBox::valueChanged, [this](int value){
+    connect(ui->spin_sides, QOverload<int>::of(&QSpinBox::valueChanged), [this](int value){
        if (!ui->radio_dice->isChecked()) {
            return;
        }

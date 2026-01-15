@@ -15,7 +15,11 @@
 #if defined(WITH_SCANNER)
 #include "wizard/offline_tx_signing/OfflineTxSigningWizard.h"
 #include "qrcode/scanner/QrCodeScanDialog.h"
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QMediaDevices>
+#else
+#include <QCameraInfo>
+#endif
 #endif
 
 SendWidget::SendWidget(Wallet *wallet, QWidget *parent)
@@ -127,7 +131,11 @@ void SendWidget::fillAddress(const QString &address) {
 
 void SendWidget::scanClicked() {
 #if defined(WITH_SCANNER)
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     auto cameras = QMediaDevices::videoInputs();
+#else
+    const QList<QCameraInfo> cameras = QCameraInfo::availableCameras();
+#endif
     if (cameras.empty()) {
         Utils::showError(this, "Can't open QR scanner", "No available cameras found");
         return;

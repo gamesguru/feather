@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: The Monero Project
 
 #include "WalletKeysFilesModel.h"
+#include <QDebug>
 
 #include "utils/Utils.h"
 #include <QDir>
