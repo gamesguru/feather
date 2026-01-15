@@ -506,17 +506,26 @@ void Wallet::startRefreshThread()
                 const auto elapsed = now - last;
                 if (elapsed >= std::chrono::seconds(m_refreshInterval) || m_refreshNow)
                 {
-                    m_lastRefreshTime = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-                    last = std::chrono::steady_clock::now();
-
-                    qDebug() << "Refresher: Interval met. Elapsed:" << std::chrono::duration_cast<std::chrono::seconds>(elapsed).count()
-                             << "Interval:" << m_refreshInterval << "RefreshNow:" << m_refreshNow;
-                    m_refreshNow = false;
-
+                    auto loopStartTime = std::chrono::time_point_cast<std::chrono::microseconds>(std::chrono::steady_clock::now());
                     // get daemonHeight and targetHeight
                     // daemonHeight and targetHeight will be 0 if call to get_info fails
                     quint64 daemonHeight = m_walletImpl->daemonBlockChainHeight();
                     bool success = daemonHeight > 0;
+
+                    if (success) {
+                        m_lastRefreshTime = loopStartTime.time_since_epoch().count();
+                        last = loopStartTime;
+                    } else {
+                        // If sync failed, retry in 10 seconds (or immediately if interval < 10s)
+                        auto retryDelay = std::min(std::chrono::seconds(m_refreshInterval), std::chrono::seconds(10));
+                        auto nextTime = loopStartTime - std::chrono::seconds(m_refreshInterval) + retryDelay;
+                        m_lastRefreshTime = nextTime.time_since_epoch().count();
+                        last = nextTime;
+                    }
+
+                    qDebug() << "Refresher: Interval met. Elapsed:" << std::chrono::duration_cast<std::chrono::seconds>(elapsed).count()
+                             << "Interval:" << m_refreshInterval << "RefreshNow:" << m_refreshNow;
+
 
                     quint64 targetHeight = 0;
                     if (success) {

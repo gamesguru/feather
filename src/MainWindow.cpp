@@ -663,9 +663,9 @@ void MainWindow::initWalletContext() {
         this->onConnectionStatusChanged(status);
 
         if (status == Wallet::ConnectionStatus_Disconnected) {
-             QTimer::singleShot(2000, m_nodes, [this]{ m_nodes->autoConnect(); });
+            QTimer::singleShot(2000, m_nodes, [this]{ m_nodes->autoConnect(); });
         } else {
-             m_nodes->autoConnect();
+            m_nodes->autoConnect();
         }
 
         this->updateBalance();
