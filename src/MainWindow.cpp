@@ -529,9 +529,18 @@ void MainWindow::initMenu() {
         toggleTab->menuAction->setText(toggleTab->name);
         toggleTab->menuAction->setCheckable(true);
         toggleTab->menuAction->setChecked(show);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
         ui->tabWidget->setTabVisible(ui->tabWidget->indexOf(toggleTab->tab), show);
+#else
+        ui->tabWidget->setTabEnabled(ui->tabWidget->indexOf(toggleTab->tab), show);
+#endif
     }
+#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
     connect(m_tabShowHideSignalMapper, &QSignalMapper::mappedString, this, &MainWindow::menuToggleTabVisible);
+#else
+    // Qt 5.14 and older use the overloaded 'mapped' signal
+    connect(m_tabShowHideSignalMapper, QOverload<const QString &>::of(&QSignalMapper::mapped), this, &MainWindow::menuToggleTabVisible);
+#endif
 
     // [Tools]
     connect(ui->actionSignVerify,                  &QAction::triggered, this, &MainWindow::menuSignVerifyClicked);
@@ -709,7 +718,11 @@ void MainWindow::menuToggleTabVisible(const QString &key){
     }
 
     conf()->set(Config::enabledTabs, enabledTabs);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
     ui->tabWidget->setTabVisible(ui->tabWidget->indexOf(toggleTab->tab), show);
+#else
+    ui->tabWidget->setTabEnabled(ui->tabWidget->indexOf(toggleTab->tab), show);
+#endif
     toggleTab->menuAction->setText(toggleTab->name);
 }
 
@@ -989,8 +1002,15 @@ void MainWindow::onWebsocketStatusChanged(bool enabled) {
         }
 
         if (plugin->requiresWebsocket()) {
+            int tabIndex = this->findTab(plugin->displayName());
+            bool shouldShow = enabled && enabledTabs.contains(plugin->displayName());
             // TODO: unload plugins
-            ui->tabWidget->setTabVisible(this->findTab(plugin->displayName()), enabled && enabledTabs.contains(plugin->displayName()));
+            if (tabIndex != -1)
+#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
+                ui->tabWidget->setTabVisible(tabIndex, shouldShow);
+#else
+                ui->tabWidget->setTabEnabled(tabIndex, shouldShow);
+#endif
         }
     }
 

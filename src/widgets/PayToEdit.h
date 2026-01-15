@@ -19,6 +19,7 @@ struct PartialTxOutput {
 };
 
 struct PayToLineError {
+    PayToLineError() = default; // To satisfy Qt 5.12 QVector requirements
     explicit PayToLineError(QString lineContent, QString error, int idx = 0, bool isMultiline = false)
         : lineContent(lineContent), error(error), idx(idx), isMultiline(isMultiline) {}
 
