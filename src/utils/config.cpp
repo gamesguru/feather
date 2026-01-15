@@ -84,6 +84,7 @@ static const QHash<Config::ConfigKey, ConfigDirective> configStrings = {
         {Config::syncInterval, {QS("syncInterval"), 10}},
         {Config::lastKnownNetworkHeight, {QS("lastKnownNetworkHeight"), 0}},
         {Config::lastSyncTimestamp, {QS("lastSyncTimestamp"), 0}},
+        {Config::lastPriceUpdateTimestamp, {QS("lastPriceUpdateTimestamp"), 0}},
 
         // Transactions
         {Config::multiBroadcast, {QS("multiBroadcast"), true}},

@@ -149,6 +149,7 @@ public:
         syncInterval,
         lastKnownNetworkHeight,
         lastSyncTimestamp,
+        lastPriceUpdateTimestamp,
     };
 
     enum PrivacyLevel {
