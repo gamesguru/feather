@@ -506,6 +506,7 @@ void Wallet::startRefreshThread()
                 const auto elapsed = now - last;
                 if (elapsed >= std::chrono::seconds(m_refreshInterval) || m_refreshNow)
                 {
+                    m_refreshNow = false;
                     auto loopStartTime = std::chrono::time_point_cast<std::chrono::microseconds>(std::chrono::steady_clock::now());
                     // get daemonHeight and targetHeight
                     // daemonHeight and targetHeight will be 0 if call to get_info fails
