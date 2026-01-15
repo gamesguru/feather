@@ -208,6 +208,7 @@ private:
     void userActivity();
     void checkUserActivity();
     void updateStatusToolTip();
+    void updateSyncStatusToolTip();
     void lockWallet();
     void unlockWallet(const QString &password);
     void closeQDialogChildren(QObject *object);

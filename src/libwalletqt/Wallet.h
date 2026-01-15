@@ -139,6 +139,7 @@ public:
     bool viewOnly() const;
 
     QDateTime lastSyncTime() const;
+    void setRefreshInterval(int seconds);
 
     //! return true if deterministic keys
     bool isDeterministic() const;
@@ -518,6 +519,8 @@ private:
 
     Coins *m_coins;
     CoinsModel *m_coinsModel;
+
+    int m_refreshInterval = 10;
 
     QMutex m_asyncMutex;
     QString m_daemonUsername;

@@ -186,13 +186,24 @@ void Settings::setupNetworkTab() {
         this->enableWebsocket(checked);
     });
 
-    // Overview
-    ui->checkBox_offlineMode->setChecked(conf()->get(Config::offlineMode).toBool());
-    connect(ui->checkBox_offlineMode, &QCheckBox::toggled, [this](bool checked){
-        conf()->set(Config::offlineMode, checked);
-        emit offlineMode(checked);
-        this->enableWebsocket(!checked);
+    // Sync
+    QSpinBox *sbSyncInterval = new QSpinBox(this);
+    sbSyncInterval->setRange(1, 3600);
+    sbSyncInterval->setSuffix(" seconds");
+    sbSyncInterval->setValue(conf()->get(Config::syncInterval).toInt());
+    connect(sbSyncInterval, QOverload<int>::of(&QSpinBox::valueChanged), [](int value){
+        conf()->set(Config::syncInterval, value);
     });
+
+    QHBoxLayout *hLayoutSync = new QHBoxLayout();
+    hLayoutSync->addWidget(new QLabel("Time between syncs:", this));
+    hLayoutSync->addWidget(sbSyncInterval);
+    hLayoutSync->addStretch();
+
+    // Add to the same layout as offlineMode
+    if (auto *layout = qobject_cast<QVBoxLayout*>(ui->checkBox_offlineMode->parentWidget()->layout())) {
+        layout->addLayout(hLayoutSync);
+    }
 }
 
 void Settings::setupStorageTab() {

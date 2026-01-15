@@ -494,7 +494,6 @@ void Wallet::startRefreshThread()
     const auto future = m_scheduler.run([this] {
         // Beware! This code does not run in the GUI thread.
 
-        constexpr const std::chrono::seconds refreshInterval{10};
         constexpr const std::chrono::milliseconds intervalResolution{100};
 
         auto last = std::chrono::steady_clock::now();
@@ -504,7 +503,7 @@ void Wallet::startRefreshThread()
             {
                 const auto now = std::chrono::steady_clock::now();
                 const auto elapsed = now - last;
-                if (elapsed >= refreshInterval || m_refreshNow)
+                if (elapsed >= std::chrono::seconds(m_refreshInterval) || m_refreshNow)
                 {
                     m_refreshNow = false;
 
@@ -606,6 +605,11 @@ void Wallet::setSyncPaused(bool paused) {
 
 QDateTime Wallet::lastSyncTime() const {
     return m_lastSyncTime;
+}
+
+void Wallet::setRefreshInterval(int seconds) {
+    if (seconds < 1) seconds = 1;
+    m_refreshInterval = seconds;
 }
 
 void Wallet::skipToTip() {

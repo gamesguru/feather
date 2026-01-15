@@ -129,6 +129,12 @@ MainWindow::MainWindow(WindowManager *windowManager, Wallet *wallet, QWidget *pa
 
     conf()->set(Config::firstRun, false);
 
+    connect(conf(), &Config::changed, this, [this](Config::ConfigKey key){
+        if (key == Config::syncInterval && m_wallet) {
+            m_wallet->setRefreshInterval(conf()->get(Config::syncInterval).toInt());
+        }
+    });
+
     this->onWalletOpened();
 
     connect(&appData()->prices, &Prices::fiatPricesUpdated, this, &MainWindow::updateBalance);
@@ -724,6 +730,14 @@ void MainWindow::onWalletOpened() {
 
     m_wallet->setRingDatabase(Utils::ringDatabasePath());
 
+    // Load persisted sync state
+    qint64 lastSync = conf()->get(Config::lastSyncTimestamp).toLongLong();
+    if (lastSync > 0) {
+        m_lastSyncStatusUpdate = QDateTime::fromSecsSinceEpoch(lastSync);
+    }
+
+    m_wallet->setRefreshInterval(conf()->get(Config::syncInterval).toInt());
+
     m_wallet->updateBalance();
     if (m_wallet->isHwBacked()) {
         m_statusBtnHwDevice->show();
@@ -839,13 +853,71 @@ void MainWindow::updateStatusToolTip() {
         toolTip += QString("\nWallet synced: %1").arg(Utils::timeAgo(m_wallet->lastSyncTime()));
     }
     m_statusLabelBalance->setToolTip(toolTip);
+
+    this->updateSyncStatusToolTip();
+}
+
+void MainWindow::updateSyncStatusToolTip() {
+    if (!m_wallet) return;
+
+    quint64 walletHeight = m_wallet->blockChainHeight();
+    quint64 targetHeight = m_wallet->daemonBlockChainTargetHeight();
+
+    // Fall back to persisted network height if current is 0
+    if (targetHeight == 0) {
+        targetHeight = conf()->get(Config::lastKnownNetworkHeight).toULongLong();
+    }
+
+    // Determine blocks behind
+    quint64 blocksBehindActual = Utils::blocksBehind(walletHeight, targetHeight);
+    quint64 blocksBehindEstimated = 0;
+
+    // Use lastSyncTime, then m_lastSyncStatusUpdate, then persisted timestamp
+    QDateTime lastSync = m_wallet->lastSyncTime().isValid()
+        ? m_wallet->lastSyncTime()
+        : m_lastSyncStatusUpdate;
+
+    if (!lastSync.isValid()) {
+        qint64 persistedTimestamp = conf()->get(Config::lastSyncTimestamp).toLongLong();
+        if (persistedTimestamp > 0) {
+            lastSync = QDateTime::fromSecsSinceEpoch(persistedTimestamp);
+        }
+    }
+
+    if (lastSync.isValid()) {
+        qint64 secsSinceSync = lastSync.secsTo(QDateTime::currentDateTime());
+        blocksBehindEstimated = secsSinceSync / 120; // ~2 min per block
+    }
+
+    quint64 blocksBehind = std::max(blocksBehindActual, blocksBehindEstimated);
+
+    // Build Tooltip
+    QString tooltip;
+    if (targetHeight > 0) {
+        tooltip = tr("Wallet Height: %1 | Network Tip: %2")
+            .arg(QLocale().toString(walletHeight))
+            .arg(QLocale().toString(targetHeight));
+    } else {
+        tooltip = tr("Wallet Height: %1").arg(QLocale().toString(walletHeight));
+    }
+
+    if (lastSync.isValid()) {
+        tooltip += tr("\nLast synchronized: %1").arg(Utils::timeAgo(lastSync));
+    }
+
+    if (blocksBehind > 0) {
+        tooltip += tr("\n~%1 blocks behind").arg(QLocale().toString(blocksBehind));
+    }
+
+    // qDebug() << "Setting Status Tooltip:" << tooltip;
+    m_statusLabelStatus->setToolTip(tooltip);
 }
 
 void MainWindow::setStatusText(const QString &text, bool override, int timeout) {
 
     if (override) {
         m_statusOverrideActive = true;
-        qDebug() << "STATUS (override):" << text;
+        // qDebug() << "STATUS (override):" << text;
         m_statusLabelStatus->setText(text);
         QTimer::singleShot(timeout, [this]{
             m_statusOverrideActive = false;
@@ -857,7 +929,7 @@ void MainWindow::setStatusText(const QString &text, bool override, int timeout) 
     m_statusText = text;
 
     if (!m_statusOverrideActive && !m_constructingTransaction) {
-        qDebug() << "STATUS:" << text; // adding this since the label has complex handlers now
+        // qDebug() << "STATUS:" << text;
         m_statusLabelStatus->setText(text);
     }
 }
@@ -957,12 +1029,13 @@ void MainWindow::onMultiBroadcast(const QMap<QString, QString> &txHexMap) {
 }
 
 void MainWindow::onSyncStatus(quint64 height, quint64 target, bool daemonSync) {
-    qDebug() << "onSyncStatus: Height" << height << "Target" << target << "DaemonSync" << daemonSync;
+    // qDebug() << "onSyncStatus: Height" << height << "Target" << target << "DaemonSync" << daemonSync;
 
     quint64 blocksBehind = Utils::blocksBehind(height, target);
-    m_lastSyncStatusUpdate = QDateTime::currentDateTime();
 
     if (height >= (target - 1) && target > 0) {
+        m_lastSyncStatusUpdate = QDateTime::currentDateTime();
+
         this->updateNetStats();
         this->setStatusText(QString("Synchronized (%1)").arg(QLocale().toString(height)));
 
@@ -975,19 +1048,7 @@ void MainWindow::onSyncStatus(quint64 height, quint64 target, bool daemonSync) {
         this->setStatusText(tr("%1 sync: %2 blocks behind").arg(type, blocksStr));
     }
 
-    // Update tooltip with consistent format
-    QString tooltip = tr("Wallet Height: %1 | Network Tip: %2")
-        .arg(QLocale().toString(height))
-        .arg(QLocale().toString(target));
-
-    tooltip += tr("\nLast updated: %1").arg(Utils::timeAgo(m_lastSyncStatusUpdate));
-
-    if (blocksBehind > 0) {
-        tooltip += tr("\n~%1 blocks behind").arg(QLocale().toString(blocksBehind));
-    }
-
-    qDebug() << "Setting Status Tooltip:" << tooltip;
-    m_statusLabelStatus->setToolTip(tooltip);
+    this->updateSyncStatusToolTip();
 }
 
 void MainWindow::onConnectionStatusChanged(int status)
@@ -1050,48 +1111,7 @@ void MainWindow::onConnectionStatusChanged(int status)
 
     this->setStatusText(statusStr);
 
-    // Update tooltip with wallet/network heights and time since last sync
-    if (m_wallet) {
-        quint64 walletHeight = m_wallet->blockChainHeight();
-        quint64 targetHeight = m_wallet->daemonBlockChainTargetHeight();
-
-        // Fall back to persisted network height if current is 0
-        if (targetHeight == 0) {
-            targetHeight = conf()->get(Config::lastKnownNetworkHeight).toULongLong();
-        }
-
-        QString tooltip;
-        if (targetHeight > 0) {
-            tooltip = tr("Wallet Height: %1 | Network Tip: %2")
-                .arg(QLocale().toString(walletHeight))
-                .arg(QLocale().toString(targetHeight));
-        } else {
-            tooltip = tr("Wallet Height: %1").arg(QLocale().toString(walletHeight));
-        }
-
-        // Use lastSyncTime, then m_lastSyncStatusUpdate, then persisted timestamp
-        QDateTime lastSync = m_wallet->lastSyncTime().isValid()
-            ? m_wallet->lastSyncTime()
-            : m_lastSyncStatusUpdate;
-
-        // Fall back to persisted timestamp if still invalid
-        if (!lastSync.isValid()) {
-            qint64 persistedTimestamp = conf()->get(Config::lastSyncTimestamp).toLongLong();
-            if (persistedTimestamp > 0) {
-                lastSync = QDateTime::fromSecsSinceEpoch(persistedTimestamp);
-            }
-        }
-
-        if (lastSync.isValid()) {
-            qint64 secsSinceSync = lastSync.secsTo(QDateTime::currentDateTime());
-            quint64 blocksBehind = secsSinceSync / 120; // ~2 min per block
-            tooltip += tr("\nLast updated: %1").arg(Utils::timeAgo(lastSync));
-            if (blocksBehind > 0) {
-                tooltip += tr("\n~%1 blocks behind").arg(QLocale().toString(blocksBehind));
-            }
-        }
-        m_statusLabelStatus->setToolTip(tooltip);
-    }
+    this->updateSyncStatusToolTip();
 
     if (m_wallet) {
         quint64 walletHeight = m_wallet->blockChainHeight();
@@ -1105,9 +1125,7 @@ void MainWindow::onConnectionStatusChanged(int status)
                     .arg(QLocale::system().toString(targetHeight));
         }
     }
-
     m_statusBtnConnectionStatusIndicator->setToolTip(statusStr);
-
     m_statusBtnConnectionStatusIndicator->setIcon(icon);
 }
 

@@ -146,6 +146,7 @@ public:
         // Sync & data saver
         syncPaused,
         syncPausedAlsoDisconnectWebSocket,
+        syncInterval,
         lastKnownNetworkHeight,
         lastSyncTimestamp,
     };
