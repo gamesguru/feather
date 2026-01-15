@@ -74,7 +74,7 @@ jobs:
           EOF
           sudo /etc/init.d/apparmor reload
           sudo aa-enforce guix || true
-          sudo apt purge apparmor
+          sudo apt -y purge apparmor
       - name: build
         run: ADDITIONAL_GUIX_TIMEMACHINE_FLAGS="--disable-authentication" SUBSTITUTE_URLS='http://bordeaux.guix.gnu.org' HOSTS="${{ matrix.toolchain.target }}" ./contrib/guix/guix-build
       - name: virustotal scan
