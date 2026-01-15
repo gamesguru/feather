@@ -242,9 +242,10 @@ void Settings::setupNetworkTab() {
             seconds = text.split(" ").first().toInt(&ok);
             if (!ok) return;
         }
-        if (seconds > 0) {
-            conf()->set(Config::syncInterval, seconds);
+        if (seconds < 30) {
+            seconds = 30;
         }
+        conf()->set(Config::syncInterval, seconds);
     };
 
     connect(comboSyncInterval, &QComboBox::currentTextChanged, updateConfig);

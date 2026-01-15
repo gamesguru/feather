@@ -820,12 +820,16 @@ void MainWindow::onBalanceUpdated(quint64 balance, quint64 spendable) {
         QString fiatCurrency = conf()->get(Config::preferredFiatCurrency).toString();
         double balanceFiatAmount = appData()->prices.convert("XMR", fiatCurrency, balance / constants::cdiv);
         bool isCacheValid = appData()->prices.lastUpdateTime.isValid();
+        bool hasXmrPrice = appData()->prices.markets.contains("XMR");
+        bool hasFiatRate = fiatCurrency == "USD" || appData()->prices.rates.contains(fiatCurrency);
 
         if (balance > 0 && (balanceFiatAmount == 0.0 || !isCacheValid)) {
             if (conf()->get(Config::offlineMode).toBool() || conf()->get(Config::disableWebsocket).toBool() || m_wallet->connectionStatus() == Wallet::ConnectionStatus_Disconnected) {
                 suffixStr += " (offline)";
-            } else {
+            } else if (!hasXmrPrice || !hasFiatRate) {
                 suffixStr += " (connecting)";
+            } else {
+                suffixStr += " (unknown)";
             }
         } else {
             QString approx = !conf()->get(Config::disableWebsocket).toBool() ? "" : "~ ";
