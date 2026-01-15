@@ -38,7 +38,7 @@ void Prices::cryptoPricesReceived(const QJsonArray &data) {
 void Prices::fiatPricesReceived(const QJsonObject &data) {
     QJsonObject ratesData = data.value("rates").toObject();
     for (const auto &currency : ratesData.keys()) {
-        this->rates.insert(currency, ratesData.value(currency).toDouble());
+        this->rates.insert(currency.toUpper(), ratesData.value(currency).toDouble());
     }
     emit fiatPricesUpdated();
 }

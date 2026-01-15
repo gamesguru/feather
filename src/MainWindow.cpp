@@ -824,10 +824,8 @@ void MainWindow::onBalanceUpdated(quint64 balance, quint64 spendable) {
         if (balance > 0 && (balanceFiatAmount == 0.0 || !isCacheValid)) {
             if (conf()->get(Config::offlineMode).toBool() || conf()->get(Config::disableWebsocket).toBool() || m_wallet->connectionStatus() == Wallet::ConnectionStatus_Disconnected) {
                 suffixStr += " (offline)";
-            } else if (!appData()->prices.markets.contains("XMR")) {
-                suffixStr += " (connecting)";
             } else {
-                suffixStr += " (unknown)";
+                suffixStr += " (connecting)";
             }
         } else {
             QString approx = !conf()->get(Config::disableWebsocket).toBool() ? "" : "~ ";
@@ -1125,8 +1123,9 @@ void MainWindow::onConnectionStatusChanged(int status)
                     .arg(QLocale::system().toString(targetHeight));
         }
     }
-    m_statusBtnConnectionStatusIndicator->setToolTip(statusStr);
+    // m_statusBtnConnectionStatusIndicator->setToolTip(statusStr);
     m_statusBtnConnectionStatusIndicator->setIcon(icon);
+    this->updateBalance();
 }
 
 void MainWindow::onTransactionCreated(PendingTransaction *tx, const QVector<QString> &address) {
