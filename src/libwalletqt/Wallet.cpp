@@ -506,6 +506,11 @@ void Wallet::startRefreshThread()
                 const auto elapsed = now - last;
                 if (elapsed >= std::chrono::seconds(m_refreshInterval) || m_refreshNow)
                 {
+                    m_lastRefreshTime = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+                    last = std::chrono::steady_clock::now();
+
+                    qDebug() << "Refresher: Interval met. Elapsed:" << std::chrono::duration_cast<std::chrono::seconds>(elapsed).count()
+                             << "Interval:" << m_refreshInterval << "RefreshNow:" << m_refreshNow;
                     m_refreshNow = false;
 
                     // get daemonHeight and targetHeight
@@ -525,10 +530,8 @@ void Wallet::startRefreshThread()
                     // We do this to prevent to UI from getting confused about the amount of blocks that are still remaining
                     if (haveHeights) {
                         // Prevent background network usage when sync is paused
-                        if (m_syncPaused) {
-                           last = std::chrono::steady_clock::now();
-                           continue;
-                        }
+                        if (m_syncPaused)
+                            continue;
 
                         QMutexLocker locker(&m_asyncMutex);
 
@@ -542,8 +545,6 @@ void Wallet::startRefreshThread()
                         qInfo() << "Calling m_walletImpl->refresh(). Wallet height:" << walletHeight << "Daemon height:" << daemonHeight << "Target:" << targetHeight;
                         m_walletImpl->refresh();
                     }
-                    m_lastRefreshTime = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-                    last = std::chrono::steady_clock::now();
                 }
             }
 
