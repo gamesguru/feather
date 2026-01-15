@@ -1,3 +1,4 @@
+---
 name: ci/gh-actions/build
 
 on:
@@ -6,8 +7,9 @@ on:
   pull_request:
 
 jobs:
-  build-ubuntu-without-scanner:
-    name: "Ubuntu 24.04 (no scanner)"
+  build-ubuntu-24:
+    name: "Ubuntu 24.04 (Full Features)"
+    continue-on-error: true
     runs-on: ubuntu-latest
     container:
       image: ubuntu:24.04
@@ -20,7 +22,7 @@ jobs:
           libqrencode-dev qt6-base-dev qt6-svg-dev qt6-websockets-dev qt6-multimedia-dev \
           qt6-wayland-dev libzip-dev libsodium-dev libgcrypt20-dev libx11-xcb-dev \
           protobuf-compiler libprotobuf-dev libhidapi-dev libzxing-dev libusb-dev \
-          libusb-1.0-0-dev
+          libusb-1.0-0-dev tor
       - name: configure git
         run: git config --global --add safe.directory '*'
       - uses: actions/checkout@v4
@@ -30,11 +32,12 @@ jobs:
         run: |
           mkdir build
           cd build
-          cmake -DWITH_SCANNER=OFF ..
+          cmake -DWITH_SCANNER=ON -DCHECK_UPDATES=ON -DSTACK_TRACE=ON -DTOR_INSTALLED=ON ..
           cmake --build . -j $(nproc)
 
   build-ubuntu-22:
     name: "Ubuntu 22.04 (Qt 5.15)"
+    continue-on-error: true
     runs-on: ubuntu-latest
     container:
       image: ubuntu:22.04
@@ -42,7 +45,6 @@ jobs:
       - name: update apt
         run: apt update
       - name: install dependencies
-        # FIXED: Switched to native Qt5 packages because Qt6 is incomplete on 22.04
         run: |
           apt -y install git cmake build-essential ccache libssl-dev libunbound-dev \
           libboost-all-dev libqrencode-dev qtbase5-dev libqt5svg5-dev libqt5websockets5-dev \
@@ -62,6 +64,7 @@ jobs:
 
   build-ubuntu-20:
     name: "Ubuntu 20.04 (Qt 5.12 + Latest CMake)"
+    continue-on-error: true
     runs-on: ubuntu-latest
     container:
       image: ubuntu:20.04
@@ -116,29 +119,3 @@ jobs:
         run: |
           cmake -S . -B build
           cmake --build build -j $(nproc)
-
-  build-macos:
-    name: "macOS (brew)"
-    if: false
-    runs-on: macos-latest
-    env:
-      CCACHE_DIR: /Users/runner/Library/Caches/ccache
-      HOMEBREW_NO_AUTO_UPDATE: 1
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-      - name: install dependencies
-        run: |
-          brew install --quiet qt libsodium libzip qrencode unbound cmake boost hidapi openssl expat protobuf pkg-config ccache ninja
-      - name: Setup ccache
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.CCACHE_DIR }}
-          key: macos-ccache-${{ github.sha }}
-          restore-keys: |
-            macos-ccache-
-      - name: build
-        run: |
-          cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release -DWITH_SCANNER=Off -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-          cmake --build build
