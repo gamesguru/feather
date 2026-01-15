@@ -66,14 +66,16 @@ BalanceTickerWidget::BalanceTickerWidget(QWidget *parent, Wallet *wallet, bool t
     this->setPercentageVisible(false);
 
     connect(m_wallet, &Wallet::balanceUpdated, this, &BalanceTickerWidget::updateDisplay);
+    connect(m_wallet, &Wallet::connectionStatusChanged, this, &BalanceTickerWidget::updateDisplay);
     connect(&appData()->prices, &Prices::fiatPricesUpdated, this, &BalanceTickerWidget::updateDisplay);
     connect(&appData()->prices, &Prices::cryptoPricesUpdated, this, &BalanceTickerWidget::updateDisplay);
 }
 
 void BalanceTickerWidget::updateDisplay() {
-    double balance = (m_totalBalance ? m_wallet->balanceAll() : m_wallet->balance()) / constants::cdiv;
+    double balance = (m_totalBalance ? m_wallet->balanceAll() : m_wallet->balance());
+    double balanceAmount = balance / constants::cdiv;
     QString fiatCurrency = conf()->get(Config::preferredFiatCurrency).toString();
-    double balanceFiatAmount = appData()->prices.convert("XMR", fiatCurrency, balance);
+    double balanceFiatAmount = appData()->prices.convert("XMR", fiatCurrency, balanceAmount);
 
     bool isCacheValid = appData()->prices.lastUpdateTime.isValid();
     bool isCacheFresh = isCacheValid && appData()->prices.lastUpdateTime.secsTo(QDateTime::currentDateTime()) < 3600;
@@ -81,7 +83,7 @@ void BalanceTickerWidget::updateDisplay() {
     bool hasXmrPrice = appData()->prices.markets.contains("XMR");
     bool hasFiatRate = fiatCurrency == "USD" || appData()->prices.rates.contains(fiatCurrency);
 
-    if (balanceFiatAmount == 0.0 || !isCacheValid) {
+    if (balance > 0 && (balanceFiatAmount == 0.0 || !isCacheValid)) {
         if (conf()->get(Config::offlineMode).toBool() || conf()->get(Config::disableWebsocket).toBool() || m_wallet->connectionStatus() == Wallet::ConnectionStatus_Disconnected) {
             this->setDisplayText("offline");
         } else if (!hasXmrPrice || !hasFiatRate) {

@@ -15,6 +15,7 @@
 #include "rows/TxBacklogEntry.h"
 
 #include <set>
+#include <atomic>
 
 class WalletListenerImpl;
 
@@ -140,6 +141,7 @@ public:
 
     QDateTime lastSyncTime() const;
     void setRefreshInterval(int seconds);
+    qint64 secondsUntilNextRefresh() const;
 
     //! return true if deterministic keys
     bool isDeterministic() const;
@@ -520,7 +522,7 @@ private:
     Coins *m_coins;
     CoinsModel *m_coinsModel;
 
-    int m_refreshInterval = 10;
+    std::atomic<int> m_refreshInterval{10};
 
     QMutex m_asyncMutex;
     QString m_daemonUsername;
@@ -542,6 +544,7 @@ private:
     std::atomic<quint64> m_stopHeight{0};
     std::atomic<bool> m_rangeSyncActive{false};
     std::atomic<bool> m_syncPaused{false};
+    std::atomic<int64_t> m_lastRefreshTime{0};
 };
 
 #endif // FEATHER_WALLET_H

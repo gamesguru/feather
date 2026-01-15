@@ -55,6 +55,7 @@ Wallet::Wallet(Monero::Wallet *wallet, QObject *parent)
         , m_useSSL(true)
         , m_coins(new Coins(this, wallet->getWallet(), this))
         , m_storeTimer(new QTimer(this))
+        , m_lastRefreshTime(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count())
 {
     m_walletListener = new WalletListenerImpl(this);
     m_walletImpl->setListener(m_walletListener);
@@ -541,6 +542,7 @@ void Wallet::startRefreshThread()
                         qInfo() << "Calling m_walletImpl->refresh(). Wallet height:" << walletHeight << "Daemon height:" << daemonHeight << "Target:" << targetHeight;
                         m_walletImpl->refresh();
                     }
+                    m_lastRefreshTime = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
                     last = std::chrono::steady_clock::now();
                 }
             }
@@ -584,6 +586,26 @@ void Wallet::onHeightsRefreshed(bool success, quint64 daemonHeight, quint64 targ
 quint64 Wallet::blockChainHeight() const {
     // Can not block UI
     return m_wallet2->get_blockchain_current_height();
+}
+
+qint64 Wallet::secondsUntilNextRefresh() const {
+    if (m_syncPaused || !m_refreshEnabled) {
+        return -1;
+    }
+
+    if (this->isHwBacked() && !this->isDeviceConnected()) {
+        return -2;
+    }
+
+    auto now = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    auto elapsed = std::chrono::microseconds(now - m_lastRefreshTime.load());
+    auto interval = std::chrono::seconds(m_refreshInterval);
+
+    if (elapsed >= interval) {
+        return 0;
+    }
+
+    return std::chrono::duration_cast<std::chrono::seconds>(interval - elapsed).count();
 }
 
 quint64 Wallet::daemonBlockChainHeight() const {

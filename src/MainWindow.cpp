@@ -766,6 +766,16 @@ void MainWindow::onWalletOpened() {
     connect(m_wallet->coins(), &Coins::descriptionChanged, [this] {
         m_wallet->history()->refresh();
     });
+
+    connect(m_wallet->coins(), &Coins::refreshStarted, [this]{
+        m_coinsRefreshing = true;
+        this->updateNetStats();
+    });
+
+    connect(m_wallet->coins(), &Coins::refreshFinished, [this]{
+        m_coinsRefreshing = false;
+        this->updateNetStats();
+    });
     // Vice versa
     connect(m_wallet->transactionHistoryModel(), &TransactionHistoryModel::transactionDescriptionChanged, [this] {
         m_wallet->coins()->refresh();
@@ -854,6 +864,18 @@ void MainWindow::updateStatusToolTip() {
     if (m_wallet && m_wallet->lastSyncTime().isValid()) {
         toolTip += QString("\nWallet synced: %1").arg(Utils::timeAgo(m_wallet->lastSyncTime()));
     }
+
+    if (m_wallet) {
+        qint64 nextRefresh = m_wallet->secondsUntilNextRefresh();
+        if (nextRefresh > 0) {
+            toolTip += QString("\nNext sync attempt in: %1s").arg(nextRefresh);
+        } else if (nextRefresh == 0) {
+            toolTip += "\nSync attempt in progress...";
+        } else if (nextRefresh == -2) {
+            toolTip += "\nHardware wallet disconnected";
+        }
+    }
+
     m_statusLabelBalance->setToolTip(toolTip);
 
     this->updateSyncStatusToolTip();
@@ -888,7 +910,9 @@ void MainWindow::updateSyncStatusToolTip() {
 
     if (lastSync.isValid()) {
         qint64 secsSinceSync = lastSync.secsTo(QDateTime::currentDateTime());
-        blocksBehindEstimated = secsSinceSync / 120; // ~2 min per block
+        if (secsSinceSync > 0) {
+            blocksBehindEstimated = secsSinceSync / 120; // ~2 min per block
+        }
     }
 
     quint64 blocksBehind = std::max(blocksBehindActual, blocksBehindEstimated);
@@ -1079,10 +1103,12 @@ void MainWindow::onConnectionStatusChanged(int status)
                 // Estimate blocks behind based on time since last sync
                 if (m_wallet && m_wallet->lastSyncTime().isValid()) {
                     qint64 secsSinceLastSync = m_wallet->lastSyncTime().secsTo(QDateTime::currentDateTime());
-                    quint64 estimatedBlocksBehind = secsSinceLastSync / 120; // ~2 min per block
-                    if (estimatedBlocksBehind > 0) {
-                        statusStr = tr("~%1 blocks behind").arg(QLocale().toString(estimatedBlocksBehind));
-                        break;
+                    if (secsSinceLastSync > 0) {
+                        quint64 estimatedBlocksBehind = secsSinceLastSync / 120; // ~2 min per block
+                        if (estimatedBlocksBehind > 0) {
+                            statusStr = tr("~%1 blocks behind").arg(QLocale().toString(estimatedBlocksBehind));
+                            break;
+                        }
                     }
                 }
                 statusStr = "Disconnected";
@@ -1897,7 +1923,7 @@ void MainWindow::onWalletPassphraseNeeded(bool on_device) {
 
 void MainWindow::updateNetStats() {
     if (!m_wallet || m_wallet->connectionStatus() == Wallet::ConnectionStatus_Disconnected
-                       || m_wallet->connectionStatus() == Wallet::ConnectionStatus_Synchronized)
+                       || (m_wallet->connectionStatus() == Wallet::ConnectionStatus_Synchronized && !m_coinsRefreshing))
     {
         m_statusLabelNetStats->hide();
         return;

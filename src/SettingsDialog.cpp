@@ -178,6 +178,14 @@ void Settings::setupNetworkTab() {
     // Proxy
     connect(ui->proxyWidget, &NetworkProxyWidget::proxySettingsChanged, this, &Settings::onProxySettingsChanged);
 
+    // Offline mode
+    ui->checkBox_offlineMode->setChecked(conf()->get(Config::offlineMode).toBool());
+    connect(ui->checkBox_offlineMode, &QCheckBox::toggled, [this](bool checked){
+        conf()->set(Config::offlineMode, checked);
+        this->enableWebsocket(!checked && !conf()->get(Config::disableWebsocket).toBool());
+        emit offlineMode(checked);
+    });
+
     // Websocket
     // [Obtain third-party data]
     ui->checkBox_enableWebsocket->setChecked(!conf()->get(Config::disableWebsocket).toBool());

@@ -263,6 +263,7 @@ private:
 
     QString m_statusText;
     int m_statusDots;
+    bool m_coinsRefreshing = false;
     bool m_constructingTransaction = false;
     bool m_statusOverrideActive = false;
     bool m_showDeviceError = false;
