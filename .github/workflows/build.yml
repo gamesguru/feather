@@ -9,7 +9,6 @@ on:
 jobs:
   build-ubuntu-24:
     name: "Ubuntu 24.04 (Full Features)"
-    continue-on-error: true
     runs-on: ubuntu-latest
     container:
       image: ubuntu:24.04
@@ -37,7 +36,6 @@ jobs:
 
   build-ubuntu-22:
     name: "Ubuntu 22.04 (Qt 5.15)"
-    continue-on-error: true
     runs-on: ubuntu-latest
     container:
       image: ubuntu:22.04
