@@ -8,28 +8,55 @@ on:
 
 jobs:
   build-macos:
-    name: "macOS (brew)"
-    # Disabled due to 6 hour timeout. Need to find a way to speed it up.
-    if: false
-    runs-on: macos-latest
+    name: "macOS (Apple Silicon)"
+    # Enable the job
+    if: true
+    # UTTERLY CRITICAL: Use M1/M2 runners (macos-14).
+    # This reduces compile time from >6h to ~1.5h.
+    runs-on: macos-14
+
     env:
       CCACHE_DIR: /Users/runner/Library/Caches/ccache
+      CCACHE_COMPILERCHECK: content
+      CCACHE_MAXSIZE: 1G
       HOMEBREW_NO_AUTO_UPDATE: 1
+
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-      - name: install dependencies
+
+      - name: Install dependencies
         run: |
           brew install --quiet qt libsodium libzip qrencode unbound cmake boost hidapi openssl expat protobuf pkg-config ccache ninja
+
       - name: Setup ccache
         uses: actions/cache@v4
         with:
           path: ${{ env.CCACHE_DIR }}
-          key: macos-ccache-${{ github.sha }}
+          # Use a simpler key so it matches easily.
+          # We rely on ccache's internal hashing, not the git SHA.
+          key: macos-ccache-v1-${{ github.ref_name }}
           restore-keys: |
-            macos-ccache-
-      - name: build
+            macos-ccache-v1-
+
+      - name: Configure
         run: |
-          cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release -DWITH_SCANNER=Off -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-          cmake --build build
+          # Configure for Release.
+          # Note: This produces an arm64 binary.
+          cmake -G Ninja -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DWITH_SCANNER=Off \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build Monero Libs (Cache Primer)
+        # We build the heavy libs first. If this passes but the next step fails/times out,
+        # ccache will still have these objects for the next run.
+        run: cmake --build build --target wallet_api
+
+      - name: Build Feather
+        run: cmake --build build
+
+      - name: Show ccache stats
+        # Useful to verify you are actually getting hits
+        run: ccache -s
