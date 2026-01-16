@@ -153,19 +153,19 @@ void HistoryExportDialog::exportHistory()
         QString fiatAmount = (usd_price > 0) ? QString::number(fiat_price, 'f', 2) : "?";
 
         QString line = QString(R"(%1,%2,"%3",%4,"%5",%6,%7,%8,"%9","%10","%11","%12","%13")")
-        .arg(QString::number(tx.blockHeight),
-             QString::number(tx.timestamp.toSecsSinceEpoch()),
-             date,
-             QString::number(tx.subaddrAccount),
-             direction,
-             balanceDelta,
-             tx.displayAmount(),
-             tx.displayFee(),
-             tx.hash,
-             tx.description,
-             paymentId,
-             fiatAmount,
-             "USD");
+            .arg(QString::number(tx.blockHeight))   // %1
+            .arg(QString::number(tx.timestamp.toSecsSinceEpoch()))
+            .arg(date)
+            .arg(QString::number(tx.subaddrAccount))
+            .arg(direction)                           // %5
+            .arg(balanceDelta)
+            .arg(tx.displayAmount())
+            .arg(tx.displayFee())
+            .arg(tx.hash)
+            .arg(tx.description)                     // %10
+            .arg(paymentId)
+            .arg(fiatAmount)
+            .arg("USD");
         csvData.append({tx.blockHeight, line});
     }
 

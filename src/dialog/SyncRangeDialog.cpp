@@ -130,8 +130,16 @@ void SyncRangeDialog::updateInfo() {
     QDate start = m_fromDateEdit->date();
     QDate end = m_toDateEdit->date();
 
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+    // Modern Qt (Ubuntu 22.04+)
     uint64_t startHeight = lookup->dateToHeight(start.startOfDay().toSecsSinceEpoch());
     uint64_t endHeight = lookup->dateToHeight(end.endOfDay().toSecsSinceEpoch());
+#else
+    // Legacy Qt 5.12 (Ubuntu 20.04)
+    // Manually construct the DateTime for 00:00:00 and 23:59:59
+    uint64_t startHeight = lookup->dateToHeight(QDateTime(start, QTime(0, 0, 0)).toSecsSinceEpoch());
+    uint64_t endHeight = lookup->dateToHeight(QDateTime(end, QTime(23, 59, 59)).toSecsSinceEpoch());
+#endif
 
     if (endHeight < startHeight) endHeight = startHeight;
     m_estimatedBlocks = endHeight - startHeight;

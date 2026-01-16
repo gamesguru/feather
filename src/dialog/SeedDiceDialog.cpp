@@ -11,7 +11,15 @@
 #include <sodium/randombytes.h>
 #include "polyseed/polyseed.h"
 
+#include <QtGlobal>
+
+// Use QPasswordDigestor only on newer Qt versions (5.15+)
+// Fallback to OpenSSL for Ubuntu 20.04 (Qt 5.12)
+#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
 #include <QPasswordDigestor>
+#else
+#include <openssl/evp.h> // TODO: add tests for this block
+#endif
 
 #include "utils/Seed.h"
 
@@ -103,8 +111,20 @@ SeedDiceDialog::SeedDiceDialog(QWidget *parent)
         int sides = ui->radio_coinflip->isChecked() ? 2 : ui->spin_sides->value();
         QByteArray salt = "POLYSEED-" + QString::number(sides).toUtf8(); // domain separate by number of sides
 
+#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
+        // Modern Qt (Ubuntu 22.04+)
         // Polyseed requests 19 bytes of random data and discards two bits (for a total of 150 bits)
         m_key = QPasswordDigestor::deriveKeyPbkdf2(QCryptographicHash::Sha256, data, salt, 2048, 19);
+#else
+        // Legacy Qt 5.12 (Ubuntu 20.04) - Fallback to OpenSSL
+        m_key.resize(19);
+        PKCS5_PBKDF2_HMAC(data.data(), data.length(),
+                          reinterpret_cast<const unsigned char*>(salt.data()), salt.length(),
+                          2048,           // Iterations
+                          EVP_sha256(),   // Match QCryptographicHash::Sha256
+                          19,             // Output Key Size
+                          reinterpret_cast<unsigned char*>(m_key.data()));
+#endif
 
         sodium_memzero(data.data(), data.size());
         sodium_memzero(&random, POLYSEED_RANDBYTES);
