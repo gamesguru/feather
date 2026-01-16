@@ -72,7 +72,12 @@ QString loadQrc(const QString &qrc) {
 bool fileWrite(const QString &path, const QString &data) {
     QFile file(path);
     if (file.open(QIODevice::WriteOnly)) {
-        QTextStream out(&file); out << data << Qt::endl;
+        QTextStream out(&file);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+        out << data << Qt::endl;
+#else
+        out << data << endl; // Legacy Qt 5.12 uses the global/stream 'endl'
+#endif
         file.close();
         return true;
     }

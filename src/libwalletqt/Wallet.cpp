@@ -364,7 +364,12 @@ QString Wallet::getSeed(const QString &seedOffset) const {
 }
 
 qsizetype Wallet::seedLength() const {
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
     auto seedLength = this->getCacheAttribute("feather.seed").split(" ", Qt::SkipEmptyParts).length();
+#else
+    auto seedLength = this->getCacheAttribute("feather.seed").split(" ", QString::SkipEmptyParts).length();
+#endif
+
     return seedLength ? seedLength : 25;
 }
 
@@ -670,8 +675,14 @@ void Wallet::syncDateRange(const QDate &start, const QDate &end) {
     QString filename = Utils::getRestoreHeightFilename(static_cast<NetworkType::Type>(nettype));
 
     std::unique_ptr<RestoreHeightLookup> lookup(RestoreHeightLookup::fromFile(filename, static_cast<NetworkType::Type>(nettype)));
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
     uint64_t startHeight = lookup->dateToHeight(start.startOfDay().toSecsSinceEpoch());
     uint64_t endHeight = lookup->dateToHeight(end.startOfDay().toSecsSinceEpoch());
+#else
+    // Legacy Qt 5.12
+    uint64_t startHeight = lookup->dateToHeight(QDateTime(start, QTime(0, 0, 0)).toSecsSinceEpoch());
+    uint64_t endHeight = lookup->dateToHeight(QDateTime(end, QTime(0, 0, 0)).toSecsSinceEpoch());
+#endif
 
     if (startHeight >= endHeight)
         return;
