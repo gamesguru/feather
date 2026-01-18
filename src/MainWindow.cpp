@@ -334,12 +334,7 @@ void MainWindow::initStatusBar() {
         }
     });
 
-    connect(scanTxAction, &QAction::triggered, this, [this](){
-        if (m_wallet) {
-            TxImportDialog dialog(this, m_wallet, m_nodes);
-            dialog.exec();
-        }
-    });
+    connect(scanTxAction, &QAction::triggered, this, &MainWindow::importTransaction);
 }
 
 void MainWindow::initPlugins() {
@@ -862,10 +857,7 @@ void MainWindow::onBalanceUpdated(quint64 balance, quint64 spendable) {
 void MainWindow::updateStatusToolTip() {
     QString toolTip = "Right-click for details";
     if (appData()->prices.lastUpdateTime.isValid()) {
-        toolTip += QString("\nPrice updated: %1").arg(Utils::timeAgo(appData()->prices.lastUpdateTime));
-    }
-    if (m_wallet && m_wallet->lastSyncTime().isValid()) {
-        toolTip += QString("\nWallet synced: %1").arg(Utils::timeAgo(m_wallet->lastSyncTime()));
+        toolTip += QString("\nFiat updated: %1").arg(Utils::timeAgo(appData()->prices.lastUpdateTime));
     }
 
     m_statusLabelBalance->setToolTip(toolTip);
@@ -1040,6 +1032,8 @@ void MainWindow::onMultiBroadcast(const QMap<QString, QString> &txHexMap) {
 }
 
 void MainWindow::onSyncStatus(quint64 height, quint64 target, bool daemonSync) {
+    m_lastNetInfoUpdate = QDateTime::currentDateTime();
+
     // qDebug() << "onSyncStatus: Height" << height << "Target" << target << "DaemonSync" << daemonSync;
 
     quint64 blocksBehind = Utils::blocksBehind(height, target);
@@ -1068,7 +1062,7 @@ void MainWindow::onSyncStatus(quint64 height, quint64 target, bool daemonSync) {
 
         QString blocksStr = QLocale().toString(blocksBehind);
         if (conf()->get(Config::syncPaused).toBool()) {
-             this->setStatusText(tr("[SYNC PAUSED] %1 blocks behind").arg(blocksStr));
+             this->setStatusText(this->getPausedStatusText());
         } else {
              QString type = daemonSync ? tr("Blockchain") : tr("Wallet");
              this->setStatusText(tr("%1 sync: %2 blocks behind").arg(type, blocksStr));
@@ -1086,6 +1080,7 @@ void MainWindow::onConnectionStatusChanged(int status)
         QString statusStr = this->getPausedStatusText();
 
         m_statusBtnConnectionStatusIndicator->setIcon(icon);
+        m_statusBtnConnectionStatusIndicator->setToolTip(tr("Sync Paused"));
         this->setStatusText(statusStr);
 
         // Hide the "Net Stats" (D: 0.0 B) label since we aren't downloading
@@ -1955,18 +1950,7 @@ void MainWindow::onWalletPassphraseNeeded(bool on_device) {
 }
 
 QString MainWindow::getPausedStatusText() {
-    if (!m_wallet) return tr("Sync Paused");
-
-    quint64 walletHeight = m_wallet->blockChainHeight();
-    quint64 targetHeight = m_wallet->daemonBlockChainTargetHeight();
-
-    if (walletHeight > 0 && targetHeight > 0) {
-        quint64 blocksBehind = Utils::blocksBehind(walletHeight, targetHeight);
-        if (blocksBehind > 0) {
-            return tr("[SYNC PAUSED] %1 blocks behind").arg(QLocale().toString(blocksBehind));
-        }
-    }
-    return tr("Sync Paused");
+    return tr("[SYNC PAUSED]");
 }
 
 void MainWindow::updateNetStats() {
@@ -1982,6 +1966,14 @@ void MainWindow::updateNetStats() {
     prevBytes = currBytes;
 
     bool showTraffic = trafficCooldown > 0;
+
+    // Update tooltip
+    QString tooltip = "";
+    if (m_lastNetInfoUpdate.isValid()) {
+        qint64 secs = m_lastNetInfoUpdate.secsTo(QDateTime::currentDateTime());
+        tooltip = tr("Last updated net info: %1 seconds ago").arg(secs);
+    }
+    m_statusLabelStatus->setToolTip(tooltip);
 
     if (!m_wallet || m_wallet->connectionStatus() == Wallet::ConnectionStatus_Disconnected
                        || (m_wallet->connectionStatus() == Wallet::ConnectionStatus_Synchronized && !m_coinsRefreshing && !showTraffic))

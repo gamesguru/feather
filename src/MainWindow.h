@@ -242,6 +242,7 @@ private:
     QPointer<QAction> m_actionPauseSync;
 
     QDateTime m_lastSyncStatusUpdate;
+    QDateTime m_lastNetInfoUpdate;
 
     // lower status bar
     QPushButton *m_statusUpdateAvailable;
