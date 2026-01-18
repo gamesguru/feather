@@ -868,17 +868,6 @@ void MainWindow::updateStatusToolTip() {
         toolTip += QString("\nWallet synced: %1").arg(Utils::timeAgo(m_wallet->lastSyncTime()));
     }
 
-    if (m_wallet) {
-        qint64 nextRefresh = m_wallet->secondsUntilNextRefresh();
-        if (nextRefresh > 0) {
-            toolTip += QString("\nNext sync attempt in: %1s").arg(nextRefresh);
-        } else if (nextRefresh == 0) {
-            toolTip += "\nSync attempt in progress...";
-        } else if (nextRefresh == -2) {
-            toolTip += "\nHardware wallet disconnected";
-        }
-    }
-
     m_statusLabelBalance->setToolTip(toolTip);
 
     this->updateSyncStatusToolTip();
@@ -1113,8 +1102,8 @@ void MainWindow::onConnectionStatusChanged(int status)
 
     qDebug() << "Wallet connection status changed " << Utils::QtEnumToString(static_cast<Wallet::ConnectionStatus>(status));
 
-    if (m_updateNetworkInfoAction) {  // Maybe not initialized on first function call
-        m_updateNetworkInfoAction->setEnabled(status != Wallet::ConnectionStatus_Disconnected && !conf()->get(Config::syncPaused).toBool());
+    if (m_updateNetworkInfoAction) {  // Maybe not initialized first call
+        m_updateNetworkInfoAction->setEnabled(true);
     }
 
     // Update connection info in status bar.
