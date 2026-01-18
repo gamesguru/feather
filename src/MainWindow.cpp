@@ -235,6 +235,15 @@ void MainWindow::initStatusBar() {
     m_actionPauseSync->setChecked(conf()->get(Config::syncPaused).toBool());
     m_statusLabelStatus->addAction(m_actionPauseSync);
 
+    m_actionScanMempoolWhenPaused = new QAction(tr("Scan mempool when paused"), this);
+    m_actionScanMempoolWhenPaused->setCheckable(true);
+    m_actionScanMempoolWhenPaused->setChecked(conf()->get(Config::scanMempoolWhenPaused).toBool());
+    m_statusLabelStatus->addAction(m_actionScanMempoolWhenPaused);
+
+    connect(m_actionScanMempoolWhenPaused, &QAction::toggled, this, [](bool checked) {
+        conf()->set(Config::scanMempoolWhenPaused, checked);
+    });
+
     m_actionEnableWebsocket = new QAction(tr("Enable Websocket"), this);
     m_actionEnableWebsocket->setCheckable(true);
     m_actionEnableWebsocket->setChecked(!conf()->get(Config::disableWebsocket).toBool());

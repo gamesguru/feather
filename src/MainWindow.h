@@ -240,6 +240,7 @@ private:
     QPointer<QAction> m_updateNetworkInfoAction;
     QPointer<QAction> m_actionEnableWebsocket;
     QPointer<QAction> m_actionPauseSync;
+    QPointer<QAction> m_actionScanMempoolWhenPaused;
 
     QDateTime m_lastSyncStatusUpdate;
     QDateTime m_lastNetInfoUpdate;

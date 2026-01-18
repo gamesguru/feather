@@ -5,6 +5,7 @@
 
 #include <chrono>
 #include <thread>
+#include <tuple>
 
 #include "AddressBook.h"
 #include "Coins.h"
@@ -561,9 +562,6 @@ void Wallet::startRefreshThread()
                     // Don't call refresh function if we don't have the daemon and target height
                     // We do this to prevent to UI from getting confused about the amount of blocks that are still remaining
                     if (haveHeights) {
-                        // Prevent background network usage when sync is paused
-                        if (m_syncPaused)
-                            continue;
 
                         QMutexLocker locker(&m_asyncMutex);
 
@@ -575,6 +573,19 @@ void Wallet::startRefreshThread()
 
                         quint64 walletHeight = m_walletImpl->blockChainHeight();
                         m_walletImpl->refresh();
+                    }
+
+                    // Scan mempool if paused
+                    // Low-bandwidth query if user has enabled it
+                    if (m_syncPaused) {
+                        if (m_refreshNow || conf()->get(Config::scanMempoolWhenPaused).toBool()) {
+                            scanMempool();
+                            m_refreshNow = false;
+                        } else {
+                            std::this_thread::sleep_for(std::chrono::milliseconds(250));
+                        }
+                        last = std::chrono::steady_clock::now();
+                        continue;
                     }
                 }
             }
@@ -1686,6 +1697,19 @@ void Wallet::getTxPoolStatsAsync() {
 
         emit poolStats(txPoolBacklog, baseFees, blockWeightLimit);
     });
+}
+
+void Wallet::scanMempool() {
+    QMutexLocker locker(&m_asyncMutex);
+    try {
+        std::vector<std::tuple<cryptonote::transaction, crypto::hash, bool>> process_txs;
+        m_wallet2->update_pool_state(process_txs, false, false);
+        if (!process_txs.empty()) {
+            m_wallet2->process_pool_state(process_txs);
+        }
+    } catch (const std::exception &e) {
+        qWarning() << "Failed to scan mempool:" << e.what();
+    }
 }
 
 Wallet::~Wallet()

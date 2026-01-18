@@ -132,6 +132,7 @@ static const QHash<Config::ConfigKey, ConfigDirective> configStrings = {
         {Config::torManagedPort, {QS("torManagedPort"), "19450"}},
         {Config::useLocalTor, {QS("useLocalTor"), false}},
         {Config::initSyncThreshold, {QS("initSyncThreshold"), 360}},
+        {Config::scanMempoolWhenPaused, {QS("scanMempoolWhenPaused"), false}},
 
         {Config::enabledPlugins, {QS("enabledPlugins"), QStringList{"tickers", "crowdfunding", "revuo", "calc"}}},
         {Config::restartRequired, {QS("restartRequired"), false}},

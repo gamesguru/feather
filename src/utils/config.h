@@ -150,6 +150,7 @@ public:
         lastNetInfoUpdate,
         lastSyncTimestamp,
         lastPriceUpdateTimestamp,
+        scanMempoolWhenPaused,
     };
 
     enum PrivacyLevel {

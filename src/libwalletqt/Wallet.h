@@ -494,6 +494,7 @@ private:
     void onTransactionCreated(Monero::PendingTransaction *mtx, const QVector<QString> &address);
 
 private:
+    void scanMempool();
     friend class WalletManager;
     friend class WalletListenerImpl;
 
