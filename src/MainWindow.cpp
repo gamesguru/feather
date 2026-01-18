@@ -608,8 +608,8 @@ void MainWindow::initOffline() {
     connect(m_updateNetworkInfoAction, &QAction::triggered, this, [this]() {
         if (!m_wallet) return;
 
-        this->setStatusText(tr("Scanning..."));
-        
+        this->setStatusText(tr("Scanning..."), true);
+
         // FIX: Temporarily connect if we are disconnected/paused
         if (m_wallet->connectionStatus() == Wallet::ConnectionStatus_Disconnected) {
              m_nodes->connectToNode();
@@ -1152,7 +1152,11 @@ void MainWindow::onConnectionStatusChanged(int status)
                 statusStr = "Synchronizing";
                 break;
             case Wallet::ConnectionStatus_Synchronized:
-                icon = icons()->icon("status_connected.svg");
+                if (conf()->get(Config::proxy).toInt() == Config::Proxy::Tor) {
+                    icon = icons()->icon("status_connected_proxy.svg");
+                } else {
+                    icon = icons()->icon("status_connected.svg");
+                }
                 statusStr = "Synchronized";
                 break;
             default:
