@@ -30,6 +30,7 @@ public:
 private:
     void updateInfo();
     void updateFromDate();
+    void updateToDate();
 
     Wallet *m_wallet;
     QComboBox *m_presetCombo;

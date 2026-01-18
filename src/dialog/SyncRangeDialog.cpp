@@ -72,7 +72,7 @@ SyncRangeDialog::SyncRangeDialog(QWidget *parent, Wallet *wallet)
     layout->addLayout(formLayout);
     layout->addWidget(m_infoLabel);
 
-    connect(m_fromDateEdit, &QDateEdit::dateChanged, this, &SyncRangeDialog::updateInfo);
+    connect(m_fromDateEdit, &QDateEdit::dateChanged, this, &SyncRangeDialog::updateToDate);
     connect(m_toDateEdit, &QDateEdit::dateChanged, this, &SyncRangeDialog::updateFromDate);
     connect(m_daysSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this, &SyncRangeDialog::updateFromDate);
 
@@ -144,5 +144,10 @@ void SyncRangeDialog::updateInfo() {
 
 void SyncRangeDialog::updateFromDate() {
     m_fromDateEdit->setDate(m_toDateEdit->date().addDays(-m_daysSpinBox->value()));
+    updateInfo();
+}
+
+void SyncRangeDialog::updateToDate() {
+    m_toDateEdit->setDate(m_fromDateEdit->date().addDays(m_daysSpinBox->value()));
     updateInfo();
 }

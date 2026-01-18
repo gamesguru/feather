@@ -336,7 +336,7 @@ void MainWindow::initStatusBar() {
 
     connect(scanTxAction, &QAction::triggered, this, [this](){
         if (m_wallet) {
-            TxImportDialog dialog(this, m_wallet);
+            TxImportDialog dialog(this, m_wallet, m_nodes);
             dialog.exec();
         }
     });
