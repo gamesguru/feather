@@ -884,6 +884,13 @@ void MainWindow::updateStatusToolTip() {
 void MainWindow::updateSyncStatusToolTip() {
     if (!m_wallet) return;
 
+    // Throttle updates to 1s to prevent overwhelming the event loop (e.g. m_updateBytes timer)
+    static QDateTime lastUpdate = QDateTime::currentDateTime();
+    if (lastUpdate.msecsTo(QDateTime::currentDateTime()) < 1000) {
+        return;
+    }
+    lastUpdate = QDateTime::currentDateTime();
+
     bool isPaused = conf()->get(Config::syncPaused).toBool();
 
     quint64 walletHeight = m_wallet->blockChainHeight();
@@ -1974,14 +1981,6 @@ void MainWindow::updateNetStats() {
     prevBytes = currBytes;
 
     bool showTraffic = trafficCooldown > 0;
-
-    // Update tooltip
-    QString tooltip = "";
-    if (m_lastNetInfoUpdate.isValid()) {
-        qint64 secs = m_lastNetInfoUpdate.secsTo(QDateTime::currentDateTime());
-        tooltip = tr("Last updated net info: %1 seconds ago").arg(secs);
-    }
-    m_statusLabelStatus->setToolTip(tooltip);
 
     if (!m_wallet || m_wallet->connectionStatus() == Wallet::ConnectionStatus_Disconnected
                        || (m_wallet->connectionStatus() == Wallet::ConnectionStatus_Synchronized && !m_coinsRefreshing && !showTraffic))
