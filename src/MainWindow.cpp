@@ -888,16 +888,7 @@ void MainWindow::updateSyncStatusToolTip() {
 
     quint64 walletHeight = m_wallet->blockChainHeight();
     quint64 daemonHeight = m_wallet->daemonBlockChainHeight();
-    quint64 blocksBehind = daemonHeigh - walletHeight;
-
-    // Use time-estimation if we don't have a live connection
-    if (isPaused || m_wallet->connectionStatus() == Wallet::ConnectionStatus_Disconnected) {
-            QDateTime lastSync = m_wallet->lastSyncTime();
-            if (lastSync.isValid()) {
-                qint64 secs = lastSync.secsTo(QDateTime::currentDateTime());
-                if (secs > 0) blocksBehind = secs / 120; // 120s per block
-        }
-    }
+    quint64 blocksBehind = (daemonHeight > walletHeight) ? (daemonHeight - walletHeight) : 0;
 
     // Build tooltip
     QString tooltip = tr("Daemon Height: %1").arg(QLocale().toString(daemonHeight));
