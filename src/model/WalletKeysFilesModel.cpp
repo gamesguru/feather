@@ -93,6 +93,7 @@ void WalletKeysFilesModel::findWallets() {
         const QString baseName = fileInfo.baseName();
         const QString basePath = QString("%1/%2").arg(path).arg(baseName);
         QString addr = QString("");
+        // Assume mainnet by default, set otherwise if needed
         quint8 networkType = NetworkType::MAINNET;
 
         if (Utils::fileExists(basePath + ".address.txt")) {
@@ -104,7 +105,7 @@ void WalletKeysFilesModel::findWallets() {
                 addr = _address;
                 if (addr.startsWith("5") || addr.startsWith("7"))
                     networkType = NetworkType::STAGENET;
-                else if (addr.startsWith("9") || addr.startsWith("B"))
+                else if (addr.startsWith("9") || addr.startsWith("A") || addr.startsWith("B"))
                     networkType = NetworkType::TESTNET;
             }
             file.close();
