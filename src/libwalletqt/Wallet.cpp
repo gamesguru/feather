@@ -522,17 +522,18 @@ void Wallet::startRefreshThread()
                 const auto elapsed = now - last;
                 if (elapsed >= std::chrono::seconds(m_refreshInterval) || m_refreshNow)
                 {
-                    if (m_syncPaused && !m_refreshNow) {
-                        last = std::chrono::steady_clock::now();
-                        std::this_thread::sleep_for(std::chrono::milliseconds(250));
-                        continue;
-                    }
-
-                    // Scan mempool if paused, low-bandwidth query if user has enabled it
+                    // Scan mempool if paused and user has enabled it (low-bandwidth query)
                     if (m_syncPaused) {
                         if (m_refreshNow || conf()->get(Config::scanMempoolWhenPaused).toBool()) {
                             qDebug() << "[SYNC PAUSED] Scanning mempool because scans are enabled";
+                            if (m_scheduler.stopping()) return; // TODO: do we need this?
                             scanMempool();
+
+                            // Update network stats
+                            quint64 daemonHeight = m_walletImpl->daemonBlockChainHeight();
+                            quint64 targetHeight = (daemonHeight > 0) ? m_walletImpl->daemonBlockChainTargetHeight() : 0;
+                            emit heightsRefreshed(daemonHeight > 0, daemonHeight, targetHeight);
+
                             m_refreshNow = false;
                         }
                         last = std::chrono::steady_clock::now();
@@ -608,6 +609,7 @@ void Wallet::onHeightsRefreshed(bool success, quint64 daemonHeight, quint64 targ
             emit syncStatus(daemonHeight, targetHeight, true);
         } else {
             this->syncStatusUpdated(walletHeight, daemonHeight);
+            emit syncStatus(daemonHeight, targetHeight, false);
         }
 
         if (walletHeight < targetHeight) {
