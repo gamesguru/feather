@@ -619,7 +619,7 @@ void MainWindow::initOffline() {
     connect(m_updateNetworkInfoAction, &QAction::triggered, this, [this]() {
         if (!m_wallet) return;
 
-        this->setStatusText(tr("Scanning..."), true);
+        qDebug() << "[UI] User requested network info and scan of mempool";
 
         // FIX: Temporarily connect if we are disconnected/paused
         if (m_wallet->connectionStatus() == Wallet::ConnectionStatus_Disconnected) {
@@ -900,12 +900,7 @@ void MainWindow::updateSyncStatusToolTip() {
     }
 
     if (blocksBehind > 0) {
-        // Show estimate if significant or if explicitly paused
-        if (blocksBehind > 2 || isPaused) {
-             tooltip += tr("\n~%1 blocks behind").arg(QLocale().toString(blocksBehind));
-        }
-    } else if (isPaused) {
-         tooltip += tr("\n(Sync paused. Mempool alive.)");
+        tooltip += tr("\n~%1 blocks behind").arg(QLocale().toString(blocksBehind));
     }
 
     m_statusLabelStatus->setToolTip(tooltip);
@@ -1052,7 +1047,7 @@ void MainWindow::onSyncStatus(quint64 height, quint64 target, bool daemonSync) {
         m_lastSyncStatusUpdate = QDateTime::currentDateTime();
 
         this->updateNetStats();
-        this->setStatusText(tr("Synchronized"));
+        // this->setStatusText(tr("Synchronized")); // TODO: do we need this?
 
         // Persist sync state for next boot
         conf()->set(Config::lastKnownNetworkHeight, static_cast<qulonglong>(target));
