@@ -80,11 +80,12 @@ static const QHash<Config::ConfigKey, ConfigDirective> configStrings = {
         {Config::disableAutoRefresh, {QS("disableAutoRefresh"), false}},
         {Config::offlineMode, {QS("offlineMode"), false}},
         {Config::syncPaused, {QS("syncPaused"), false}},
-        {Config::syncPausedAlsoDisconnectWebSocket, {QS("syncPausedAlsoDisconnectWebSocket"), false}},
+
         {Config::syncInterval, {QS("syncInterval"), 30}},
         {Config::lastKnownNetworkHeight, {QS("lastKnownNetworkHeight"), 0}},
         {Config::lastSyncTimestamp, {QS("lastSyncTimestamp"), 0}},
         {Config::lastPriceUpdateTimestamp, {QS("lastPriceUpdateTimestamp"), 0}},
+        {Config::lastNetInfoUpdate, {QS("lastNetInfoUpdate"), 0}},
 
         // Transactions
         {Config::multiBroadcast, {QS("multiBroadcast"), true}},

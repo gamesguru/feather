@@ -63,10 +63,6 @@ void WebsocketClient::start() {
         return;
     }
 
-    if (conf()->get(Config::syncPaused).toBool() && conf()->get(Config::syncPausedAlsoDisconnectWebSocket).toBool()) {
-        return;
-    }
-
     // connect & reconnect on errors/close
     auto state = webSocket->state();
     if (state != QAbstractSocket::ConnectedState && state != QAbstractSocket::ConnectingState) {

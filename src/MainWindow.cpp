@@ -432,7 +432,14 @@ void MainWindow::initWidgets() {
     connect(m_walletUnlockWidget, &WalletUnlockWidget::unlockWallet, this, &MainWindow::unlockWallet);
 
     ui->tabWidget->setCurrentIndex(0);
+    ui->tabWidget->setCurrentIndex(0);
     ui->stackedWidget->setCurrentIndex(0);
+
+    // Restore last network info update time
+    qulonglong lastNetInfoUpdate = conf()->get(Config::lastNetInfoUpdate).toULongLong();
+    if (lastNetInfoUpdate > 0) {
+        m_lastNetInfoUpdate = QDateTime::fromSecsSinceEpoch(lastNetInfoUpdate);
+    }
 }
 
 void MainWindow::initMenu() {
@@ -871,13 +878,13 @@ void MainWindow::updateSyncStatusToolTip() {
     quint64 walletHeight = m_wallet->blockChainHeight();
     quint64 targetHeight = m_wallet->daemonBlockChainTargetHeight();
 
-    // 1. Calculate Real Lag (If connected)
+    // 1. Calculate real lag (if connected)
     quint64 blocksBehind = 0;
     if (targetHeight > walletHeight) {
         blocksBehind = targetHeight - walletHeight;
-    } 
-    
-    // 2. Calculate Estimated Lag (If Paused/Offline)
+    }
+
+    // 2. Calculate estimate lag (if paused or offline)
     // Only use time-estimation if we don't have a live connection
     bool isPaused = conf()->get(Config::syncPaused).toBool();
     if (isPaused || m_wallet->connectionStatus() == Wallet::ConnectionStatus_Disconnected) {
@@ -891,7 +898,7 @@ void MainWindow::updateSyncStatusToolTip() {
         }
     }
 
-    // 3. Build the String
+    // 3. Build status tooltip
     QString tooltip = tr("Wallet Height: %1").arg(QLocale().toString(walletHeight));
 
     // Only show Network Tip if we are actually connected
@@ -900,8 +907,10 @@ void MainWindow::updateSyncStatusToolTip() {
             tooltip += tr(" | Network Tip: %1").arg(QLocale().toString(targetHeight));
     }
 
-    if (m_wallet->lastSyncTime().isValid()) {
-        tooltip += tr("\nLast synchronized: %1").arg(Utils::timeAgo(m_wallet->lastSyncTime()));
+    if (conf()->get(Config::lastNetInfoUpdate).toULongLong() > 0) {
+        tooltip += tr("\nLast network update: %1").arg(
+            Utils::timeAgo(QDateTime::fromSecsSinceEpoch(conf()->get(Config::lastNetInfoUpdate).toULongLong()))
+        );
     }
 
     if (blocksBehind > 0) {
@@ -910,7 +919,7 @@ void MainWindow::updateSyncStatusToolTip() {
              tooltip += tr("\n~%1 blocks behind").arg(QLocale().toString(blocksBehind));
         }
     } else if (isPaused) {
-         tooltip += tr("\n(Up to date)");
+         tooltip += tr("\n(Sync paused. Mempool alive.)");
     }
 
     m_statusLabelStatus->setToolTip(tooltip);
@@ -1033,6 +1042,14 @@ void MainWindow::onMultiBroadcast(const QMap<QString, QString> &txHexMap) {
 
 void MainWindow::onSyncStatus(quint64 height, quint64 target, bool daemonSync) {
     m_lastNetInfoUpdate = QDateTime::currentDateTime();
+
+    // Persist to global config (throttled to syncInterval)
+    static QDateTime lastConfigSave = QDateTime::currentDateTime();
+    int interval = conf()->get(Config::syncInterval).toInt();
+    if (lastConfigSave.secsTo(QDateTime::currentDateTime()) > interval) {
+        conf()->set(Config::lastNetInfoUpdate, static_cast<qulonglong>(m_lastNetInfoUpdate.toSecsSinceEpoch()));
+        lastConfigSave = QDateTime::currentDateTime();
+    }
 
     // qDebug() << "onSyncStatus: Height" << height << "Target" << target << "DaemonSync" << daemonSync;
 
