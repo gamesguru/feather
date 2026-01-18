@@ -1965,10 +1965,6 @@ QString MainWindow::getPausedStatusText() {
     quint64 walletHeight = m_wallet->blockChainHeight();
     quint64 targetHeight = m_wallet->daemonBlockChainTargetHeight();
 
-    if (targetHeight == 0) {
-        targetHeight = conf()->get(Config::lastKnownNetworkHeight).toULongLong();
-    }
-
     if (walletHeight > 0 && targetHeight > 0) {
         quint64 blocksBehind = Utils::blocksBehind(walletHeight, targetHeight);
         if (blocksBehind > 0) {
