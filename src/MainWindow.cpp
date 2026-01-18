@@ -879,11 +879,6 @@ void MainWindow::updateSyncStatusToolTip() {
     quint64 walletHeight = m_wallet->blockChainHeight();
     quint64 targetHeight = m_wallet->daemonBlockChainTargetHeight();
 
-    // Fall back to persisted network height if current is 0
-    if (targetHeight == 0) {
-        targetHeight = conf()->get(Config::lastKnownNetworkHeight).toULongLong();
-    }
-
     // 1. Calculate Real Lag (If connected)
     quint64 blocksBehind = 0;
     if (targetHeight > walletHeight) {
