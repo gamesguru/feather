@@ -528,6 +528,17 @@ void Wallet::startRefreshThread()
                         continue;
                     }
 
+                    // Scan mempool if paused, low-bandwidth query if user has enabled it
+                    if (m_syncPaused) {
+                        if (m_refreshNow || conf()->get(Config::scanMempoolWhenPaused).toBool()) {
+                            qDebug() << "[SYNC PAUSED] Scanning mempool because scans are enabled";
+                            scanMempool();
+                            m_refreshNow = false;
+                        }
+                        last = std::chrono::steady_clock::now();
+                        continue;
+                    }
+
                     m_refreshNow = false;
                     auto loopStartTime = std::chrono::time_point_cast<std::chrono::microseconds>(std::chrono::steady_clock::now());
                     // get daemonHeight and targetHeight
@@ -573,19 +584,6 @@ void Wallet::startRefreshThread()
 
                         quint64 walletHeight = m_walletImpl->blockChainHeight();
                         m_walletImpl->refresh();
-                    }
-
-                    // Scan mempool if paused
-                    // Low-bandwidth query if user has enabled it
-                    if (m_syncPaused) {
-                        if (m_refreshNow || conf()->get(Config::scanMempoolWhenPaused).toBool()) {
-                            scanMempool();
-                            m_refreshNow = false;
-                        } else {
-                            std::this_thread::sleep_for(std::chrono::milliseconds(250));
-                        }
-                        last = std::chrono::steady_clock::now();
-                        continue;
                     }
                 }
             }
