@@ -1857,7 +1857,7 @@ void MainWindow::importTransaction() {
          m_nodes->connectToNode();
     }
 
-    TxImportDialog dialog(this, m_wallet);
+    TxImportDialog dialog(this, m_wallet, m_nodes);
     dialog.exec();
 }
 
