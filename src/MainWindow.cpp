@@ -884,37 +884,23 @@ void MainWindow::updateStatusToolTip() {
 void MainWindow::updateSyncStatusToolTip() {
     if (!m_wallet) return;
 
-    quint64 walletHeight = m_wallet->blockChainHeight();
-    quint64 targetHeight = m_wallet->daemonBlockChainTargetHeight();
-
-    // 1. Calculate real lag (if connected)
-    quint64 blocksBehind = 0;
-    if (targetHeight > walletHeight) {
-        blocksBehind = targetHeight - walletHeight;
-    }
-
-    // 2. Calculate estimate lag (if paused or offline)
-    // Only use time-estimation if we don't have a live connection
     bool isPaused = conf()->get(Config::syncPaused).toBool();
+
+    quint64 walletHeight = m_wallet->blockChainHeight();
+    quint64 daemonHeight = m_wallet->daemonBlockChainHeight();
+    quint64 blocksBehind = daemonHeigh - walletHeight;
+
+    // Use time-estimation if we don't have a live connection
     if (isPaused || m_wallet->connectionStatus() == Wallet::ConnectionStatus_Disconnected) {
-        // Only estimate if we deviate from the cached target, OR if target is unknown
-        if (targetHeight == 0 || targetHeight > walletHeight) {
             QDateTime lastSync = m_wallet->lastSyncTime();
             if (lastSync.isValid()) {
                 qint64 secs = lastSync.secsTo(QDateTime::currentDateTime());
                 if (secs > 0) blocksBehind = secs / 120; // 120s per block
-            }
         }
     }
 
-    // 3. Build status tooltip
-    QString tooltip = tr("Wallet Height: %1").arg(QLocale().toString(walletHeight));
-
-    // Only show Network Tip if we are actually connected
-    if (!isPaused && m_wallet->connectionStatus() == Wallet::ConnectionStatus_Synchronized) {
-        if (targetHeight > 0)
-            tooltip += tr(" | Network Tip: %1").arg(QLocale().toString(targetHeight));
-    }
+    // Build tooltip
+    QString tooltip = tr("Daemon Height: %1").arg(QLocale().toString(daemonHeight));
 
     if (conf()->get(Config::lastNetInfoUpdate).toULongLong() > 0) {
         tooltip += tr("\nLast network update: %1").arg(
