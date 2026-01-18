@@ -92,8 +92,14 @@ Wallet::Wallet(Monero::Wallet *wallet, QObject *parent)
     // This protects the restore height from being overwritten by "Skip Sync" or range syncs
     if (!cacheAttributeExists("feather.creation_height")) {
         quint64 height = m_wallet2->get_refresh_from_block_height();
-        if (height > 0) {
-            setCacheAttribute("feather.creation_height", QString::number(height));
+        setCacheAttribute("feather.creation_height", QString::number(height));
+    }
+
+    QString lastSyncStr = getCacheAttribute("feather.lastSync");
+    if (!lastSyncStr.isEmpty()) {
+        qint64 lastSync = lastSyncStr.toLongLong();
+        if (lastSync > 0) {
+            m_lastSyncTime = QDateTime::fromSecsSinceEpoch(lastSync);
         }
     }
 }

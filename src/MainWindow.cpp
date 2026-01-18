@@ -133,6 +133,9 @@ MainWindow::MainWindow(WindowManager *windowManager, Wallet *wallet, QWidget *pa
         if (key == Config::syncInterval && m_wallet) {
             m_wallet->setRefreshInterval(conf()->get(Config::syncInterval).toInt());
         }
+        if (key == Config::syncPaused) {
+            this->setSyncPaused(conf()->get(Config::syncPaused).toBool());
+        }
     });
 
     this->onWalletOpened();
@@ -227,10 +230,10 @@ void MainWindow::initStatusBar() {
 
     m_statusLabelStatus->setContextMenuPolicy(Qt::ActionsContextMenu);
 
-    QAction *pauseSyncAction = new QAction(tr("Pause Sync"), this);
-    pauseSyncAction->setCheckable(true);
-    pauseSyncAction->setChecked(conf()->get(Config::syncPaused).toBool());
-    m_statusLabelStatus->addAction(pauseSyncAction);
+    m_actionPauseSync = new QAction(tr("Pause Sync"), this);
+    m_actionPauseSync->setCheckable(true);
+    m_actionPauseSync->setChecked(conf()->get(Config::syncPaused).toBool());
+    m_statusLabelStatus->addAction(m_actionPauseSync);
 
     m_actionEnableWebsocket = new QAction(tr("Enable Websocket"), this);
     m_actionEnableWebsocket->setCheckable(true);
@@ -262,23 +265,9 @@ void MainWindow::initStatusBar() {
     m_updateNetworkInfoAction = new QAction(tr("Scan Now"), this);
     m_statusLabelStatus->addAction(m_updateNetworkInfoAction);
 
-    connect(pauseSyncAction, &QAction::toggled, this, [this](bool checked) {
+    connect(m_actionPauseSync, &QAction::toggled, this, [this](bool checked) {
         qInfo() << "Pause Sync toggled. Checked =" << checked;
         conf()->set(Config::syncPaused, checked);
-
-        if (m_wallet) {
-            if (checked) {
-                m_wallet->setSyncPaused(true);
-                m_nodes->disconnectCurrentNode();
-                this->onConnectionStatusChanged(Wallet::ConnectionStatus_Disconnected);
-            } else {
-                // Ensure we reconnect everything when unpausing
-                m_wallet->setSyncPaused(false);
-                m_nodes->connectToNode();
-                websocketNotifier()->websocketClient->restart();
-                this->setStatusText(tr("Resuming sync..."));
-            }
-        }
     });
 
     connect(skipSyncAction, &QAction::triggered, this, [this](){
@@ -745,16 +734,6 @@ void MainWindow::onWalletOpened() {
     m_splashDialog->hide();
 
     m_wallet->setRingDatabase(Utils::ringDatabasePath());
-
-    // Load persisted sync state
-    // Load persisted sync state
-    QString lastSyncStr = m_wallet->getCacheAttribute("feather.lastSync");
-    if (!lastSyncStr.isEmpty()) {
-        qint64 lastSync = lastSyncStr.toLongLong();
-        if (lastSync > 0) {
-            m_lastSyncStatusUpdate = QDateTime::fromSecsSinceEpoch(lastSync);
-        }
-    }
 
     m_wallet->setRefreshInterval(conf()->get(Config::syncInterval).toInt());
 
@@ -2428,4 +2407,29 @@ int MainWindow::findTab(const QString &title) {
 
 MainWindow::~MainWindow() {
     qDebug() << "~MainWindow" << QThread::currentThreadId();
+}
+
+void MainWindow::setSyncPaused(bool checked) {
+    if (m_actionPauseSync && m_actionPauseSync->isChecked() != checked) {
+        const QSignalBlocker blocker(m_actionPauseSync);
+        m_actionPauseSync->setChecked(checked);
+    }
+
+    if (m_wallet) {
+        if (checked) {
+            qInfo() << "Pausing sync via setSyncPaused";
+            m_wallet->setSyncPaused(true);
+            m_nodes->disconnectCurrentNode();
+            this->onConnectionStatusChanged(Wallet::ConnectionStatus_Disconnected);
+        } else {
+            qInfo() << "Resuming sync via setSyncPaused";
+            m_wallet->setSyncPaused(false);
+            m_nodes->connectToNode();
+
+            if (!conf()->get(Config::disableWebsocket).toBool()) {
+                websocketNotifier()->websocketClient->restart();
+            }
+            this->setStatusText(tr("Resuming sync..."));
+        }
+    }
 }
