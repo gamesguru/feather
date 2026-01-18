@@ -821,7 +821,7 @@ void MainWindow::onBalanceUpdated(quint64 balance, quint64 spendable) {
         copyableVal = amount;
 
         if (displaySetting == Config::spendablePlusUnconfirmed && balance > spendable) {
-            balance_str += QString(" (+%1 XMR unconfirmed)").arg(WalletManager::displayAmount(balance - spendable, false, decimals));
+            balance_str += QString(" <font color='#ffd60a'>(+%1 XMR unconfirmed)</font>").arg(WalletManager::displayAmount(balance - spendable, false, decimals));
         }
     }
 
@@ -1080,7 +1080,6 @@ void MainWindow::onConnectionStatusChanged(int status)
         QString statusStr = this->getPausedStatusText();
 
         m_statusBtnConnectionStatusIndicator->setIcon(icon);
-        m_statusBtnConnectionStatusIndicator->setToolTip(tr("Sync Paused"));
         this->setStatusText(statusStr);
 
         // Hide the "Net Stats" (D: 0.0 B) label since we aren't downloading
@@ -1950,6 +1949,17 @@ void MainWindow::onWalletPassphraseNeeded(bool on_device) {
 }
 
 QString MainWindow::getPausedStatusText() {
+    if (!m_wallet) return tr("Sync Paused");
+
+    quint64 walletHeight = m_wallet->blockChainHeight();
+    quint64 targetHeight = m_wallet->daemonBlockChainTargetHeight();
+
+    if (walletHeight > 0 && targetHeight > 0) {
+        quint64 blocksBehind = Utils::blocksBehind(walletHeight, targetHeight);
+        if (blocksBehind > 0) {
+            return tr("[SYNC PAUSED] - %1 blocks behind").arg(QLocale().toString(blocksBehind));
+        }
+    }
     return tr("[SYNC PAUSED]");
 }
 
