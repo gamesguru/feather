@@ -2017,6 +2017,7 @@ void MainWindow::updateNetStats() {
 
     if (conf()->get(Config::syncPaused).toBool()) {
         m_statusLabelNetStats->hide();
+        this->setStatusText(this->getPausedStatusText());
         return;
     }
 
