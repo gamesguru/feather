@@ -1071,9 +1071,13 @@ void MainWindow::onSyncStatus(quint64 height, quint64 target, bool daemonSync) {
             return;
         }
 
-        QString type = daemonSync ? tr("Blockchain") : tr("Wallet");
         QString blocksStr = QLocale().toString(blocksBehind);
-        this->setStatusText(tr("%1 sync: %2 blocks behind").arg(type, blocksStr));
+        if (conf()->get(Config::syncPaused).toBool()) {
+             this->setStatusText(tr("[SYNC PAUSED] %1 blocks behind").arg(blocksStr));
+        } else {
+             QString type = daemonSync ? tr("Blockchain") : tr("Wallet");
+             this->setStatusText(tr("%1 sync: %2 blocks behind").arg(type, blocksStr));
+        }
     }
 
     this->updateSyncStatusToolTip();
@@ -1084,14 +1088,14 @@ void MainWindow::onConnectionStatusChanged(int status)
     // Fix B: Override status when paused
     if (conf()->get(Config::syncPaused).toBool()) {
         QIcon icon = icons()->icon("status_offline.svg");
-        QString statusStr = tr("Sync Paused");
-        
+        QString statusStr = this->getPausedStatusText();
+
         m_statusBtnConnectionStatusIndicator->setIcon(icon);
         this->setStatusText(statusStr);
-        
+
         // Hide the "Net Stats" (D: 0.0 B) label since we aren't downloading
         m_statusLabelNetStats->hide();
-        
+
         // Update tooltip to ensure it doesn't show "Synchronized"
         this->updateSyncStatusToolTip();
         return; // STOP EXECUTION HERE
@@ -1955,6 +1959,21 @@ void MainWindow::onWalletPassphraseNeeded(bool on_device) {
     }
 }
 
+QString MainWindow::getPausedStatusText() {
+    if (!m_wallet) return tr("Sync Paused");
+
+    quint64 walletHeight = m_wallet->blockChainHeight();
+    quint64 targetHeight = m_wallet->daemonBlockChainTargetHeight();
+
+    if (walletHeight > 0 && targetHeight > 0) {
+        quint64 blocksBehind = Utils::blocksBehind(walletHeight, targetHeight);
+        if (blocksBehind > 0) {
+            return tr("[SYNC PAUSED] %1 blocks behind").arg(QLocale().toString(blocksBehind));
+        }
+    }
+    return tr("Sync Paused");
+}
+
 void MainWindow::updateNetStats() {
     static quint64 prevBytes = 0;
     static int trafficCooldown = 0;
@@ -1992,13 +2011,12 @@ void MainWindow::updateNetStats() {
                  this->setStatusText(QString("Disconnected (Retry in %1)").arg(timeStr));
              } else {
                  if (conf()->get(Config::syncPaused).toBool()) {
-                     this->setStatusText(tr("Paused"));
+                     this->setStatusText(this->getPausedStatusText());
                  } else {
                      this->setStatusText(tr("Connecting..."));
                  }
              }
         }
-
         return;
     }
 
