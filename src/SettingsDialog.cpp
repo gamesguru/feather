@@ -178,11 +178,6 @@ void Settings::setupNetworkTab() {
     };
     setupNodeWidget();
 
-    // Data Saving Mode
-    QCheckBox *cbDataSaver = new QCheckBox("Data Saving Mode (Pause Sync on startup)", this);
-    cbDataSaver->setChecked(conf()->get(Config::syncPaused).toBool());
-    cbDataSaver->setToolTip("Prevents the wallet from automatically connecting to nodes on startup.");
-
     connect(cbDataSaver, &QCheckBox::toggled, [](bool checked){
         conf()->set(Config::syncPaused, checked);
     });
@@ -211,7 +206,11 @@ void Settings::setupNetworkTab() {
         this->enableWebsocket(checked);
     });
 
-    // Sync
+    // Sync (Data Saving Mode)
+    QCheckBox *cbDataSaver = new QCheckBox("Data Saving Mode (Pause Sync on startup)", this);
+    cbDataSaver->setChecked(conf()->get(Config::syncPaused).toBool());
+    cbDataSaver->setToolTip("Prevents the wallet from automatically connecting to nodes on startup.");
+
     QComboBox *comboSyncInterval = new QComboBox(this);
     comboSyncInterval->setEditable(true);
 
