@@ -68,7 +68,7 @@ Wallet::Wallet(Monero::Wallet *wallet, QObject *parent)
     m_coinsModel = new CoinsModel(this, m_coins);
 
     if (this->status() == Status_Ok) {
-        startRefreshThread();
+        // startRefreshThread(); // Moved to startRefresh()
 
         // Store the wallet every 2 minutes
         m_storeTimer->start(2 * 60 * 1000);
@@ -481,6 +481,7 @@ void Wallet::initAsync(const QString &daemonAddress, bool trustedDaemon, quint64
 // #################### Synchronization (Refresh) ####################
 
 void Wallet::startRefresh() {
+    startRefreshThread();
     m_refreshEnabled = true;
     m_refreshNow = true;
 }
@@ -508,6 +509,11 @@ void Wallet::updateNetworkStatus() {
 
 void Wallet::startRefreshThread()
 {
+    bool expected = false;
+    if (!m_refreshThreadStarted.compare_exchange_strong(expected, true)) {
+        return;
+    }
+
     const auto future = m_scheduler.run([this] {
         // Beware! This code does not run in the GUI thread.
 

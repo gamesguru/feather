@@ -546,6 +546,7 @@ private:
     std::atomic<bool> m_rangeSyncActive{false};
     std::atomic<bool> m_syncPaused{false};
     std::atomic<int64_t> m_lastRefreshTime{0};
+    std::atomic<bool> m_refreshThreadStarted{false};
 };
 
 #endif // FEATHER_WALLET_H
