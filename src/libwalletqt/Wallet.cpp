@@ -7,6 +7,8 @@
 #include <thread>
 #include <tuple>
 
+#include <QMetaObject>
+
 #include "AddressBook.h"
 #include "Coins.h"
 #include "Subaddress.h"
@@ -532,9 +534,13 @@ void Wallet::startRefreshThread()
                         bool shouldScanMempool = m_refreshNow || conf()->get(Config::scanMempoolWhenPaused).toBool();
 
                         if (shouldScanMempool) {
-                            qDebug() << "[SYNC PAUSED] Scanning mempool because scans are enabled";
-                            if (m_scheduler.stopping()) return;
-                            scanMempool();
+                            if (m_wallet2->get_daemon_address().empty()) {
+                                qDebug() << "[SYNC PAUSED] Skipping mempool scan because daemon address is empty";
+                            } else {
+                                qDebug() << "[SYNC PAUSED] Scanning mempool because scans are enabled";
+                                if (m_scheduler.stopping()) return;
+                                scanMempool();
+                            }
                         }
 
                         // Update network stats if we just scanned OR if we don't have stats yet (startup recovery)
@@ -1156,7 +1162,9 @@ void Wallet::createTransaction(const QString &address, quint64 amount, const QSt
                                                                              currentSubaddressAccount(), subaddr_indices, m_selectedInputs, subtractFeeFromAmount);
 
         QVector<QString> addresses{address};
-        this->onTransactionCreated(ptImpl, addresses);
+        QMetaObject::invokeMethod(this, [this, ptImpl, addresses] {
+            this->onTransactionCreated(ptImpl, addresses);
+        }, Qt::QueuedConnection);
     });
 }
 
@@ -1180,7 +1188,9 @@ void Wallet::createTransactionMultiDest(const QVector<QString> &addresses, const
                                                                                      static_cast<Monero::PendingTransaction::Priority>(feeLevel),
                                                                                      currentSubaddressAccount(), subaddr_indices, m_selectedInputs, subtractFeeFromAmount);
 
-        this->onTransactionCreated(ptImpl, addresses);
+        QMetaObject::invokeMethod(this, [this, ptImpl, addresses] {
+            this->onTransactionCreated(ptImpl, addresses);
+        }, Qt::QueuedConnection);
     });
 }
 
@@ -1201,7 +1211,9 @@ void Wallet::sweepOutputs(const QVector<QString> &keyImages, QString address, bo
                                                                                      static_cast<Monero::PendingTransaction::Priority>(feeLevel));
 
         QVector<QString> addresses {address};
-        this->onTransactionCreated(ptImpl, addresses);
+        QMetaObject::invokeMethod(this, [this, ptImpl, addresses] {
+            this->onTransactionCreated(ptImpl, addresses);
+        }, Qt::QueuedConnection);
     });
 }
 
@@ -1209,7 +1221,6 @@ void Wallet::sweepOutputs(const QVector<QString> &keyImages, QString address, bo
 
 void Wallet::onTransactionCreated(Monero::PendingTransaction *mtx, const QVector<QString> &address) {
     qDebug() << Q_FUNC_INFO;
-    startRefresh();
 
     PendingTransaction *tx = new PendingTransaction(mtx, this);
 
