@@ -225,6 +225,10 @@ public:
     void pauseRefresh();
     Q_INVOKABLE void updateNetworkStatus();
 
+    bool syncPaused() const;
+    void setSyncPaused(bool paused);
+    void setScanMempoolWhenPaused(bool enabled);
+
     //! returns current wallet's block height
     //! (can be less than daemon's blockchain height when wallet sync in progress)
     quint64 blockChainHeight() const;
@@ -549,6 +553,7 @@ private:
     std::atomic<bool> m_syncPaused{false};
     std::atomic<int64_t> m_lastRefreshTime{0};
     std::atomic<bool> m_refreshThreadStarted{false};
+    std::atomic<bool> m_scanMempoolWhenPaused{false};
 };
 
 #endif // FEATHER_WALLET_H

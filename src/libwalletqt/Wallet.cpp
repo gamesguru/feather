@@ -533,7 +533,7 @@ void Wallet::startRefreshThread()
                 if (elapsed >= std::chrono::seconds(m_refreshInterval) || m_refreshNow)
                 {
                     if (m_syncPaused && !m_rangeSyncActive) {
-                        bool shouldScanMempool = m_refreshNow;
+                        bool shouldScanMempool = m_refreshNow || m_scanMempoolWhenPaused;
 
                         if (shouldScanMempool) {
                             if (m_wallet2->get_daemon_address().empty()) {
@@ -698,9 +698,25 @@ void Wallet::setSyncPaused(bool paused) {
     m_syncPaused = paused;
     if (paused) {
         pauseRefresh();
+        if (!m_scanMempoolWhenPaused) {
+            m_wallet2->set_offline(true);
+        }
     } else {
         m_wallet2->set_offline(false);
         startRefresh(true);
+    }
+}
+
+void Wallet::setScanMempoolWhenPaused(bool enabled) {
+    m_scanMempoolWhenPaused = enabled;
+
+    // Immediately trigger a scan if enabled and paused
+    if (enabled && m_syncPaused) {
+        m_wallet2->set_offline(false);
+        startRefresh(true);
+    }
+    else if (!enabled && m_syncPaused) {
+        m_wallet2->set_offline(true);
     }
 }
 

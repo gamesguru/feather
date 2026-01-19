@@ -259,7 +259,7 @@ void MainWindow::initStatusBar() {
     QAction *scanTxAction = new QAction(tr("Import Transaction"), this);
     m_statusLabelStatus->addAction(scanTxAction);
 
-    m_updateNetworkInfoAction = new QAction(tr("Scan Mempool"), this);
+    m_updateNetworkInfoAction = new QAction(tr("Scan mempool when paused"), this);
     m_statusLabelStatus->addAction(m_updateNetworkInfoAction);
 
     connect(m_actionPauseSync, &QAction::toggled, this, [this](bool checked) {
@@ -604,18 +604,18 @@ void MainWindow::initOffline() {
             ui->radio_airgapUR->setChecked(true);
     }
 
-    connect(m_updateNetworkInfoAction, &QAction::triggered, this, [this]() {
+    m_updateNetworkInfoAction->setCheckable(true);
+    connect(m_updateNetworkInfoAction, &QAction::toggled, this, [this](bool checked) {
         if (!m_wallet) return;
-
-        qDebug() << "[UI] User requested network info and scan of mempool";
-
-        // FIX: Temporarily connect if we are disconnected/paused
-        if (m_wallet->connectionStatus() == Wallet::ConnectionStatus_Disconnected) {
-             m_nodes->connectToNode();
-        }
         
-        // Trigger the refresh (sets m_refreshNow = true, bypassing the pause check)
-        m_wallet->startRefresh(true);
+        m_wallet->setScanMempoolWhenPaused(checked);
+
+        if (checked) {
+             // Ensure we are connected if enabling
+            if (m_wallet->connectionStatus() == Wallet::ConnectionStatus_Disconnected) {
+                 m_nodes->connectToNode();
+            }
+        }
     });
 
 
@@ -1087,10 +1087,16 @@ void MainWindow::onConnectionStatusChanged(int status)
         switch(status){
             case Wallet::ConnectionStatus_Idle:
             {
-                if (conf()->get(Config::proxy).toInt() == Config::Proxy::Tor) {
-                    icon = icons()->icon("status_idle_proxy.svg");
+                // If "Scan Mempool" is active, we show "Idle" (connected/active)
+                if (m_updateNetworkInfoAction->isChecked()) {
+                    if (conf()->get(Config::proxy).toInt() == Config::Proxy::Tor) {
+                        icon = icons()->icon("status_idle_proxy.svg");
+                    } else {
+                        icon = icons()->icon("status_idle.svg");
+                    }
                 } else {
-                    icon = icons()->icon("status_idle.svg");
+                    // "True Idle" - just waiting, no network activity
+                    icon = icons()->icon("status_waiting.svg");
                 }
                 statusStr = this->getPausedStatusText();
                 m_statusLabelNetStats->hide();
