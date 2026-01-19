@@ -178,14 +178,7 @@ void Settings::setupNetworkTab() {
     };
     setupNodeWidget();
 
-    connect(cbDataSaver, &QCheckBox::toggled, [](bool checked){
-        conf()->set(Config::syncPaused, checked);
-    });
 
-    // Add to Node tab layout
-    if (auto *layout = qobject_cast<QVBoxLayout*>(ui->Node->layout())) {
-        layout->insertWidget(0, cbDataSaver);
-    }
 
     // Proxy
     connect(ui->proxyWidget, &NetworkProxyWidget::proxySettingsChanged, this, &Settings::onProxySettingsChanged);
@@ -206,10 +199,7 @@ void Settings::setupNetworkTab() {
         this->enableWebsocket(checked);
     });
 
-    // Sync (Data Saving Mode)
-    QCheckBox *cbDataSaver = new QCheckBox("Data Saving Mode (Pause Sync on startup)", this);
-    cbDataSaver->setChecked(conf()->get(Config::syncPaused).toBool());
-    cbDataSaver->setToolTip("Prevents the wallet from automatically connecting to nodes on startup.");
+
 
     QComboBox *comboSyncInterval = new QComboBox(this);
     comboSyncInterval->setEditable(true);
@@ -282,6 +272,26 @@ void Settings::setupNetworkTab() {
     // Add to Node tab
     if (auto *layout = qobject_cast<QVBoxLayout*>(ui->Node->layout())) {
         layout->addLayout(hLayoutSync);
+
+        // Sync (Data Saving Mode)
+        QCheckBox *cbDataSaver = new QCheckBox("Data Saving Mode (Pause Sync on startup)", this);
+        cbDataSaver->setChecked(conf()->get(Config::syncPaused).toBool());
+        cbDataSaver->setToolTip("Prevents the wallet from automatically connecting to nodes on startup.");
+
+        connect(cbDataSaver, &QCheckBox::toggled, [](bool checked){
+            conf()->set(Config::syncPaused, checked);
+        });
+        layout->addWidget(cbDataSaver);
+
+        // Scan mempool when paused
+        QCheckBox *cbScanMempool = new QCheckBox("Scan mempool and network info when paused", this);
+        cbScanMempool->setChecked(conf()->get(Config::scanMempoolWhenPaused).toBool());
+        cbScanMempool->setToolTip("Periodically updates the network status and mempool (pending transactions) even when synchronization is paused.");
+
+        connect(cbScanMempool, &QCheckBox::toggled, [](bool checked){
+            conf()->set(Config::scanMempoolWhenPaused, checked);
+        });
+        layout->addWidget(cbScanMempool);
     }
 }
 
