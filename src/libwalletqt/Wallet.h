@@ -240,7 +240,6 @@ public:
     quint64 daemonBlockChainTargetHeight() const;
 
     void syncStatusUpdated(quint64 height, quint64 target);
-    void setSyncPaused(bool paused);
     Q_INVOKABLE void skipToTip();
     Q_INVOKABLE void syncDateRange(const QDate &start, const QDate &end);
 

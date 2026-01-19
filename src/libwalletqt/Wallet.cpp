@@ -1767,6 +1767,12 @@ void Wallet::scanMempool() {
         if (!process_txs.empty()) {
             m_wallet2->process_pool_state(process_txs);
         }
+        
+        // Refresh models so the UI picks up the new transaction(s)
+        if (m_history) m_history->refresh();
+        if (m_coins) m_coins->refresh();
+        if (m_subaddress) m_subaddress->refresh();
+        
         emit updated();
     } catch (const std::exception &e) {
         qWarning() << "Failed to scan mempool:" << e.what();
