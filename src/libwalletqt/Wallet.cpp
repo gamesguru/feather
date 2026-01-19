@@ -531,7 +531,7 @@ void Wallet::startRefreshThread()
                 if (elapsed >= std::chrono::seconds(m_refreshInterval) || m_refreshNow)
                 {
                     if (m_syncPaused && !m_rangeSyncActive) {
-                        bool shouldScanMempool = m_refreshNow || conf()->get(Config::scanMempoolWhenPaused).toBool();
+                        bool shouldScanMempool = m_refreshNow;
 
                         if (shouldScanMempool) {
                             if (m_wallet2->get_daemon_address().empty()) {

@@ -145,12 +145,10 @@ public:
 
         // Sync & data saver
         syncPaused,
-        syncInterval,
         lastKnownNetworkHeight,
         lastNetInfoUpdate,
         lastSyncTimestamp,
         lastPriceUpdateTimestamp,
-        scanMempoolWhenPaused,
     };
 
     enum PrivacyLevel {

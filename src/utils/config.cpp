@@ -81,7 +81,6 @@ static const QHash<Config::ConfigKey, ConfigDirective> configStrings = {
         {Config::offlineMode, {QS("offlineMode"), false}},
         {Config::syncPaused, {QS("syncPaused"), false}},
 
-        {Config::syncInterval, {QS("syncInterval"), 30}},
         {Config::lastKnownNetworkHeight, {QS("lastKnownNetworkHeight"), 0}},
         {Config::lastSyncTimestamp, {QS("lastSyncTimestamp"), 0}},
         {Config::lastPriceUpdateTimestamp, {QS("lastPriceUpdateTimestamp"), 0}},
@@ -132,7 +131,6 @@ static const QHash<Config::ConfigKey, ConfigDirective> configStrings = {
         {Config::torManagedPort, {QS("torManagedPort"), "19450"}},
         {Config::useLocalTor, {QS("useLocalTor"), false}},
         {Config::initSyncThreshold, {QS("initSyncThreshold"), 360}},
-        {Config::scanMempoolWhenPaused, {QS("scanMempoolWhenPaused"), false}},
 
         {Config::enabledPlugins, {QS("enabledPlugins"), QStringList{"tickers", "crowdfunding", "revuo", "calc"}}},
         {Config::restartRequired, {QS("restartRequired"), false}},

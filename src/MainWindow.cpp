@@ -130,9 +130,6 @@ MainWindow::MainWindow(WindowManager *windowManager, Wallet *wallet, QWidget *pa
     conf()->set(Config::firstRun, false);
 
     connect(conf(), &Config::changed, this, [this](Config::ConfigKey key){
-        if (key == Config::syncInterval && m_wallet) {
-            m_wallet->setRefreshInterval(conf()->get(Config::syncInterval).toInt());
-        }
         if (key == Config::syncPaused) {
             this->setSyncPaused(conf()->get(Config::syncPaused).toBool());
         }
@@ -737,7 +734,7 @@ void MainWindow::onWalletOpened() {
 
     m_wallet->setRingDatabase(Utils::ringDatabasePath());
 
-    m_wallet->setRefreshInterval(conf()->get(Config::syncInterval).toInt());
+    m_wallet->setRefreshInterval(constants::defaultRefreshInterval);
 
     m_wallet->updateBalance();
     if (m_wallet->isHwBacked()) {
@@ -1024,7 +1021,7 @@ void MainWindow::onSyncStatus(quint64 height, quint64 target, bool daemonSync) {
 
     // Persist to global config (throttled to syncInterval)
     static QDateTime lastConfigSave = QDateTime::currentDateTime();
-    int interval = conf()->get(Config::syncInterval).toInt();
+    int interval = constants::defaultRefreshInterval;
     if (lastConfigSave.secsTo(QDateTime::currentDateTime()) > interval) {
         conf()->set(Config::lastNetInfoUpdate, static_cast<qulonglong>(m_lastNetInfoUpdate.toSecsSinceEpoch()));
         lastConfigSave = QDateTime::currentDateTime();
