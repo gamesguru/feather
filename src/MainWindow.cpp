@@ -1071,19 +1071,28 @@ void MainWindow::onSyncStatus(quint64 height, quint64 target, bool daemonSync) {
 void MainWindow::onConnectionStatusChanged(int status)
 {
     // Fix B: Override status when paused
+    // Only override if we aren't actively trying to connect/sync (e.g. from a user-initiated "Scan Now")
     if (conf()->get(Config::syncPaused).toBool()) {
-        QIcon icon = icons()->icon("status_offline.svg");
-        QString statusStr = this->getPausedStatusText();
+        bool idle = (status == Wallet::ConnectionStatus_Disconnected || status == Wallet::ConnectionStatus_Synchronized);
+        if (idle) {
+            QIcon icon;
+            if (conf()->get(Config::proxy).toInt() == Config::Proxy::Tor) {
+                icon = icons()->icon("status_idle_proxy.svg");
+            } else {
+                icon = icons()->icon("status_idle.svg");
+            }
+            QString statusStr = this->getPausedStatusText();
 
-        m_statusBtnConnectionStatusIndicator->setIcon(icon);
-        this->setStatusText(statusStr);
+            m_statusBtnConnectionStatusIndicator->setIcon(icon);
+            this->setStatusText(statusStr);
 
-        // Hide the "Net Stats" (D: 0.0 B) label since we aren't downloading
-        m_statusLabelNetStats->hide();
+            // Hide the "Net Stats" (D: 0.0 B) label since we aren't downloading
+            m_statusLabelNetStats->hide();
 
-        // Update tooltip to ensure it doesn't show "Synchronized"
-        this->updateSyncStatusToolTip();
-        return; // STOP EXECUTION HERE
+            // Update tooltip to ensure it doesn't show "Synchronized"
+            this->updateSyncStatusToolTip();
+            return;
+        }
     }
 
     // Note: Wallet does not emit this signal unless status is changed, so calling this function from MainWindow may
