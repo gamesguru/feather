@@ -706,7 +706,8 @@ void Wallet::skipToTip() {
     m_wallet2->set_refresh_from_block_height(target);
     m_lastSyncTime = QDateTime::currentDateTime();
 
-    pauseRefresh();
+    setConnectionStatus(ConnectionStatus_Synchronized);
+    startRefresh();
     emit syncStatus(target, target, true);
 }
 
@@ -731,7 +732,24 @@ void Wallet::syncDateRange(const QDate &start, const QDate &end) {
         m_rangeSyncActive = true;
         m_wallet2->set_refresh_from_block_height(startHeight);
     }
-    pauseRefresh();
+    setConnectionStatus(ConnectionStatus_Synchronizing);
+    startRefresh();
+}
+
+void Wallet::scanBlockRange(quint64 start, quint64 end) {
+    if (!m_wallet2) return;
+
+    // Minimal sanity checks
+    if (start >= end) return;
+
+    {
+        QMutexLocker locker(&m_asyncMutex);
+        m_stopHeight = end;
+        m_rangeSyncActive = true;
+        m_wallet2->set_refresh_from_block_height(start);
+    }
+
+    setConnectionStatus(ConnectionStatus_Synchronizing);
     startRefresh();
 }
 
@@ -760,7 +778,7 @@ void Wallet::fullSync() {
         m_wallet2->set_refresh_from_block_height(originalHeight);
     }
     // Trigger rescan
-    pauseRefresh();
+    setConnectionStatus(ConnectionStatus_Synchronizing);
     startRefresh();
 
     qInfo() << "Full Sync triggered. Rescanning from original restore height:" << originalHeight;

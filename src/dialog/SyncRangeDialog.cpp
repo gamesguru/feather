@@ -10,6 +10,7 @@
 #include <QSpinBox>
 #include <QDateEdit>
 #include <QLabel>
+#include <QTabWidget>
 #include <QDialogButtonBox>
 
 #include "utils/Utils.h"
@@ -25,7 +26,11 @@ SyncRangeDialog::SyncRangeDialog(QWidget *parent, Wallet *wallet)
     setWindowFlags(windowFlags() | Qt::MSWindowsFixedSizeDialogHint);
 
     auto *layout = new QVBoxLayout(this);
-    auto *formLayout = new QFormLayout;
+    m_tabWidget = new QTabWidget(this);
+
+    // --- Date Tab ---
+    m_dateTab = new QWidget;
+    auto *formLayout = new QFormLayout(m_dateTab);
     formLayout->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
 
     m_toDateEdit = new QDateEdit(QDate::currentDate());
@@ -61,16 +66,43 @@ SyncRangeDialog::SyncRangeDialog(QWidget *parent, Wallet *wallet)
     m_fromDateEdit->setDisplayFormat("yyyy-MM-dd");
     m_fromDateEdit->setToolTip(tr("Calculated from 'End date' and day span."));
 
-    m_infoLabel = new QLabel;
-    m_infoLabel->setWordWrap(true);
-    m_infoLabel->setStyleSheet("QLabel { color: #888; font-size: 11px; }");
-
     formLayout->addRow(tr("Day span:"), daysLayout);
     formLayout->addRow(tr("Start date:"), m_fromDateEdit);
     formLayout->addRow(tr("End date:"), m_toDateEdit);
 
-    layout->addLayout(formLayout);
+    m_tabWidget->addTab(m_dateTab, tr("Date Range"));
+
+    // --- Block Tab ---
+    m_blockTab = new QWidget;
+    auto *blockLayout = new QFormLayout(m_blockTab);
+
+    quint64 currentHeight = m_wallet->blockChainHeight();
+    quint64 daemonHeight = m_wallet->daemonBlockChainHeight();
+    quint64 targetHeight = (daemonHeight > 0) ? daemonHeight : currentHeight;
+
+    m_startHeightSpin = new QSpinBox;
+    m_startHeightSpin->setRange(0, 9999999);
+    m_startHeightSpin->setValue(std::max((quint64)0, targetHeight - 5040)); // Approx 7 days
+
+    m_endHeightSpin = new QSpinBox;
+    m_endHeightSpin->setRange(0, 9999999);
+    m_endHeightSpin->setValue(targetHeight);
+
+    blockLayout->addRow(tr("Start Height:"), m_startHeightSpin);
+    blockLayout->addRow(tr("End Height:"), m_endHeightSpin);
+
+    m_tabWidget->addTab(m_blockTab, tr("Block Height"));
+
+    m_infoLabel = new QLabel;
+    m_infoLabel->setWordWrap(true);
+    m_infoLabel->setStyleSheet("QLabel { color: #888; font-size: 11px; }");
+
+    layout->addWidget(m_tabWidget);
     layout->addWidget(m_infoLabel);
+
+    connect(m_tabWidget, &QTabWidget::currentChanged, this, &SyncRangeDialog::updateInfo);
+    connect(m_startHeightSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &SyncRangeDialog::updateInfo);
+    connect(m_endHeightSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &SyncRangeDialog::updateInfo);
 
     connect(m_fromDateEdit, &QDateEdit::dateChanged, this, &SyncRangeDialog::updateToDate);
     connect(m_toDateEdit, &QDateEdit::dateChanged, this, &SyncRangeDialog::updateFromDate);
@@ -116,26 +148,48 @@ quint64 SyncRangeDialog::estimatedSize() const {
     return m_estimatedSize;
 }
 
+quint64 SyncRangeDialog::startHeight() const {
+    return m_startHeightSpin->value();
+}
+
+quint64 SyncRangeDialog::endHeight() const {
+    return m_endHeightSpin->value();
+}
+
+SyncRangeDialog::Mode SyncRangeDialog::mode() const {
+    if (m_tabWidget->currentIndex() == 1) return Mode_Block;
+    return Mode_Date;
+}
+
 void SyncRangeDialog::updateInfo() {
-    NetworkType::Type nettype = m_wallet->nettype();
-    QString filename = Utils::getRestoreHeightFilename(nettype);
-    std::unique_ptr<RestoreHeightLookup> lookup(RestoreHeightLookup::fromFile(filename, nettype));
-    if (!lookup || lookup->data.isEmpty()) {
-        m_infoLabel->setText(tr("Unable to estimate - restore height data unavailable"));
-        m_estimatedBlocks = 0;
-        m_estimatedSize = 0;
-        return;
+    if (this->mode() == Mode_Block) {
+        quint64 start = m_startHeightSpin->value();
+        quint64 end = m_endHeightSpin->value();
+
+        m_estimatedBlocks = (end > start) ? (end - start) : 0;
+        m_estimatedSize = Utils::estimateSyncDataSize(m_estimatedBlocks);
+    } 
+    else {
+        NetworkType::Type nettype = m_wallet->nettype();
+        QString filename = Utils::getRestoreHeightFilename(nettype);
+        std::unique_ptr<RestoreHeightLookup> lookup(RestoreHeightLookup::fromFile(filename, nettype));
+        if (!lookup || lookup->data.isEmpty()) {
+            m_infoLabel->setText(tr("Unable to estimate - restore height data unavailable"));
+            m_estimatedBlocks = 0;
+            m_estimatedSize = 0;
+            return;
+        }
+
+        QDate start = m_fromDateEdit->date();
+        QDate end = m_toDateEdit->date();
+
+        uint64_t startHeight = lookup->dateToHeight(start.startOfDay().toSecsSinceEpoch());
+        uint64_t endHeight = lookup->dateToHeight(end.endOfDay().toSecsSinceEpoch());
+
+        if (endHeight < startHeight) endHeight = startHeight;
+        m_estimatedBlocks = endHeight - startHeight;
+        m_estimatedSize = Utils::estimateSyncDataSize(m_estimatedBlocks);
     }
-
-    QDate start = m_fromDateEdit->date();
-    QDate end = m_toDateEdit->date();
-
-    uint64_t startHeight = lookup->dateToHeight(start.startOfDay().toSecsSinceEpoch());
-    uint64_t endHeight = lookup->dateToHeight(end.endOfDay().toSecsSinceEpoch());
-
-    if (endHeight < startHeight) endHeight = startHeight;
-    m_estimatedBlocks = endHeight - startHeight;
-    m_estimatedSize = Utils::estimateSyncDataSize(m_estimatedBlocks);
 
     m_infoLabel->setText(tr("Scanning ~%1 blocks\nEst. download size: %2")
                            .arg(m_estimatedBlocks)
