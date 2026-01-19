@@ -240,10 +240,14 @@ public:
     quint64 daemonBlockChainTargetHeight() const;
 
     void syncStatusUpdated(quint64 height, quint64 target);
+    quint64 getUnlockTargetHeight() const;
     Q_INVOKABLE void skipToTip();
+    Q_INVOKABLE void startSmartSync(quint64 target = 0);
     Q_INVOKABLE void syncDateRange(const QDate &start, const QDate &end);
 
     void fullSync(); // Rescans from wallet creation height, not genesis block
+
+    Q_INVOKABLE void rescanBlockchainAsync();
 
     bool importTransaction(const QString &txid);
 
@@ -550,7 +554,8 @@ private:
     std::atomic<quint64> m_stopHeight{0};
     std::atomic<bool> m_rangeSyncActive{false};
     std::atomic<bool> m_syncPaused{false};
-    std::atomic<int64_t> m_lastRefreshTime{0};
+    std::atomic<bool> m_lastRefreshTime{0};
+    std::atomic<bool> m_pauseAfterSync{false};
     std::atomic<bool> m_refreshThreadStarted{false};
     std::atomic<bool> m_scanMempoolWhenPaused{false};
 };

@@ -3,6 +3,8 @@
 
 #include "Wallet.h"
 
+
+
 #include <chrono>
 #include <thread>
 #include <tuple>
@@ -607,7 +609,10 @@ void Wallet::startRefreshThread()
                         uint64_t blocks_fetched = 0;
                         bool received_money = false;
 
-                        m_wallet2->refresh(m_wallet2->is_trusted_daemon(), 0, blocks_fetched, received_money, true, true, max_blocks);
+                        // Ensure we respect the wallet creation height (restore height) if it's set higher than current
+                        uint64_t startHeight = std::max((uint64_t)walletHeight, m_wallet2->get_refresh_from_block_height());
+
+                        m_wallet2->refresh(m_wallet2->is_trusted_daemon(), startHeight, blocks_fetched, received_money, true, true, max_blocks);
 
                         if (m_walletImpl->blockChainHeight() >= m_stopHeight) {
                             m_rangeSyncActive = false;
@@ -748,6 +753,91 @@ void Wallet::skipToTip() {
     emit syncStatus(target, target, true);
 }
 
+quint64 Wallet::getUnlockTargetHeight() const {
+    if (!m_wallet2) return 0;
+
+    uint64_t current = blockChainHeight();
+    uint64_t target = 0;
+    
+    // Check incoming transfers (last 1000 blocks)
+    uint64_t min_height = (current > 1000) ? current - 1000 : 0;
+    uint64_t max_height = (uint64_t)-1;
+    
+    std::list<std::pair<crypto::hash, tools::wallet2::payment_details>> in_payments;
+    m_wallet2->get_payments(in_payments, min_height, max_height);
+    
+    for (const auto &p : in_payments) {
+        // Standard unlock time is block_height + 10
+        uint64_t unlock_height = p.second.m_block_height + 10;
+        // Explicit unlock_time override
+        if (p.second.m_unlock_time > 0) {
+             unlock_height = p.second.m_unlock_time;
+        }
+        
+        if (unlock_height > current) {
+             target = std::max(target, unlock_height);
+        }
+    }
+    
+    // Check outgoing transfers (change)
+    std::list<std::pair<crypto::hash, tools::wallet2::confirmed_transfer_details>> out_payments;
+    m_wallet2->get_payments_out(out_payments, min_height, max_height);
+    
+    for (const auto &p : out_payments) {
+         // Change is locked for 10 blocks
+         uint64_t unlock_height = p.second.m_block_height + 10;
+         if (unlock_height > current) {
+              target = std::max(target, unlock_height);
+         }
+    }
+    
+    return target;
+}
+
+void Wallet::startSmartSync(quint64 requestedTarget) {
+    if (!m_wallet2) return;
+
+    uint64_t tip = m_daemonBlockChainTargetHeight;
+    if (tip == 0) {
+        qWarning() << "Cannot start smart sync: Network target unknown. Connect first.";
+        return;
+    }
+
+    uint64_t current = blockChainHeight();
+    uint64_t target = tip;
+    uint64_t unlockTarget = getUnlockTargetHeight();
+    
+    // "Smart Sync": Only scan what is needed to unlock funds
+    if (requestedTarget > 0) {
+        target = std::min((uint64_t)requestedTarget, tip);
+        qInfo() << "Smart Sync: Scanning to requested target:" << target;
+    } else if (unlockTarget > current) {
+        // If we have locked funds, scan to their unlock height (clamped to tip)
+        target = std::min(unlockTarget, tip);
+        qInfo() << "Smart Sync: Scanning to unlock target:" << target;
+    } else {
+        // No locked funds.
+        if (tip > current) {
+             // Minimal connectivity check
+             target = std::min(current + 10, tip);
+             qInfo() << "Smart Sync: No locked funds. Scanning small buffer to:" << target;
+        } else {
+             qInfo() << "Smart Sync: Already at tip.";
+             return;
+        }
+    }
+
+    QMutexLocker locker(&m_asyncMutex);
+    m_stopHeight = target;
+    m_rangeSyncActive = true;
+    m_pauseAfterSync = true;
+    m_lastSyncTime = QDateTime::currentDateTime();
+
+    setConnectionStatus(ConnectionStatus_Synchronizing);
+    startRefresh(true);
+    emit syncStatus(target, target, true);
+}
+
 void Wallet::syncDateRange(const QDate &start, const QDate &end) {
     if (!m_wallet2)
         return;
@@ -810,7 +900,15 @@ void Wallet::syncStatusUpdated(quint64 height, quint64 targetHeight) {
     if (m_rangeSyncActive && height >= m_stopHeight) {
         // At end of requested date range, jump to tip
         m_rangeSyncActive = false;
-        this->skipToTip();
+        
+        if (m_pauseAfterSync) {
+             m_pauseAfterSync = false;
+             // We reached the tip via scan. Just go back to paused/idle.
+             setSyncPaused(true);
+        } else {
+             // Normal date range sync behavior: skip the rest
+             this->skipToTip();
+        }
         return;
     }
 
@@ -847,6 +945,8 @@ bool Wallet::importTransaction(const QString &txid) {
     }
     return false;
 }
+
+
 
 void Wallet::onNewBlock(uint64_t walletHeight) {
     if (m_syncPaused) {
@@ -893,6 +993,13 @@ void Wallet::onRefreshed(bool success, const QString &message) {
         // store wallet immediately upon finishing synchronization
         this->storeSafer();
     }
+}
+
+void Wallet::rescanBlockchainAsync() {
+    m_wallet2->rescan_blockchain();
+    // After rescan, the wallet's local height is reset to the refresh-from height.
+    // We trigger a refresh to update the UI state.
+    this->refresh();
 }
 
 void Wallet::refreshModels() {

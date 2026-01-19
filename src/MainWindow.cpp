@@ -253,6 +253,9 @@ void MainWindow::initStatusBar() {
     QAction *syncRangeAction = new QAction(tr("Sync Date Range..."), this);
     m_statusLabelStatus->addAction(syncRangeAction);
 
+    QAction *scanToTipAction = new QAction(tr("Sync Unconfirmed"), this);
+    m_statusLabelStatus->addAction(scanToTipAction);
+
     QAction *fullSyncAction = new QAction(tr("Full Sync"), this);
     m_statusLabelStatus->addAction(fullSyncAction);
 
@@ -293,6 +296,19 @@ void MainWindow::initStatusBar() {
                                 .arg(dialog.toDate().toString("yyyy-MM-dd"))
                                 .arg(QLocale().toString(dialog.estimatedBlocks()))
                                 .arg(Utils::formatBytes(dialog.estimatedSize())));
+        }
+    });
+
+    connect(scanToTipAction, &QAction::triggered, this, [this](){
+        if (!m_wallet) return;
+
+        QString msg = tr("Sync Unconfirmed (Smart Sync) will scan only the specific blocks required to unlock your pending funds (e.g. 10 confirmations).\n\n"
+                          "This minimizes data usage by pausing immediately after verification.\n\n"
+                          "Continue?");
+
+        if (QMessageBox::question(this, tr("Sync Unconfirmed"), msg) == QMessageBox::Yes) {
+            m_wallet->startSmartSync();
+            this->setStatusText(tr("Scanning to tip..."));
         }
     });
 
