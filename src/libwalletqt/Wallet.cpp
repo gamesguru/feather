@@ -1764,14 +1764,14 @@ void Wallet::scanMempool() {
     try {
         std::vector<std::tuple<cryptonote::transaction, crypto::hash, bool>> process_txs;
         m_wallet2->update_pool_state(process_txs, false, false);
-        if (!process_txs.empty()) {
-            m_wallet2->process_pool_state(process_txs);
-        }
-        
         // Refresh models so the UI picks up the new transaction(s)
-        if (m_history) m_history->refresh();
-        if (m_coins) m_coins->refresh();
-        if (m_subaddress) m_subaddress->refresh();
+        // We invoke this on the main thread to ensure signals (beginResetModel) are processed synchronously
+        // with the data update, preventing race conditions or ignored updates in the view.
+        QMetaObject::invokeMethod(this, [this]{
+            if (m_history) m_history->refresh();
+            if (m_coins) m_coins->refresh();
+            if (m_subaddress) m_subaddress->refresh();
+        }, Qt::QueuedConnection);
         
         emit updated();
     } catch (const std::exception &e) {
