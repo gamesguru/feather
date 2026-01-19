@@ -482,10 +482,12 @@ void Wallet::initAsync(const QString &daemonAddress, bool trustedDaemon, quint64
 
 // #################### Synchronization (Refresh) ####################
 
-void Wallet::startRefresh() {
+void Wallet::startRefresh(bool force) {
     startRefreshThread();
     m_refreshEnabled = true;
-    m_refreshNow = true;
+    if (force || !m_syncPaused) {
+        m_refreshNow = true;
+    }
 }
 
 void Wallet::pauseRefresh() {
@@ -697,9 +699,8 @@ void Wallet::setSyncPaused(bool paused) {
     if (paused) {
         pauseRefresh();
     } else {
-        m_refreshNow = true;
         m_wallet2->set_offline(false);
-        startRefresh();
+        startRefresh(true);
     }
 }
 
@@ -727,7 +728,7 @@ void Wallet::skipToTip() {
     m_lastSyncTime = QDateTime::currentDateTime();
 
     setConnectionStatus(ConnectionStatus_Synchronized);
-    startRefresh();
+    startRefresh(true);
     emit syncStatus(target, target, true);
 }
 
@@ -753,7 +754,7 @@ void Wallet::syncDateRange(const QDate &start, const QDate &end) {
         m_wallet2->set_refresh_from_block_height(startHeight);
     }
     setConnectionStatus(ConnectionStatus_Synchronizing);
-    startRefresh();
+    startRefresh(true);
 }
 
 
@@ -784,7 +785,7 @@ void Wallet::fullSync() {
     }
     // Trigger rescan
     setConnectionStatus(ConnectionStatus_Synchronizing);
-    startRefresh();
+    startRefresh(true);
 
     qInfo() << "Full Sync triggered. Rescanning from original restore height:" << originalHeight;
 }

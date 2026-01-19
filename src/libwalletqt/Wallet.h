@@ -221,7 +221,7 @@ public:
                    const QString &proxyAddress = "");
 
     // ##### Synchronization (Refresh) #####
-    void startRefresh();
+    void startRefresh(bool force = false);
     void pauseRefresh();
     Q_INVOKABLE void updateNetworkStatus();
 

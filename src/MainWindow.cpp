@@ -615,7 +615,7 @@ void MainWindow::initOffline() {
         }
         
         // Trigger the refresh (sets m_refreshNow = true, bypassing the pause check)
-        m_wallet->startRefresh();
+        m_wallet->startRefresh(true);
     });
 
 
