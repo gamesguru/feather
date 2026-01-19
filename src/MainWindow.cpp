@@ -262,7 +262,7 @@ void MainWindow::initStatusBar() {
     QAction *scanTxAction = new QAction(tr("Import Transaction"), this);
     m_statusLabelStatus->addAction(scanTxAction);
 
-    m_updateNetworkInfoAction = new QAction(tr("Scan Mempool & Get Network Info"), this);
+    m_updateNetworkInfoAction = new QAction(tr("Scan Mempool/Get Network Info"), this);
     m_statusLabelStatus->addAction(m_updateNetworkInfoAction);
 
     connect(m_actionPauseSync, &QAction::toggled, this, [this](bool checked) {
@@ -1070,31 +1070,6 @@ void MainWindow::onSyncStatus(quint64 height, quint64 target, bool daemonSync) {
 
 void MainWindow::onConnectionStatusChanged(int status)
 {
-    // Fix B: Override status when paused
-    // Only override if we aren't actively trying to connect/sync (e.g. from a user-initiated "Scan Now")
-    if (conf()->get(Config::syncPaused).toBool()) {
-        bool idle = (status == Wallet::ConnectionStatus_Disconnected || status == Wallet::ConnectionStatus_Synchronized);
-        if (idle) {
-            QIcon icon;
-            if (conf()->get(Config::proxy).toInt() == Config::Proxy::Tor) {
-                icon = icons()->icon("status_idle_proxy.svg");
-            } else {
-                icon = icons()->icon("status_idle.svg");
-            }
-            QString statusStr = this->getPausedStatusText();
-
-            m_statusBtnConnectionStatusIndicator->setIcon(icon);
-            this->setStatusText(statusStr);
-
-            // Hide the "Net Stats" (D: 0.0 B) label since we aren't downloading
-            m_statusLabelNetStats->hide();
-
-            // Update tooltip to ensure it doesn't show "Synchronized"
-            this->updateSyncStatusToolTip();
-            return;
-        }
-    }
-
     // Note: Wallet does not emit this signal unless status is changed, so calling this function from MainWindow may
     // result in the wrong connection status being displayed.
 
@@ -1113,6 +1088,17 @@ void MainWindow::onConnectionStatusChanged(int status)
         statusStr = "Offline mode";
     } else {
         switch(status){
+            case Wallet::ConnectionStatus_Idle:
+            {
+                if (conf()->get(Config::proxy).toInt() == Config::Proxy::Tor) {
+                    icon = icons()->icon("status_idle_proxy.svg");
+                } else {
+                    icon = icons()->icon("status_idle.svg");
+                }
+                statusStr = this->getPausedStatusText();
+                m_statusLabelNetStats->hide();
+                break;
+            }
             case Wallet::ConnectionStatus_Disconnected:
             {
                 icon = icons()->icon("status_offline.svg");
@@ -1989,12 +1975,8 @@ void MainWindow::updateNetStats() {
 
         if (m_wallet && m_wallet->connectionStatus() == Wallet::ConnectionStatus_Synchronized) {
              qint64 seconds = m_wallet->secondsUntilNextRefresh();
-             if (seconds > 0) {
-                 QString timeStr;
-                 if (seconds > 60) timeStr = QString("%1 min").arg((seconds + 59) / 60);
-                 else timeStr = QString("%1s").arg(seconds);
-                 this->setStatusText(QString("Synchronized (Sync in %1)").arg(timeStr));
-             }
+             this->setStatusText(tr("Synchronized"));
+             // if (seconds > 0) { ... } // Removed countdown display per user feedback
         }
         else if (m_wallet && m_wallet->connectionStatus() == Wallet::ConnectionStatus_Disconnected) {
              qint64 seconds = m_wallet->secondsUntilNextRefresh();
@@ -2018,6 +2000,10 @@ void MainWindow::updateNetStats() {
         m_statusLabelNetStats->hide();
         this->setStatusText(this->getPausedStatusText());
         return;
+    }
+
+    if (m_wallet && m_wallet->connectionStatus() == Wallet::ConnectionStatus_Synchronized) {
+        this->setStatusText(tr("Synchronized"));
     }
 
     m_statusLabelNetStats->show();

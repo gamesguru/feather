@@ -112,7 +112,8 @@ public:
         ConnectionStatus_WrongVersion    = 2,
         ConnectionStatus_Connecting = 9,
         ConnectionStatus_Synchronizing = 10,
-        ConnectionStatus_Synchronized = 11
+        ConnectionStatus_Synchronized = 11,
+        ConnectionStatus_Idle = 12
     };
 
     Q_ENUM(ConnectionStatus)
