@@ -262,7 +262,7 @@ void MainWindow::initStatusBar() {
     QAction *scanTxAction = new QAction(tr("Import Transaction"), this);
     m_statusLabelStatus->addAction(scanTxAction);
 
-    m_updateNetworkInfoAction = new QAction(tr("Scan Mempool/Get Network Info"), this);
+    m_updateNetworkInfoAction = new QAction(tr("Scan Mempool"), this);
     m_statusLabelStatus->addAction(m_updateNetworkInfoAction);
 
     connect(m_actionPauseSync, &QAction::toggled, this, [this](bool checked) {
