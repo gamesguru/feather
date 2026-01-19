@@ -167,14 +167,14 @@ void SendWidget::sendClicked() {
         }
     }
 
-    if (!m_wallet->isConnected()) {
+    if (!m_wallet->isConnected() && !conf()->get(Config::syncPaused).toBool()) {
         Utils::showError(this, "Unable to create transaction", "Wallet is not connected to a node.",
                          {"Wait for the wallet to automatically connect to a node.", "Go to File -> Settings -> Network -> Node to manually connect to a node."},
                          "nodes");
         return;
     }
 
-    if (!m_wallet->isSynchronized()) {
+    if (!m_wallet->isSynchronized() && !conf()->get(Config::syncPaused).toBool()) {
         Utils::showError(this, "Unable to create transaction", "Wallet is not synchronized", {"Wait for wallet synchronization to complete"}, "synchronization");
         return;
     }
