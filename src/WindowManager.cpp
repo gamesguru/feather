@@ -213,6 +213,11 @@ void WindowManager::raise() {
         m_wizard->raise();
         m_wizard->activateWindow();
     }
+    else if (m_openingWallet && m_splashDialog) {
+        m_splashDialog->show();
+        m_splashDialog->raise();
+        m_splashDialog->activateWindow();
+    }
     else {
         // This shouldn't happen
         this->close();
@@ -317,6 +322,8 @@ void WindowManager::tryOpenWallet(const QString &path, const QString &password) 
     }
 
     m_openingWallet = true;
+    m_splashDialog->setMessage("Opening wallet...");
+    m_splashDialog->show();
     m_walletManager->openWalletAsync(path, password, constants::networkType, constants::kdfRounds, Utils::ringDatabasePath());
 }
 
