@@ -659,7 +659,7 @@ void Nodes::onConnectionStatusChanged(int status) {
             qInfo() << "Nodes: Wallet disconnected unexpectedly, triggering auto-connect to new node.";
             // Fix J: Mark connection as inactive so autoConnect treats it as a failure, not a transient disconnect
             m_connection.isActive = false;
-            QTimer::singleShot(1000, [this]{
+            QTimer::singleShot(1000, this, [this]{
                 this->autoConnect(false);
             });
         }

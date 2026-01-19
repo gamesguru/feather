@@ -47,7 +47,7 @@ void WalletKeysFilesModel::clear() {
 void WalletKeysFilesModel::refresh() {
     this->clear();
     this->findWallets();
-    endResetModel();
+
 }
 
 void WalletKeysFilesModel::updateDirectories() {
