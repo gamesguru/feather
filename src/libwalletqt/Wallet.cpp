@@ -530,7 +530,7 @@ void Wallet::startRefreshThread()
                 const auto elapsed = now - last;
                 if (elapsed >= std::chrono::seconds(m_refreshInterval) || m_refreshNow)
                 {
-                    if (m_syncPaused) {
+                    if (m_syncPaused && !m_rangeSyncActive) {
                         bool shouldScanMempool = m_refreshNow || conf()->get(Config::scanMempoolWhenPaused).toBool();
 
                         if (shouldScanMempool) {
@@ -598,9 +598,25 @@ void Wallet::startRefreshThread()
                             m_newWallet = false;
                         }
 
-                        quint64 walletHeight = m_walletImpl->blockChainHeight();
+                    quint64 walletHeight = m_walletImpl->blockChainHeight();
+
+                    if (m_rangeSyncActive) {
+                        uint64_t max_blocks = (m_stopHeight > walletHeight) ? (m_stopHeight - walletHeight) : 1;
+                        uint64_t blocks_fetched = 0;
+                        bool received_money = false;
+
+                        m_wallet2->refresh(m_wallet2->is_trusted_daemon(), 0, blocks_fetched, received_money, true, true, max_blocks);
+
+                        if (m_walletImpl->blockChainHeight() >= m_stopHeight) {
+                            m_rangeSyncActive = false;
+                            if (m_syncPaused) {
+                                setConnectionStatus(ConnectionStatus_Idle);
+                            }
+                        }
+                    } else {
                         m_walletImpl->refresh();
                     }
+                }
                 }
             }
 
@@ -627,7 +643,9 @@ void Wallet::onHeightsRefreshed(bool success, quint64 daemonHeight, quint64 targ
             emit syncStatus(daemonHeight, targetHeight, false);
         }
 
-        if (walletHeight < targetHeight) {
+        if (m_syncPaused && !m_rangeSyncActive) {
+            setConnectionStatus(ConnectionStatus_Idle);
+        } else if (walletHeight < targetHeight) {
             setConnectionStatus(ConnectionStatus_Synchronizing);
         } else {
             setConnectionStatus(ConnectionStatus_Synchronized);
@@ -703,6 +721,8 @@ void Wallet::skipToTip() {
     }
 
     QMutexLocker locker(&m_asyncMutex);
+    m_stopHeight = target;
+    m_rangeSyncActive = true;
     m_wallet2->set_refresh_from_block_height(target);
     m_lastSyncTime = QDateTime::currentDateTime();
 
@@ -736,22 +756,7 @@ void Wallet::syncDateRange(const QDate &start, const QDate &end) {
     startRefresh();
 }
 
-void Wallet::scanBlockRange(quint64 start, quint64 end) {
-    if (!m_wallet2) return;
 
-    // Minimal sanity checks
-    if (start >= end) return;
-
-    {
-        QMutexLocker locker(&m_asyncMutex);
-        m_stopHeight = end;
-        m_rangeSyncActive = true;
-        m_wallet2->set_refresh_from_block_height(start);
-    }
-
-    setConnectionStatus(ConnectionStatus_Synchronizing);
-    startRefresh();
-}
 
 void Wallet::fullSync() {
     if (!m_wallet2)

@@ -239,7 +239,7 @@ public:
     void setSyncPaused(bool paused);
     Q_INVOKABLE void skipToTip();
     Q_INVOKABLE void syncDateRange(const QDate &start, const QDate &end);
-    Q_INVOKABLE void scanBlockRange(quint64 start, quint64 end);
+
     void fullSync(); // Rescans from wallet creation height, not genesis block
 
     bool importTransaction(const QString &txid);

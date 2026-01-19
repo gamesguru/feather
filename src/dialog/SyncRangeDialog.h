@@ -13,7 +13,6 @@ class QComboBox;
 class QSpinBox;
 class QDateEdit;
 class QLabel;
-class QTabWidget;
 
 class SyncRangeDialog : public QDialog
 {
@@ -23,18 +22,10 @@ public:
     explicit SyncRangeDialog(QWidget *parent, Wallet *wallet);
     ~SyncRangeDialog() override = default;
 
-    enum Mode {
-        Mode_Date,
-        Mode_Block
-    };
-
     QDate fromDate() const;
     QDate toDate() const;
-    quint64 startHeight() const;
-    quint64 endHeight() const;
     quint64 estimatedBlocks() const;
     quint64 estimatedSize() const;
-    Mode mode() const;
 
 private:
     void updateInfo();
@@ -42,19 +33,12 @@ private:
     void updateToDate();
 
     Wallet *m_wallet;
-    QTabWidget *m_tabWidget;
-    QWidget *m_dateTab;
-    QWidget *m_blockTab;
 
     // Date/Time
     QComboBox *m_presetCombo;
     QSpinBox *m_daysSpinBox;
     QDateEdit *m_fromDateEdit;
     QDateEdit *m_toDateEdit;
-
-    // Blocks
-    QSpinBox *m_startHeightSpin;
-    QSpinBox *m_endHeightSpin;
 
     QLabel *m_infoLabel;
 

@@ -199,79 +199,8 @@ void Settings::setupNetworkTab() {
         this->enableWebsocket(checked);
     });
 
-
-
-    QComboBox *comboSyncInterval = new QComboBox(this);
-    comboSyncInterval->setEditable(true);
-
-    struct IntervalPreset {
-        QString label;
-        int seconds;
-    };
-
-    QList<IntervalPreset> presets = {
-        {"30 seconds", 30},
-        {"1 minute",   60},
-        {"2 minutes",  120},
-        {"5 minutes",  300},
-        {"10 minutes", 600},
-        {"15 minutes", 900},
-        {"20 minutes", 1200},
-        {"30 minutes", 1800},
-        {"45 minutes", 2700},
-        {"1 hour",     3600},
-        {"1.5 hours",  5400},
-        {"3 hours",    10800},
-        {"5 hours",    18000},
-        {"10 hours",   36000},
-        {"1 day",      86400},
-        {"1 week",     604800},
-        {"1 month",    2592000}
-    };
-
-    for (const auto &preset : presets) {
-        comboSyncInterval->addItem(preset.label, preset.seconds);
-    }
-
-    int currentInterval = conf()->get(Config::syncInterval).toInt();
-    bool found = false;
-    for (int i = 0; i < comboSyncInterval->count(); ++i) {
-        if (comboSyncInterval->itemData(i).toInt() == currentInterval) {
-            comboSyncInterval->setCurrentIndex(i);
-            found = true;
-            break;
-        }
-    }
-    if (!found) {
-        comboSyncInterval->setCurrentText(QString("%1 seconds").arg(currentInterval));
-    }
-
-    auto updateConfig = [comboSyncInterval](const QString &text){
-        int seconds = 0;
-        if (comboSyncInterval->currentIndex() != -1 && comboSyncInterval->currentText() == comboSyncInterval->itemText(comboSyncInterval->currentIndex())) {
-            seconds = comboSyncInterval->currentData().toInt();
-        } else {
-            // Try to parse simple number as seconds
-            bool ok;
-            seconds = text.split(" ").first().toInt(&ok);
-            if (!ok) return;
-        }
-        if (seconds < 30) {
-            seconds = 30;
-        }
-        conf()->set(Config::syncInterval, seconds);
-    };
-
-    connect(comboSyncInterval, &QComboBox::currentTextChanged, updateConfig);
-
-    QHBoxLayout *hLayoutSync = new QHBoxLayout();
-    hLayoutSync->addWidget(new QLabel("Time between syncs:", this));
-    hLayoutSync->addWidget(comboSyncInterval);
-    hLayoutSync->addStretch();
-
     // Add to Node tab
     if (auto *layout = qobject_cast<QVBoxLayout*>(ui->Node->layout())) {
-        layout->addLayout(hLayoutSync);
 
         // Sync (Data Saving Mode)
         QCheckBox *cbDataSaver = new QCheckBox("Data Saving Mode (Pause Sync on startup)", this);
@@ -282,16 +211,6 @@ void Settings::setupNetworkTab() {
             conf()->set(Config::syncPaused, checked);
         });
         layout->addWidget(cbDataSaver);
-
-        // Scan mempool when paused
-        QCheckBox *cbScanMempool = new QCheckBox("Scan mempool and network info when paused", this);
-        cbScanMempool->setChecked(conf()->get(Config::scanMempoolWhenPaused).toBool());
-        cbScanMempool->setToolTip("Periodically updates the network status and mempool (pending transactions) even when synchronization is paused.");
-
-        connect(cbScanMempool, &QCheckBox::toggled, [](bool checked){
-            conf()->set(Config::scanMempoolWhenPaused, checked);
-        });
-        layout->addWidget(cbScanMempool);
     }
 }
 
