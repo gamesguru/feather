@@ -754,8 +754,10 @@ void Wallet::skipToTip() {
     m_wallet2->set_refresh_from_block_height(target);
     m_lastSyncTime = QDateTime::currentDateTime().toMSecsSinceEpoch();
 
-    setConnectionStatus(ConnectionStatus_Synchronized);
-    startRefresh(true);
+    if (!m_syncPaused) {
+        setConnectionStatus(ConnectionStatus_Synchronized);
+        startRefresh(true);
+    }
     emit syncStatus(target, target, true);
 }
 

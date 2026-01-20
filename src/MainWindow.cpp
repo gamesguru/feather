@@ -276,7 +276,13 @@ void MainWindow::initStatusBar() {
         QString msg = tr("Skip sync will set your wallet's restore height to the current network height.\n\n"
                           "Use this if you know you haven't received any transactions since your last sync.\n"
                           "You can always use 'Full Sync' to rescan from the beginning.\n\n"
+                          "Note: This process could take 30 seconds or more.\n\n"
                           "Continue?");
+
+        if (m_wallet->daemonBlockChainTargetHeight() == 0) {
+            Utils::showError(this, tr("Skip Sync"), tr("Cannot skip to tip: unknown network target height.\nPlease wait for the wallet to connect to a daemon."));
+            return;
+        }
 
         if (QMessageBox::question(this, tr("Skip Sync"), msg) == QMessageBox::Yes) {
             m_wallet->skipToTip();
