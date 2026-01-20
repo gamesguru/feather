@@ -50,6 +50,7 @@ Wallet::Wallet(Monero::Wallet *wallet, QObject *parent)
         , m_addressBookModel(nullptr)
         , m_daemonBlockChainHeight(0)
         , m_daemonBlockChainTargetHeight(0)
+        , m_lastSyncTime(0)
         , m_connectionStatus(Wallet::ConnectionStatus_Disconnected)
         , m_currentSubaddressAccount(0)
         , m_subaddress(new Subaddress(this, wallet->getWallet(), this))
@@ -61,7 +62,6 @@ Wallet::Wallet(Monero::Wallet *wallet, QObject *parent)
         , m_coins(new Coins(this, wallet->getWallet(), this))
         , m_storeTimer(new QTimer(this))
         , m_lastRefreshTime(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count())
-        , m_lastSyncTime(0)
 {
     m_walletListener = new WalletListenerImpl(this);
     m_walletImpl->setListener(m_walletListener);
@@ -117,16 +117,16 @@ Wallet::Status Wallet::status() const {
 }
 
 Wallet::ConnectionStatus Wallet::connectionStatus() const {
-    return m_connectionStatus;
+    return static_cast<ConnectionStatus>(m_connectionStatus.load());
 }
 
 void Wallet::setConnectionStatus(ConnectionStatus value) {
-    if (m_connectionStatus == value) {
+    if (m_connectionStatus.load() == value) {
         return;
     }
 
-    m_connectionStatus = value;
-    emit connectionStatusChanged(m_connectionStatus);
+    m_connectionStatus.store(value);
+    emit connectionStatusChanged(static_cast<ConnectionStatus>(m_connectionStatus.load()));
 }
 
 bool Wallet::isSynchronized() const {
@@ -729,9 +729,10 @@ void Wallet::setScanMempoolWhenPaused(bool enabled) {
 }
 
 QDateTime Wallet::lastSyncTime() const {
-    if (m_lastSyncTime == 0)
+    qint64 syncTime = m_lastSyncTime.load();
+    if (syncTime == 0)
         return QDateTime();
-    return QDateTime::fromMSecsSinceEpoch(m_lastSyncTime);
+    return QDateTime::fromMSecsSinceEpoch(syncTime);
 }
 
 void Wallet::setRefreshInterval(int seconds) {

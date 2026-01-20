@@ -520,7 +520,7 @@ private:
     std::atomic<quint64> m_daemonBlockChainTargetHeight;
     std::atomic<qint64> m_lastSyncTime;
 
-    ConnectionStatus m_connectionStatus;
+    std::atomic<int> m_connectionStatus;
 
     uint32_t m_currentSubaddressAccount;
     Subaddress *m_subaddress;
