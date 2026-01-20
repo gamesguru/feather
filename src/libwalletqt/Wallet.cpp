@@ -603,28 +603,28 @@ void Wallet::startRefreshThread()
                             m_newWallet = false;
                         }
 
-                    quint64 walletHeight = m_walletImpl->blockChainHeight();
+                        quint64 walletHeight = m_walletImpl->blockChainHeight();
 
-                    if (m_rangeSyncActive) {
-                        uint64_t max_blocks = (m_stopHeight > walletHeight) ? (m_stopHeight - walletHeight) : 1;
-                        uint64_t blocks_fetched = 0;
-                        bool received_money = false;
+                        if (m_rangeSyncActive) {
+                            uint64_t max_blocks = (m_stopHeight > walletHeight) ? (m_stopHeight - walletHeight) : 1;
+                            uint64_t blocks_fetched = 0;
+                            bool received_money = false;
 
-                        // Ensure we respect the wallet creation height (restore height) if it's set higher than current
-                        uint64_t startHeight = std::max((uint64_t)walletHeight, m_wallet2->get_refresh_from_block_height());
+                            // Ensure we respect the wallet creation height (restore height) if it's set higher than current
+                            uint64_t startHeight = std::max((uint64_t)walletHeight, m_wallet2->get_refresh_from_block_height());
 
-                        m_wallet2->refresh(m_wallet2->is_trusted_daemon(), startHeight, blocks_fetched, received_money, true, true, max_blocks);
+                            m_wallet2->refresh(m_wallet2->is_trusted_daemon(), startHeight, blocks_fetched, received_money, true, true, max_blocks);
 
-                        if (m_walletImpl->blockChainHeight() >= m_stopHeight) {
-                            m_rangeSyncActive = false;
-                            if (m_syncPaused) {
-                                setConnectionStatus(ConnectionStatus_Idle);
+                            if (m_walletImpl->blockChainHeight() >= m_stopHeight) {
+                                m_rangeSyncActive = false;
+                                if (m_syncPaused) {
+                                    setConnectionStatus(ConnectionStatus_Idle);
+                                }
                             }
+                        } else {
+                            m_walletImpl->refresh();
                         }
-                    } else {
-                        m_walletImpl->refresh();
                     }
-                }
                 }
             }
 
