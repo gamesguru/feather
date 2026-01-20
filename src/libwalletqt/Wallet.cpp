@@ -996,10 +996,8 @@ void Wallet::onRefreshed(bool success, const QString &message) {
 }
 
 void Wallet::rescanBlockchainAsync() {
-    m_wallet2->rescan_blockchain();
+    m_wallet2->rescan_blockchain(false, false, false);
     // After rescan, the wallet's local height is reset to the refresh-from height.
-    // We trigger a refresh to update the UI state.
-    this->refresh();
 }
 
 void Wallet::refreshModels() {
