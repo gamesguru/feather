@@ -248,7 +248,6 @@ public:
     void fullSync(); // Rescans from wallet creation height, not genesis block
 
     Q_INVOKABLE void rescanBlockchainAsync();
-
     bool importTransaction(const QString &txid);
 
     void refreshModels();
