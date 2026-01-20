@@ -48,7 +48,8 @@ private:
         TxID = 0,
         Description,
         Date,
-        Amount
+        Amount,
+        JSON
     };
 
     void copy(copyField field);

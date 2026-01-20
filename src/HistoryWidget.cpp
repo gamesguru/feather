@@ -15,6 +15,11 @@
 #include "utils/Icons.h"
 #include "WebsocketNotifier.h"
 
+#include <QClipboard>
+#include <QJsonObject>
+#include <QJsonDocument>
+#include <QJsonArray>
+
 HistoryWidget::HistoryWidget(Wallet *wallet, QWidget *parent)
         : QWidget(parent)
         , ui(new Ui::HistoryWidget)
@@ -33,6 +38,7 @@ HistoryWidget::HistoryWidget(Wallet *wallet, QWidget *parent)
     m_copyMenu->addAction("Date", this, [this]{copy(copyField::Date);});
     m_copyMenu->addAction("Description", this, [this]{copy(copyField::Description);});
     m_copyMenu->addAction("Amount", this, [this]{copy(copyField::Amount);});
+    m_copyMenu->addAction("Row as JSON", this, [this]{copy(copyField::JSON);});
 
     ui->history->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(ui->history, &QTreeView::customContextMenuRequested, this, &HistoryWidget::showContextMenu);
@@ -204,6 +210,30 @@ void HistoryWidget::copy(copyField field) {
                                                                      conf()->get(Config::timeFormat).toString()));
             case copyField::Amount:
                 return WalletManager::displayAmount(abs(tx.balanceDelta));
+            case copyField::JSON: {
+                QJsonObject obj;
+                obj.insert("txid", tx.hash);
+                obj.insert("amount", static_cast<double>(tx.amount));
+                obj.insert("fee", static_cast<double>(tx.fee));
+                obj.insert("height", static_cast<double>(tx.blockHeight));
+                obj.insert("timestamp", tx.timestamp.toSecsSinceEpoch());
+                obj.insert("direction", tx.direction == TransactionRow::Direction_In ? "in" : "out");
+                obj.insert("payment_id", tx.paymentId);
+                obj.insert("description", tx.description);
+                obj.insert("confirmations", static_cast<double>(tx.confirmations));
+                obj.insert("failed", tx.failed);
+                obj.insert("pending", tx.pending);
+                obj.insert("coinbase", tx.coinbase);
+                obj.insert("label", tx.label);
+
+                QJsonArray subaddrIndices;
+                for (const auto &idx : tx.subaddrIndex) subaddrIndices.append(static_cast<int>(idx));
+                obj.insert("subaddr_index", subaddrIndices);
+                obj.insert("subaddr_account", static_cast<int>(tx.subaddrAccount));
+
+                QJsonDocument doc(obj);
+                return QString::fromUtf8(doc.toJson(QJsonDocument::Indented));
+            }
             default:
                 return QString("");
         }

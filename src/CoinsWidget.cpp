@@ -10,6 +10,7 @@
 #include "dialog/OutputSweepDialog.h"
 #include "utils/Icons.h"
 #include "utils/Utils.h"
+#include "utils/config.h"
 
 #ifdef WITH_SCANNER
 #include "wizard/offline_tx_signing/OfflineTxSigningWizard.h"
@@ -222,14 +223,14 @@ void CoinsWidget::viewOutput() {
 }
 
 void CoinsWidget::onSweepOutputs() {
-    if (!m_wallet->isConnected()) {
+    if (!m_wallet->isConnected() && !conf()->get(Config::syncPaused).toBool()) {
         Utils::showError(this, "Unable to create transaction", "Wallet is not connected to a node.",
                          {"Wait for the wallet to automatically connect to a node.", "Go to File -> Settings -> Network -> Node to manually connect to a node."},
                          "nodes");
         return;
     }
 
-    if (!m_wallet->isSynchronized()) {
+    if (!m_wallet->isSynchronized() && !conf()->get(Config::syncPaused).toBool()) {
         Utils::showError(this, "Unable to create transaction", "Wallet is not synchronized", {"Wait for wallet synchronization to complete"}, "synchronization");
         return;
     }

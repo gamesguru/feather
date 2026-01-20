@@ -2,6 +2,9 @@
 // SPDX-FileCopyrightText: The Monero Project
 
 #include <QSslSocket>
+#include <iostream>
+#include <QIcon>
+#include <QGuiApplication>
 
 #include "Application.h"
 #include "constants.h"
@@ -83,10 +86,32 @@ if (AttachConsole(ATTACH_PARENT_PROCESS)) {
     QApplication::setHighDpiScaleFactorRoundingPolicy(Qt::HighDpiScaleFactorRoundingPolicy::Round);
 #endif
 
+    for (int i = 1; i < argc; i++) {
+        if (QString(argv[i]) == "--version" || QString(argv[i]) == "-v") {
+#ifdef FEATHER_BUILD_TAG
+            QString buildTag = QString(FEATHER_BUILD_TAG).replace("\"", "");
+            QString versionTag = QString(FEATHER_VERSION) + "-";
+            if (buildTag.startsWith(versionTag)) {
+                buildTag.remove(0, versionTag.length());
+            }
+            std::cout << "Feather Wallet " << FEATHER_VERSION << " (build " << buildTag.toStdString() << ")" << std::endl;
+#else
+            std::cout << "Feather Wallet " << FEATHER_VERSION << std::endl;
+#endif
+            return 0;
+        }
+    }
+
     Application app(argc, argv);
 
     QApplication::setApplicationName("FeatherWallet");
     QApplication::setApplicationVersion(FEATHER_VERSION);
+
+#if defined(Q_OS_LINUX)
+    QGuiApplication::setDesktopFileName("feather");
+#endif
+
+    QApplication::setWindowIcon(QIcon(":/assets/images/appicons/64x64.png"));
 
     QCommandLineParser parser;
     parser.setApplicationDescription("Feather - a free Monero desktop wallet");
@@ -146,9 +171,11 @@ if (AttachConsole(ATTACH_PARENT_PROCESS)) {
     }
 
     // Setup logging
-    QString logPath = QString("%1/libwallet.log").arg(configDir);
+    QString logPath = conf()->get(Config::disableLogging).toBool() ? "" : QString("%1/libwallet.log").arg(configDir);
+    bool consoleLogging = !conf()->get(Config::disableLoggingStdout).toBool();
+
     Monero::Utils::onStartup();
-    Monero::Wallet::init("", "feather", logPath.toStdString(), true);
+    Monero::Wallet::init("", "feather", logPath.toStdString(), consoleLogging);
 
     bool logLevelFromEnv;
     int logLevel = qEnvironmentVariableIntValue("MONERO_LOG_LEVEL", &logLevelFromEnv);
@@ -158,8 +185,13 @@ if (AttachConsole(ATTACH_PARENT_PROCESS)) {
         logLevel = conf()->get(Config::logLevel).toInt();
     }
 
-    if (parser.isSet("quiet") || conf()->get(Config::disableLogging).toBool()) {
-        qWarning() << "Logging is disabled";
+    bool disableEverything = parser.isSet("quiet") || (conf()->get(Config::disableLogging).toBool() && conf()->get(Config::disableLoggingStdout).toBool());
+    if (disableEverything) {
+        if (parser.isSet("quiet")) {
+            qWarning() << "Logging is disabled via --quiet flag";
+        } else {
+            qWarning() << "Logging is disabled via configuration";
+        }
         WalletManager::instance()->setLogLevel(-1);
     }
     else if (logLevel >= 0 && logLevel <= Monero::WalletManagerFactory::LogLevel_Max) {
@@ -180,7 +212,7 @@ if (AttachConsole(ATTACH_PARENT_PROCESS)) {
 
     conf()->set(Config::restartRequired, false);
 
-    if (!quiet) {
+    if (!quiet && !conf()->get(Config::disableLogging).toBool()) {
         QList<QPair<QString, QString>> info;
         info.emplace_back("Feather", FEATHER_VERSION);
         info.emplace_back("Monero", MONERO_VERSION);
@@ -188,6 +220,8 @@ if (AttachConsole(ATTACH_PARENT_PROCESS)) {
         info.emplace_back("Tor", TOR_VERSION);
         info.emplace_back("SSL", QSslSocket::sslLibraryVersionString());
         info.emplace_back("Mode", stagenet ? "Stagenet" : (testnet ? "Testnet" : "Mainnet"));
+        info.emplace_back("Network", conf()->get(Config::syncPaused).toBool() ? "PAUSED" : "ACTIVE");
+        info.emplace_back("Config dir", configDir);
 
         for (const auto &k: info) {
             qWarning().nospace().noquote() << QString("%1: %2").arg(k.first, k.second);
@@ -219,6 +253,6 @@ if (AttachConsole(ATTACH_PARENT_PROCESS)) {
     wm->setEventFilter(&filter);
 
     int exitCode = Application::exec();
-    qDebug() << "Application::exec() returned";
+    qInstallMessageHandler(nullptr);
     return exitCode;
 }

@@ -19,6 +19,7 @@ namespace constants
     const quint64 kdfRounds = 1;
 
     const QString seedLanguage = "English"; // todo: move me
+    const int defaultRefreshInterval = 30; // seconds
 }
 
 #endif //FEATHER_CONSTANTS_H
