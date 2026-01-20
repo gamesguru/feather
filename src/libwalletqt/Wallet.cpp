@@ -126,7 +126,7 @@ void Wallet::setConnectionStatus(ConnectionStatus value) {
     }
 
     m_connectionStatus.store(value);
-    emit connectionStatusChanged(static_cast<ConnectionStatus>(m_connectionStatus.load()));
+    emit connectionStatusChanged(value);
 }
 
 bool Wallet::isSynchronized() const {
