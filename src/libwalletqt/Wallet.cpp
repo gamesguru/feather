@@ -723,6 +723,8 @@ void Wallet::setScanMempoolWhenPaused(bool enabled) {
     }
     else if (!enabled && m_syncPaused) {
         m_wallet2->set_offline(true);
+        setConnectionStatus(ConnectionStatus_Disconnected);
+        pauseRefresh();
     }
 }
 
