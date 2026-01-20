@@ -11,6 +11,7 @@
 #include <QDateEdit>
 #include <QLabel>
 #include <QDialogButtonBox>
+#include <QSignalBlocker>
 
 #include "utils/Utils.h"
 #include "utils/RestoreHeightLookup.h"
@@ -144,11 +145,13 @@ void SyncRangeDialog::updateInfo() {
 }
 
 void SyncRangeDialog::updateFromDate() {
+    const QSignalBlocker blocker(m_fromDateEdit);
     m_fromDateEdit->setDate(m_toDateEdit->date().addDays(-m_daysSpinBox->value()));
     updateInfo();
 }
 
 void SyncRangeDialog::updateToDate() {
+    const QSignalBlocker blocker(m_toDateEdit);
     m_toDateEdit->setDate(m_fromDateEdit->date().addDays(m_daysSpinBox->value()));
     updateInfo();
 }

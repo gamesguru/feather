@@ -146,7 +146,9 @@ void SendWidget::scanClicked() {
 }
 
 void SendWidget::sendClicked() {
-    if (conf()->get(Config::syncPaused).toBool()) {
+    bool syncPaused = conf()->get(Config::syncPaused).toBool();
+
+    if (syncPaused) {
         QMessageBox msgBox(this);
         msgBox.setIcon(QMessageBox::Warning);
         msgBox.setWindowTitle("Are you sure? Create transaction?");
@@ -167,14 +169,14 @@ void SendWidget::sendClicked() {
         }
     }
 
-    if (!m_wallet->isConnected() && !conf()->get(Config::syncPaused).toBool()) {
+    if (!m_wallet->isConnected() && !syncPaused) {
         Utils::showError(this, "Unable to create transaction", "Wallet is not connected to a node.",
                          {"Wait for the wallet to automatically connect to a node.", "Go to File -> Settings -> Network -> Node to manually connect to a node."},
                          "nodes");
         return;
     }
 
-    if (!m_wallet->isSynchronized() && !conf()->get(Config::syncPaused).toBool()) {
+    if (!m_wallet->isSynchronized() && !syncPaused) {
         Utils::showError(this, "Unable to create transaction", "Wallet is not synchronized", {"Wait for wallet synchronization to complete"}, "synchronization");
         return;
     }

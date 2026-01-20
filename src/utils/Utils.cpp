@@ -761,11 +761,13 @@ QString formatSyncTimeEstimate(quint64 blocks) {
     quint64 minutes = blocks * 2;
     quint64 days = minutes / (60 * 24);
 
+    quint64 hours = minutes / 60;
+
     QString timeStr;
     if (days > 0) {
-        timeStr = QObject::tr("~%1 days").arg(days);
+        timeStr = QObject::tr("~%1 day%2").arg(days).arg(days == 1 ? "" : "s");
     } else if (minutes >= 60) {
-        timeStr = QObject::tr("~%1 hours").arg(minutes / 60);
+        timeStr = QObject::tr("~%1 hour%2").arg(hours).arg(hours == 1 ? "" : "s");
     } else {
         timeStr = QObject::tr("< 1 hour");
     }

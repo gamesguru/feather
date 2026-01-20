@@ -516,9 +516,9 @@ private:
     AddressBook *m_addressBook;
     AddressBookModel *m_addressBookModel;
 
-    quint64 m_daemonBlockChainHeight;
-    quint64 m_daemonBlockChainTargetHeight;
-    QDateTime m_lastSyncTime;
+    std::atomic<quint64> m_daemonBlockChainHeight;
+    std::atomic<quint64> m_daemonBlockChainTargetHeight;
+    std::atomic<qint64> m_lastSyncTime;
 
     ConnectionStatus m_connectionStatus;
 
@@ -553,7 +553,7 @@ private:
     std::atomic<quint64> m_stopHeight{0};
     std::atomic<bool> m_rangeSyncActive{false};
     std::atomic<bool> m_syncPaused{false};
-    std::atomic<bool> m_lastRefreshTime{0};
+    std::atomic<quint64> m_lastRefreshTime{0};
     std::atomic<bool> m_pauseAfterSync{false};
     std::atomic<bool> m_refreshThreadStarted{false};
     std::atomic<bool> m_scanMempoolWhenPaused{false};

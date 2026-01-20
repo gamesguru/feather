@@ -46,6 +46,12 @@ void TxImportDialog::onImport() {
     QString txid = ui->line_txid->text().trimmed();
     if (txid.isEmpty()) return;
 
+    static const QRegularExpression hexMatcher("^[0-9a-fA-F]{64}$");
+    if (!hexMatcher.match(txid).hasMatch()) {
+        Utils::showError(this, "Invalid TXID", "Transaction ID must be a 64-character hexadecimal string.");
+        return;
+    }
+
     if (m_wallet->haveTransaction(txid)) {
         Utils::showWarning(this, "Transaction already exists in wallet", "If you can't find it in your history, "
                                                                        "check if it belongs to a different account (Wallet -> Account)");
@@ -56,22 +62,22 @@ void TxImportDialog::onImport() {
     ui->btn_import->setEnabled(false);
     ui->btn_import->setText("Checking...");
 
-    QNetworkAccessManager* nam = getNetwork(); // Use global network manager
     QString url = m_nodes->connection().toURL() + "/get_transactions";
-    
+    QNetworkAccessManager* nam = getNetwork(url); // Use global network manager
+
     QJsonObject req;
     req["txs_hashes"] = QJsonArray({txid});
-    
+
     QNetworkRequest request(url);
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
     QNetworkReply* reply = nam->post(request, QJsonDocument(req).toJson());
-    
+
     connect(reply, &QNetworkReply::finished, this, [this, reply, txid]() {
         reply->deleteLater();
         ui->btn_import->setEnabled(true);
         ui->btn_import->setText("Import");
-        
+
         if (reply->error() != QNetworkReply::NoError) {
              Utils::showError(this, "Connection error", reply->errorString());
              return;
@@ -96,9 +102,22 @@ void TxImportDialog::onImport() {
                      this->accept();
                      return;
                 }
-                
+
                 quint64 height = tx.value("block_height").toVariant().toULongLong();
                 if (height > 0) {
+                     if (height > std::numeric_limits<quint64>::max() - 10) {
+                         Utils::showError(this, "Invalid Block Height", "Block height is too large.");
+                         return;
+                     }
+
+                     // Validate against daemon height
+                     quint64 daemonHeight = m_wallet->daemonBlockChainHeight();
+                     if (daemonHeight > 0 && height > daemonHeight + 100) {
+                         Utils::showError(this, "Invalid Block Height",
+                             QString("The node returned a block height significantly in the future (%1). Daemon height: %2.").arg(height).arg(daemonHeight));
+                         return;
+                     }
+
                      // Check if wallet is far behind (fresh restore?)
                      quint64 currentHeight = m_wallet->blockChainHeight();
 

@@ -61,6 +61,7 @@ Wallet::Wallet(Monero::Wallet *wallet, QObject *parent)
         , m_coins(new Coins(this, wallet->getWallet(), this))
         , m_storeTimer(new QTimer(this))
         , m_lastRefreshTime(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count())
+        , m_lastSyncTime(0)
 {
     m_walletListener = new WalletListenerImpl(this);
     m_walletImpl->setListener(m_walletListener);
@@ -104,7 +105,7 @@ Wallet::Wallet(Monero::Wallet *wallet, QObject *parent)
     if (!lastSyncStr.isEmpty()) {
         qint64 lastSync = lastSyncStr.toLongLong();
         if (lastSync > 0) {
-            m_lastSyncTime = QDateTime::fromSecsSinceEpoch(lastSync);
+            m_lastSyncTime = lastSync * 1000;
         }
     }
 }
@@ -451,7 +452,7 @@ void Wallet::initAsync(const QString &daemonAddress, bool trustedDaemon, quint64
                      safeAddress.prepend("http://");
                  }
             }
-            qCritical() << "Refresher: Initializing wallet with daemon address:" << safeAddress;
+            qInfo() << "Refresher: Initializing wallet with daemon address:" << safeAddress;
             qDebug() << "InitAsync: connecting to" << safeAddress;
             m_wallet2->set_offline(false);
             success = m_walletImpl->init(safeAddress.toStdString(), upperTransactionLimit, m_daemonUsername.toStdString(), m_daemonPassword.toStdString(), m_useSSL, false, proxyAddress.toStdString());
@@ -662,7 +663,7 @@ void Wallet::onHeightsRefreshed(bool success, quint64 daemonHeight, quint64 targ
     }
 
     if (success) {
-        m_lastSyncTime = QDateTime::currentDateTime();
+        m_lastSyncTime = QDateTime::currentDateTime().toMSecsSinceEpoch();
     }
 }
 
@@ -726,7 +727,9 @@ void Wallet::setScanMempoolWhenPaused(bool enabled) {
 }
 
 QDateTime Wallet::lastSyncTime() const {
-    return m_lastSyncTime;
+    if (m_lastSyncTime == 0)
+        return QDateTime();
+    return QDateTime::fromMSecsSinceEpoch(m_lastSyncTime);
 }
 
 void Wallet::setRefreshInterval(int seconds) {
@@ -746,7 +749,7 @@ void Wallet::skipToTip() {
     m_stopHeight = target;
     m_rangeSyncActive = true;
     m_wallet2->set_refresh_from_block_height(target);
-    m_lastSyncTime = QDateTime::currentDateTime();
+    m_lastSyncTime = QDateTime::currentDateTime().toMSecsSinceEpoch();
 
     setConnectionStatus(ConnectionStatus_Synchronized);
     startRefresh(true);
@@ -831,7 +834,7 @@ void Wallet::startSmartSync(quint64 requestedTarget) {
     m_stopHeight = target;
     m_rangeSyncActive = true;
     m_pauseAfterSync = true;
-    m_lastSyncTime = QDateTime::currentDateTime();
+    m_lastSyncTime = QDateTime::currentDateTime().toMSecsSinceEpoch();
 
     setConnectionStatus(ConnectionStatus_Synchronizing);
     startRefresh(true);
@@ -1865,23 +1868,25 @@ void Wallet::getTxPoolStatsAsync() {
 }
 
 void Wallet::scanMempool() {
-    QMutexLocker locker(&m_asyncMutex);
-    try {
-        std::vector<std::tuple<cryptonote::transaction, crypto::hash, bool>> process_txs;
-        m_wallet2->update_pool_state(process_txs, false, false);
-        // Refresh models so the UI picks up the new transaction(s)
-        // We invoke this on the main thread to ensure signals (beginResetModel) are processed synchronously
-        // with the data update, preventing race conditions or ignored updates in the view.
-        QMetaObject::invokeMethod(this, [this]{
-            if (m_history) m_history->refresh();
-            if (m_coins) m_coins->refresh();
-            if (m_subaddress) m_subaddress->refresh();
-        }, Qt::QueuedConnection);
-        
-        emit updated();
-    } catch (const std::exception &e) {
-        qWarning() << "Failed to scan mempool:" << e.what();
+    {
+        QMutexLocker locker(&m_asyncMutex);
+        try {
+            std::vector<std::tuple<cryptonote::transaction, crypto::hash, bool>> process_txs;
+            m_wallet2->update_pool_state(process_txs, false, false);
+            // Refresh models so the UI picks up the new transaction(s)
+            // We invoke this on the main thread to ensure signals (beginResetModel) are processed synchronously
+            // with the data update, preventing race conditions or ignored updates in the view.
+            QMetaObject::invokeMethod(this, [this]{
+                if (m_history) m_history->refresh();
+                if (m_coins) m_coins->refresh();
+                if (m_subaddress) m_subaddress->refresh();
+            }, Qt::QueuedConnection);
+
+        } catch (const std::exception &e) {
+            qWarning() << "Failed to scan mempool:" << e.what();
+        }
     }
+    emit updated();
 }
 
 Wallet::~Wallet()

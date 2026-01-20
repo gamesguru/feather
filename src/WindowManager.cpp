@@ -117,12 +117,12 @@ void WindowManager::close() {
     }
     m_closing = true;
 
-
-    // Stop all threads before application shutdown to avoid QThreadStorage warnings
-    if (m_cleanupThread && m_cleanupThread->isRunning()) {
-        m_cleanupThread->quit();
-        m_cleanupThread->wait();
-        qDebug() << "WindowManager: cleanup thread stopped in close()";
+    // Force save all wallets before attempting to close
+    // This ensures that even if the cleanup thread hangs and we _Exit(1), data is saved.
+    for (const auto &window : m_windows) {
+        if (window->m_wallet) {
+            window->m_wallet->store();
+        }
     }
 
     // Close all windows first to ensure they cancel their tasks/connections
@@ -130,6 +130,13 @@ void WindowManager::close() {
     auto windows = m_windows;
     for (const auto &window: windows) {
         window->close();
+    }
+
+    // Stop all threads before application shutdown to avoid QThreadStorage warnings
+    if (m_cleanupThread && m_cleanupThread->isRunning()) {
+        m_cleanupThread->quit();
+        m_cleanupThread->wait();
+        qDebug() << "WindowManager: cleanup thread stopped in close()";
     }
 
     // Stop Tor manager threads

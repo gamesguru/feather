@@ -212,7 +212,7 @@ if (AttachConsole(ATTACH_PARENT_PROCESS)) {
 
     conf()->set(Config::restartRequired, false);
 
-    if (!quiet && !conf()->get(Config::disableLogging).toBool()) {
+    if (!quiet && !conf()->get(Config::disableLoggingStdout).toBool()) {
         QList<QPair<QString, QString>> info;
         info.emplace_back("Feather", FEATHER_VERSION);
         info.emplace_back("Monero", MONERO_VERSION);

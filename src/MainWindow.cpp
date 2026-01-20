@@ -445,7 +445,6 @@ void MainWindow::initWidgets() {
     connect(m_walletUnlockWidget, &WalletUnlockWidget::unlockWallet, this, &MainWindow::unlockWallet);
 
     ui->tabWidget->setCurrentIndex(0);
-    ui->tabWidget->setCurrentIndex(0);
     ui->stackedWidget->setCurrentIndex(0);
 
     // Restore last network info update time

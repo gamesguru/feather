@@ -213,14 +213,14 @@ void HistoryWidget::copy(copyField field) {
             case copyField::JSON: {
                 QJsonObject obj;
                 obj.insert("txid", tx.hash);
-                obj.insert("amount", static_cast<double>(tx.amount));
-                obj.insert("fee", static_cast<double>(tx.fee));
-                obj.insert("height", static_cast<double>(tx.blockHeight));
+                obj.insert("amount", QString::number(tx.amount));
+                obj.insert("fee", QString::number(tx.fee));
+                obj.insert("height", static_cast<qint64>(tx.blockHeight));
                 obj.insert("timestamp", tx.timestamp.toSecsSinceEpoch());
                 obj.insert("direction", tx.direction == TransactionRow::Direction_In ? "in" : "out");
                 obj.insert("payment_id", tx.paymentId);
                 obj.insert("description", tx.description);
-                obj.insert("confirmations", static_cast<double>(tx.confirmations));
+                obj.insert("confirmations", static_cast<qint64>(tx.confirmations));
                 obj.insert("failed", tx.failed);
                 obj.insert("pending", tx.pending);
                 obj.insert("coinbase", tx.coinbase);
