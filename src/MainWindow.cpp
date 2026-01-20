@@ -1035,7 +1035,7 @@ void MainWindow::onSyncStatus(quint64 height, quint64 target, bool daemonSync) {
     m_lastNetInfoUpdate = QDateTime::currentDateTime();
 
     // Persist to global config (throttled to syncInterval)
-    static QDateTime lastConfigSave = QDateTime::currentDateTime();
+    static QDateTime lastConfigSave = QDateTime::fromMSecsSinceEpoch(0);
     int interval = constants::defaultRefreshInterval;
     if (lastConfigSave.secsTo(QDateTime::currentDateTime()) > interval) {
         conf()->set(Config::lastNetInfoUpdate, static_cast<qulonglong>(m_lastNetInfoUpdate.toSecsSinceEpoch()));
