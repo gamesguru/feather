@@ -126,7 +126,7 @@ void Wallet::setConnectionStatus(ConnectionStatus value) {
     }
 
     m_connectionStatus.store(value);
-    emit connectionStatusChanged(value);
+    emit connectionStatusChanged(static_cast<ConnectionStatus>(m_connectionStatus.load()));
 }
 
 bool Wallet::isSynchronized() const {
@@ -467,13 +467,18 @@ void Wallet::initAsync(const QString &daemonAddress, bool trustedDaemon, quint64
         if (success) {
             qInfo() << "init async finished - starting refresh. Paused:" << m_syncPaused;
 
-            // Fetch initial heights so UI can update even if paused
-            quint64 daemonHeight = m_walletImpl->daemonBlockChainHeight();
-            quint64 targetHeight = m_walletImpl->daemonBlockChainTargetHeight();
-            emit heightsRefreshed(daemonHeight > 0, daemonHeight, targetHeight);
+            if (m_syncPaused && !m_scanMempoolWhenPaused) {
+                m_wallet2->set_offline(true);
+                setConnectionStatus(ConnectionStatus_Disconnected);
+            } else {
+                // Fetch initial heights so UI can update even if paused
+                quint64 daemonHeight = m_walletImpl->daemonBlockChainHeight();
+                quint64 targetHeight = m_walletImpl->daemonBlockChainTargetHeight();
+                emit heightsRefreshed(daemonHeight > 0, daemonHeight, targetHeight);
 
-            if (!m_syncPaused) {
-                startRefresh();
+                if (!m_syncPaused) {
+                    startRefresh();
+                }
             }
         }
     });
@@ -618,7 +623,10 @@ void Wallet::startRefreshThread()
                             if (m_walletImpl->blockChainHeight() >= m_stopHeight) {
                                 m_rangeSyncActive = false;
                                 if (m_syncPaused) {
-                                    setConnectionStatus(ConnectionStatus_Idle);
+                                    if (m_scanMempoolWhenPaused)
+                                        setConnectionStatus(ConnectionStatus_Idle);
+                                    else
+                                        setConnectionStatus(ConnectionStatus_Disconnected);
                                 }
                             }
                         } else {
@@ -652,7 +660,10 @@ void Wallet::onHeightsRefreshed(bool success, quint64 daemonHeight, quint64 targ
         }
 
         if (m_syncPaused && !m_rangeSyncActive) {
-            setConnectionStatus(ConnectionStatus_Idle);
+            if (m_scanMempoolWhenPaused)
+                setConnectionStatus(ConnectionStatus_Idle);
+            else
+                setConnectionStatus(ConnectionStatus_Disconnected);
         } else if (walletHeight < targetHeight) {
             setConnectionStatus(ConnectionStatus_Synchronizing);
         } else {

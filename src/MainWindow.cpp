@@ -754,6 +754,9 @@ void MainWindow::onWalletOpened() {
     m_splashDialog->hide();
 
     m_wallet->setRingDatabase(Utils::ringDatabasePath());
+    if (m_updateNetworkInfoAction) {
+        m_wallet->setScanMempoolWhenPaused(m_updateNetworkInfoAction->isChecked());
+    }
 
     m_wallet->setRefreshInterval(constants::defaultRefreshInterval);
 
@@ -1117,7 +1120,7 @@ void MainWindow::onConnectionStatusChanged(int status)
                     }
                 } else {
                     // "True Idle" - just waiting, no network activity
-                    icon = icons()->icon("status_waiting.svg");
+                    icon = icons()->icon("status_offline.svg");
                 }
                 statusStr = this->getPausedStatusText();
                 m_statusLabelNetStats->hide();
