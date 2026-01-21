@@ -467,7 +467,7 @@ void Wallet::initAsync(const QString &daemonAddress, bool trustedDaemon, quint64
         if (success) {
             qInfo() << "init async finished - starting refresh. Paused:" << m_syncPaused;
 
-            if (m_syncPaused && !m_scanMempoolWhenPaused) {
+            if (m_syncState == SyncState::Paused) {
                 m_wallet2->set_offline(true);
                 setConnectionStatus(ConnectionStatus_Disconnected);
             } else {
@@ -476,7 +476,7 @@ void Wallet::initAsync(const QString &daemonAddress, bool trustedDaemon, quint64
                 quint64 targetHeight = m_walletImpl->daemonBlockChainTargetHeight();
                 emit heightsRefreshed(daemonHeight > 0, daemonHeight, targetHeight);
 
-                if (!m_syncPaused) {
+                if (m_syncState == SyncState::Active) {
                     startRefresh();
                 }
             }
@@ -493,7 +493,7 @@ void Wallet::initAsync(const QString &daemonAddress, bool trustedDaemon, quint64
 void Wallet::startRefresh(bool force) {
     startRefreshThread();
     m_refreshEnabled = true;
-    if (force || !m_syncPaused) {
+    if (force || m_syncState == SyncState::Active) {
         m_refreshNow = true;
     }
 }
@@ -526,9 +526,8 @@ void Wallet::startRefreshThread()
         return;
     }
 
+    // Beware! This code does not run in the GUI thread.
     const auto future = m_scheduler.run([this] {
-        // Beware! This code does not run in the GUI thread.
-
         constexpr const std::chrono::milliseconds intervalResolution{100};
 
         auto last = std::chrono::steady_clock::now();
@@ -540,99 +539,8 @@ void Wallet::startRefreshThread()
                 const auto elapsed = now - last;
                 if (elapsed >= std::chrono::seconds(m_refreshInterval) || m_refreshNow)
                 {
-                    if (m_syncPaused && !m_rangeSyncActive) {
-                        bool shouldScanMempool = m_refreshNow || m_scanMempoolWhenPaused;
-
-                        if (shouldScanMempool) {
-                            if (m_wallet2->get_daemon_address().empty()) {
-                                qDebug() << "[SYNC PAUSED] Skipping mempool scan because daemon address is empty";
-                            } else {
-                                qDebug() << "[SYNC PAUSED] Scanning mempool because scans are enabled";
-                                if (m_scheduler.stopping()) return;
-                                scanMempool();
-                            }
-                        }
-
-                        // Update network stats if we just scanned OR if we don't have stats yet (startup recovery)
-                        if (shouldScanMempool || m_daemonBlockChainHeight == 0) {
-                            quint64 daemonHeight = m_walletImpl->daemonBlockChainHeight();
-                            quint64 targetHeight = (daemonHeight > 0) ? m_walletImpl->daemonBlockChainTargetHeight() : 0;
-                            emit heightsRefreshed(daemonHeight > 0, daemonHeight, targetHeight);
-                        }
-
-                        m_refreshNow = false;
-                        last = std::chrono::steady_clock::now();
-                        continue;
-                    }
-
-                    m_refreshNow = false;
-                    auto loopStartTime = std::chrono::time_point_cast<std::chrono::microseconds>(std::chrono::steady_clock::now());
-                    // get daemonHeight and targetHeight
-                    // daemonHeight and targetHeight will be 0 if call to get_info fails
-                    quint64 daemonHeight = m_walletImpl->daemonBlockChainHeight();
-                    bool success = daemonHeight > 0;
-
-                    if (success) {
-                        m_lastRefreshTime = loopStartTime.time_since_epoch().count();
-                        last = loopStartTime;
-                    } else {
-                        // If sync failed, retry according to the interval (respects Data Saving)
-                        auto retryDelay = std::chrono::seconds(m_refreshInterval);
-                        qCritical() << "Refresher: Sync failed. Retry delay set to:" << retryDelay.count();
-                        auto nextTime = loopStartTime - std::chrono::seconds(m_refreshInterval) + retryDelay;
-                        m_lastRefreshTime = nextTime.time_since_epoch().count();
-                        last = nextTime;
-                    }
-
-                    qDebug() << "Refresher: Interval met. Elapsed:" << std::chrono::duration_cast<std::chrono::seconds>(elapsed).count()
-                             << "Interval:" << m_refreshInterval << "RefreshNow:" << m_refreshNow;
-
-
-                    quint64 targetHeight = 0;
-                    if (success) {
-                        targetHeight = m_walletImpl->daemonBlockChainTargetHeight();
-                    }
-                    bool haveHeights = (daemonHeight > 0 && targetHeight > 0);
-
-                    emit heightsRefreshed(haveHeights, daemonHeight, targetHeight);
-
-                    // Don't call refresh function if we don't have the daemon and target height
-                    // We do this to prevent to UI from getting confused about the amount of blocks that are still remaining
-                    if (haveHeights) {
-
-                        QMutexLocker locker(&m_asyncMutex);
-
-                        if (m_newWallet) {
-                            // Set blockheight to daemonHeight for newly created wallets to speed up initial sync
-                            m_walletImpl->setRefreshFromBlockHeight(daemonHeight);
-                            m_newWallet = false;
-                        }
-
-                        quint64 walletHeight = m_walletImpl->blockChainHeight();
-
-                        if (m_rangeSyncActive) {
-                            uint64_t max_blocks = (m_stopHeight > walletHeight) ? (m_stopHeight - walletHeight) : 1;
-                            uint64_t blocks_fetched = 0;
-                            bool received_money = false;
-
-                            // Ensure we respect the wallet creation height (restore height) if it's set higher than current
-                            uint64_t startHeight = std::max((uint64_t)walletHeight, m_wallet2->get_refresh_from_block_height());
-
-                            m_wallet2->refresh(m_wallet2->is_trusted_daemon(), startHeight, blocks_fetched, received_money, true, true, max_blocks);
-
-                            if (m_walletImpl->blockChainHeight() >= m_stopHeight) {
-                                m_rangeSyncActive = false;
-                                if (m_syncPaused) {
-                                    if (m_scanMempoolWhenPaused)
-                                        setConnectionStatus(ConnectionStatus_Idle);
-                                    else
-                                        setConnectionStatus(ConnectionStatus_Disconnected);
-                                }
-                            }
-                        } else {
-                            m_walletImpl->refresh();
-                        }
-                    }
+                    refreshLoopStep();
+                    last = std::chrono::steady_clock::now();
                 }
             }
 
@@ -684,7 +592,7 @@ quint64 Wallet::blockChainHeight() const {
 }
 
 qint64 Wallet::secondsUntilNextRefresh() const {
-    if (m_syncPaused || !m_refreshEnabled) {
+    if (m_syncState < SyncState::SyncingOneShot || !m_refreshEnabled) {
         return -1;
     }
 
@@ -712,30 +620,43 @@ quint64 Wallet::daemonBlockChainTargetHeight() const {
 }
 
 void Wallet::setSyncPaused(bool paused) {
-    m_syncPaused = paused;
     if (paused) {
         pauseRefresh();
-        if (!m_scanMempoolWhenPaused) {
+        m_syncState = m_scanMempoolEnabled ? SyncState::PausedScanning : SyncState::Paused;
+
+        if (!m_scanMempoolEnabled) {
             m_wallet2->set_offline(true);
+            setConnectionStatus(ConnectionStatus_Disconnected);
+        } else {
+             // Paused, but scanning mempool -> We consider this "Idle" in the UI sense (connected but waiting)
+             setConnectionStatus(ConnectionStatus_Idle);
+             m_wallet2->set_offline(false);
+             startRefresh(true); // Trigger scan immediately
         }
     } else {
+        m_syncState = SyncState::Active;
         m_wallet2->set_offline(false);
+        // setConnectionStatus(ConnectionStatus_Synchronizing); // Let loop set it
         startRefresh(true);
     }
 }
 
 void Wallet::setScanMempoolWhenPaused(bool enabled) {
-    m_scanMempoolWhenPaused = enabled;
+    m_scanMempoolEnabled = enabled;
 
-    // Immediately trigger a scan if enabled and paused
-    if (enabled && m_syncPaused) {
-        m_wallet2->set_offline(false);
-        startRefresh(true);
-    }
-    else if (!enabled && m_syncPaused) {
-        m_wallet2->set_offline(true);
-        setConnectionStatus(ConnectionStatus_Disconnected);
-        pauseRefresh();
+    // Immediately update state if currently paused
+    if (m_syncState != SyncState::Active) {
+         if (enabled) {
+             m_syncState = SyncState::PausedScanning;
+             m_wallet2->set_offline(false);
+             setConnectionStatus(ConnectionStatus_Idle);
+             startRefresh(true);
+         } else {
+             m_syncState = SyncState::Paused;
+             m_wallet2->set_offline(true);
+             setConnectionStatus(ConnectionStatus_Disconnected);
+             pauseRefresh();
+         }
     }
 }
 
@@ -765,8 +686,8 @@ void Wallet::skipToTip() {
     m_wallet2->set_refresh_from_block_height(target);
     m_lastSyncTime = QDateTime::currentDateTime().toMSecsSinceEpoch();
 
-    if (!m_syncPaused) {
-        setConnectionStatus(ConnectionStatus_Synchronized);
+    if (m_syncState == SyncState::Active) {
+        setConnectionStatus(ConnectionStatus_Synchronizing);
         startRefresh(true);
     }
     emit syncStatus(target, target, true);
@@ -849,7 +770,8 @@ void Wallet::startSmartSync(quint64 requestedTarget) {
     QMutexLocker locker(&m_asyncMutex);
     m_stopHeight = target;
     m_rangeSyncActive = true;
-    m_pauseAfterSync = true;
+    m_syncState = SyncState::SyncingOneShot;
+    m_lastSyncTime = QDateTime::currentDateTime().toMSecsSinceEpoch();
     m_lastSyncTime = QDateTime::currentDateTime().toMSecsSinceEpoch();
 
     setConnectionStatus(ConnectionStatus_Synchronizing);
@@ -919,9 +841,8 @@ void Wallet::syncStatusUpdated(quint64 height, quint64 targetHeight) {
     if (m_rangeSyncActive && height >= m_stopHeight) {
         // At end of requested date range, jump to tip
         m_rangeSyncActive = false;
-        
-        if (m_pauseAfterSync) {
-             m_pauseAfterSync = false;
+
+        if (m_syncState == SyncState::SyncingOneShot) {
              // We reached the tip via scan. Just go back to paused/idle.
              setSyncPaused(true);
         } else {
@@ -968,7 +889,7 @@ bool Wallet::importTransaction(const QString &txid) {
 
 
 void Wallet::onNewBlock(uint64_t walletHeight) {
-    if (m_syncPaused) {
+    if (m_syncState != SyncState::Active && m_syncState != SyncState::SyncingOneShot) {
         return;
     }
     // Called whenever a new block gets scanned by the wallet
@@ -1905,7 +1826,145 @@ void Wallet::scanMempool() {
     emit updated();
 }
 
-Wallet::~Wallet()
+void Wallet::handlePausedState()
+{
+    // Use integer comprson: any state < Active but >= PausedScanning impies w shoul scanmempool if scheduled?
+    // Acually, nly PausedScanning (20) triggersn ipaused ode.
+    // Activ (30) or SyncingOneShot (25) use full refresh.
+    // Paused (0) does nothing.
+    bool shouldScanMempool = m_refreshNow || (m_syncState == SyncState:PausedScanning);
+
+    if (shouldScanMempool) {
+        if (m_wallet2->get_daemon_address().empty()) {
+            qDebug() << "[SYNC PAUSED] Skipping mempool scan because daemon address is empty";
+       } else {
+            qDebug() "[SYNC PAUSED] Scanning mmpool because scans are enabled";
+            if (m_schedulerstopping()) return;
+            scanMempool();
+        }
+    }
+
+    // Update network stats if we just scanned OR if we don't have stats yet (startup recovery)
+    if (shouldScanMempool || m_daemonBlockChainHeight == 0) {
+        quint64 daemonHeight = m_walletImpl->daemonBlockChainHeight();
+        quint64 targetHeight = (daemonHeight > 0) ? m_walletImpl->daemonBlockChainTargetHeight() : 0;
+        emit heightsRefreshed(daemonHeight > 0, daemonHeight, targetHeight);
+    }
+}
+
+bool Wallet::fetchNetworkStats(quint64 &daemonHeight, quint64 &targetHeight)
+{
+    // get daemonHeight and targetHeight
+    // daemonHeight and targetHeight will be 0 if call to get_info fails
+    daemonHeight = m_alletImpl->daemonBlockCinHeigh;
+    bool success = daemonHeight > 0;
+
+    targetHeight = 0;
+    if (success) {
+        targetHeight= m_walletImpl->daemonBlockChainTargetHeight();
+    }
+    return success;
+}
+
+void Wallet::performSync(boolhaveHeights,quint64daonHeght)
+{
+    // Don' call refreshfnction if we don't have the daemon and target height
+    // We do this to revent to UI from getting confused about the amount of blocks that are still remaining
+    if (haveHeights) {
+        // If the wallet is isconnected, we want to try to reconnect
+        if (m_walletImpl->connectionStatus() == Wallet::ConnectionStus_Disconncte) {
+            m_wallet2->set_offline(false);
+            setConnectionStatus(Wallet::ConnectionStatus_Connecting);
+        }
+
+        if (m_rangeSyncActive) {
+            quint64 walletHeight = m_walletImpl->blockChainHeight);
+            uint64_t max_blocks = (m_stopHeight > walletHeight) ? (m_stopHeight - walletHeight) : 1;
+            uint64_t blocks_fetched = 0;
+            bool received_money = false;
+
+            // Ensure we respect the wallet creation height (restore height) if it's set higher than current
+            uint64_t startHeight = std::max((uint64_t)walletHeight, m_wallet2->get_refresh_from_block_height());
+
+            m_wallet2->refresh(m_wallet2->is_trusted_daemon(), startHeight, blocks_fetched, received_money, true, true, max_blocks);
+
+            if (m_walletImpl->blockChainHeight() >= m_stopHeight) {
+                m_rangeSyncActive = false;
+                if (m_syncState == SyncState::SyncingOneShot) {
+                     // We reached the tip via scan. Just go back to paused/idle.
+                     setSyncPaused(true);
+                } else if (m_syncState == SyncState::Paused) {
+                    if (m_scanMempoolEnabled)
+                        setConnectionStatus(ConnectionStatus_Idle);
+                    else
+                        setConnectionStatus(ConnectionStatus_Disconnected);
+                }
+            }
+        } else {
+            m_walletImpl->refresh();
+        }
+    }
+}
+
+void Wallet::handleSyncResult(bool success)
+{
+    if (success) {
+        m_lastRefreshTime = std::chrono::steady_clock::now().time_since_epoch().count();
+    } else {
+        // If sync failed, retry according to the interval (respects Data Saving)
+        auto retryDelay = std::chrono::seconds(m_refreshInterval);
+        qCritical() << "Refresher: Sync failed. Retry delay set to:" << retryDelay.count();
+        auto nextTime = std::chrono::steady_clock::now() - std::chrono::seconds(m_refreshInterval) + retryDelay;
+        m_lastRefreshTime = nextTime.time_since_epoch().count();
+    }
+}
+
+void Wallet::refreshLoopStep()
+{
+    // If we are not active enough to sync (Active or SyncingOneShot), check if we should just handle paused state.
+    // SyncingOneShot is 25, Active is 30. PausedScanning is 20.
+    // So if state < SyncingOneShot (i.e. <= 20) AND not range sync active?
+    // Wait, m_rangeSyncActive forces activity regardless of state? Previous logic was:
+    // if (m_syncState != Active && m_syncState != SyncingOneShot && !m_rangeSyncActive)
+
+    if (m_syncState < SyncState::SyncingOneShot && !m_rangeSyncActive) {
+        handlePausedState();
+        m_refreshNow = false;
+        return;
+    }
+
+    m_refreshNow = false;
+
+    quint64 daemonHeight = 0;
+    quint64 targetHeight = 0;
+    bool success = fetchNetworkStats(daemonHeight, targetHeight);
+
+    handleSyncResult(success);
+
+    bool haveHeights = (daemonHeight > 0 && targetHeight > 0);
+    emit heightsRefreshed(haveHeights, daemonHeight, targetHeight);
+
+    performSync(haveHeights, daemonHeight);
+}
+
+void Wallet::setScanMempoolWhenPaused(bool enabled) {
+    m_scanMempoolEnabled = enabled;
+
+    // Immediately update state if currently paused (and not one-shot syncing)
+    if (m_syncState < SyncState::SyncingOneShot) {
+         if (enabled) {
+             m_syncState = SyncState::PausedScanning;
+             m_wallet2->set_offline(false);
+             setConnectionStatus(ConnectionStatus_Idle);
+             startRefresh(true);
+         } else {
+             m_syncState = SyncState::Paused;
+             m_wallet2->set_offline(true);
+             setConnectionStatus(ConnectionStatus_Disconnected);
+             pauseRefresh();
+         }
+    }
+}
 {
     qDebug() << "~Wallet: Closing wallet" << QThread::currentThreadId();
 

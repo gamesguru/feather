@@ -506,6 +506,13 @@ private:
     friend class WalletManager;
     friend class WalletListenerImpl;
 
+    // Refresh Thread Helpers
+    void refreshLoopStep();
+    void handlePausedState();
+    bool fetchNetworkStats(quint64 &daemonHeight, quint64 &targetHeight);
+    void performSync(bool haveHeights, quint64 daemonHeight);
+    void handleSyncResult(bool success);
+
     Monero::Wallet *m_walletImpl;
     tools::wallet2 *m_wallet2;
 
@@ -552,11 +559,19 @@ private:
 
     std::atomic<quint64> m_stopHeight{0};
     std::atomic<bool> m_rangeSyncActive{false};
-    std::atomic<bool> m_syncPaused{false};
+
+    enum class SyncState : int {
+        Paused = 0,
+        PausedScanning = 20,
+        SyncingOneShot = 25,
+        Active = 30
+    };
+
+    std::atomic<SyncState> m_syncState{SyncState::Active};
+    std::atomic<bool> m_scanMempoolEnabled{false};
+
     std::atomic<quint64> m_lastRefreshTime{0};
-    std::atomic<bool> m_pauseAfterSync{false};
     std::atomic<bool> m_refreshThreadStarted{false};
-    std::atomic<bool> m_scanMempoolWhenPaused{false};
 };
 
 #endif // FEATHER_WALLET_H
