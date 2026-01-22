@@ -131,7 +131,12 @@ MainWindow::MainWindow(WindowManager *windowManager, Wallet *wallet, QWidget *pa
 
     connect(conf(), &Config::changed, this, [this](Config::ConfigKey key){
         if (key == Config::syncPaused) {
-            this->setSyncPaused(conf()->get(Config::syncPaused).toBool());
+            bool paused = conf()->get(Config::syncPaused).toBool();
+            this->setSyncPaused(paused);
+            // "Scan mempool when paused" only makes sense when sync is paused
+            if (m_updateNetworkInfoAction) {
+                m_updateNetworkInfoAction->setEnabled(paused);
+            }
         }
     });
 
@@ -309,7 +314,8 @@ void MainWindow::initStatusBar() {
         if (!m_wallet) return;
 
         QString msg = tr("Sync Unconfirmed (Smart Sync) will scan only the specific blocks required to unlock your pending funds (e.g. 10 confirmations).\n\n"
-                          "This minimizes data usage by pausing immediately after verification.\n\n"
+                          "This minimizes data usage and processing time by seeking out only the blocks required to unlock your pending funds and pausing immediately after verification.\n\n"
+                          "NOTE: You need to manually add all Tx IDs or scan the range of all transactions to ensure an accurate balance and use all features.\n\n"
                           "Continue?");
 
         if (QMessageBox::question(this, tr("Sync Unconfirmed"), msg) == QMessageBox::Yes) {
@@ -626,15 +632,22 @@ void MainWindow::initOffline() {
     }
 
     m_updateNetworkInfoAction->setCheckable(true);
+    // Only enable this action when sync is paused
+    m_updateNetworkInfoAction->setEnabled(conf()->get(Config::syncPaused).toBool());
     connect(m_updateNetworkInfoAction, &QAction::toggled, this, [this](bool checked) {
         if (!m_wallet) return;
-        
+
         m_wallet->setScanMempoolWhenPaused(checked);
 
         if (checked) {
              // Ensure we are connected if enabling
             if (m_wallet->connectionStatus() == Wallet::ConnectionStatus_Disconnected) {
                  m_nodes->connectToNode();
+            }
+        } else {
+            // Disconnect if paused and no longer scanning mempool
+            if (conf()->get(Config::syncPaused).toBool()) {
+                m_nodes->disconnectCurrentNode();
             }
         }
     });
@@ -809,8 +822,13 @@ void MainWindow::onWalletOpened() {
     if (!conf()->get(Config::disableAutoRefresh).toBool()) {
         if (conf()->get(Config::syncPaused).toBool()) {
             m_wallet->setSyncPaused(true);
-            // Manually set status to Disconnected/Paused so UI looks correct immediately
-            this->onConnectionStatusChanged(Wallet::ConnectionStatus_Disconnected);
+            // Still connect to daemon if mempool scanning is enabled while paused
+            if (m_updateNetworkInfoAction && m_updateNetworkInfoAction->isChecked()) {
+                m_nodes->connectToNode();
+            } else {
+                // Manually set status to Disconnected/Paused so UI looks correct immediately
+                this->onConnectionStatusChanged(Wallet::ConnectionStatus_Disconnected);
+            }
         } else {
             m_nodes->connectToNode();
         }

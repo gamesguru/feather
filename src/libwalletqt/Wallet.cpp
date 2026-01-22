@@ -126,7 +126,7 @@ void Wallet::setConnectionStatus(ConnectionStatus value) {
     }
 
     m_connectionStatus.store(value);
-    emit connectionStatusChanged(static_cast<ConnectionStatus>(m_connectionStatus.load()));
+    emit connectionStatusChanged(value);
 }
 
 bool Wallet::isSynchronized() const {
@@ -629,15 +629,18 @@ void Wallet::setSyncPaused(bool paused) {
             m_wallet2->set_offline(true);
             setConnectionStatus(ConnectionStatus_Disconnected);
         } else {
-             // Paused, but scanning mempool -> We consider this "Idle" in the UI sense (connected but waiting)
-             setConnectionStatus(ConnectionStatus_Idle);
+             // Paused with mempool scanning: stay online but don't sync blocks
+             // Only set Idle if we already have a daemon connection
              m_wallet2->set_offline(false);
-             startRefresh(true); // Trigger scan immediately
+             if (!m_wallet2->get_daemon_address().empty()) {
+                 setConnectionStatus(ConnectionStatus_Idle);
+             }
+             startRefresh(true);
         }
     } else {
         m_syncState = SyncState::Active;
         m_wallet2->set_offline(false);
-        // setConnectionStatus(ConnectionStatus_Synchronizing); // Let loop set it
+        // Let the refresh loop set the appropriate connection status
         startRefresh(true);
     }
 }
@@ -650,7 +653,10 @@ void Wallet::setScanMempoolWhenPaused(bool enabled) {
          if (enabled) {
              m_syncState = SyncState::PausedScanning;
              m_wallet2->set_offline(false);
-             setConnectionStatus(ConnectionStatus_Idle);
+             // Only set Idle if we already have a daemon connection
+             if (!m_wallet2->get_daemon_address().empty()) {
+                 setConnectionStatus(ConnectionStatus_Idle);
+             }
              startRefresh(true);
          } else {
              m_syncState = SyncState::Paused;
@@ -772,7 +778,6 @@ void Wallet::startSmartSync(quint64 requestedTarget) {
     m_stopHeight = target;
     m_rangeSyncActive = true;
     m_syncState = SyncState::SyncingOneShot;
-    m_lastSyncTime = QDateTime::currentDateTime().toMSecsSinceEpoch();
     m_lastSyncTime = QDateTime::currentDateTime().toMSecsSinceEpoch();
 
     setConnectionStatus(ConnectionStatus_Synchronizing);
@@ -1846,7 +1851,8 @@ void Wallet::handlePausedState()
     }
 
     // Update network stats if we just scanned OR if we don't have stats yet (startup recovery)
-    if (shouldScanMempool || m_daemonBlockChainHeight == 0) {
+    // But only if we actually have a daemon address configured
+    if ((shouldScanMempool || m_daemonBlockChainHeight == 0) && !m_wallet2->get_daemon_address().empty()) {
         quint64 daemonHeight = m_walletImpl->daemonBlockChainHeight();
         quint64 targetHeight = (daemonHeight > 0) ? m_walletImpl->daemonBlockChainTargetHeight() : 0;
         emit heightsRefreshed(daemonHeight > 0, daemonHeight, targetHeight);
