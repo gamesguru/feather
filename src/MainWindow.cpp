@@ -349,6 +349,19 @@ void MainWindow::initStatusBar() {
                           .arg(estSize);
 
             if (QMessageBox::question(this, tr("Full Sync"), msg) == QMessageBox::Yes) {
+                // Ensure we scan from the original restore height
+                quint64 restoreHeight = 0;
+                QString storedHeight = m_wallet->getCacheAttribute("feather.creation_height");
+                if (!storedHeight.isEmpty()) {
+                    restoreHeight = storedHeight.toULongLong();
+                } else {
+                    restoreHeight = walletCreationHeight;
+                }
+
+                if (restoreHeight > 0) {
+                     m_wallet->setWalletCreationHeight(restoreHeight);
+                }
+
                 m_wallet->rescanBlockchainAsync();
                 this->setStatusText(tr("Rescan started..."));
             }
@@ -1008,17 +1021,23 @@ void MainWindow::updateStatusText() {
             break;
         case Wallet::ConnectionStatus_Synchronizing: {
             quint64 walletHeight = m_wallet->blockChainHeight();
+            quint64 daemonHeight = m_wallet->daemonBlockChainHeight();
             quint64 targetHeight = m_wallet->daemonBlockChainTargetHeight();
-            quint64 blocksBehind = Utils::blocksBehind(walletHeight, targetHeight);
+            quint64 effectiveTarget = std::max(targetHeight, daemonHeight);
+            quint64 blocksBehind = Utils::blocksBehind(walletHeight, effectiveTarget);
 
-            if (targetHeight == 0) {
-                statusStr = tr("Connecting...");
+            if (effectiveTarget == 0) {
+                statusStr = tr("Waiting for node...");
             } else if (conf()->get(Config::syncPaused).toBool()) {
                 statusStr = this->getPausedStatusText();
             } else {
-                QString blocksStr = QLocale().toString(blocksBehind);
-                QString type = m_daemonSync ? tr("Blockchain") : tr("Wallet");
-                statusStr = tr("%1 sync: %2 blocks behind").arg(type, blocksStr);
+                if (blocksBehind == 0) {
+                    statusStr = tr("Synchronizing...");
+                } else {
+                    QString blocksStr = QLocale().toString(blocksBehind);
+                    QString type = m_daemonSync ? tr("Blockchain") : tr("Wallet");
+                    statusStr = tr("%1 sync: %2 blocks behind").arg(type, blocksStr);
+                }
             }
             break;
         }

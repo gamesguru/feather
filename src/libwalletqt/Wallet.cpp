@@ -89,6 +89,9 @@ Wallet::Wallet(Monero::Wallet *wallet, QObject *parent)
     connect(this, &Wallet::updated, this, &Wallet::onUpdated);
     connect(this, &Wallet::heightsRefreshed, this, &Wallet::onHeightsRefreshed);
     connect(this, &Wallet::transactionCommitted, this, &Wallet::onTransactionCommitted);
+    connect(this, &Wallet::moneyReceived, m_history, &TransactionHistory::refresh);
+    connect(this, &Wallet::unconfirmedMoneyReceived, m_history, &TransactionHistory::refresh);
+    connect(this, &Wallet::moneySpent, m_history, &TransactionHistory::refresh);
 
     connect(m_subaddress, &Subaddress::corrupted, [this]{
        emit keysCorrupted();
