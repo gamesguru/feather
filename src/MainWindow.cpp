@@ -281,7 +281,6 @@ void MainWindow::initStatusBar() {
         QString msg = tr("Skip sync will set your wallet's restore height to the current network height.\n\n"
                           "Use this if you know you haven't received any transactions since your last sync.\n"
                           "You can always use 'Full Sync' to rescan from the beginning.\n\n"
-                          "Note: This process could take 30 seconds or more.\n\n"
                           "Continue?");
 
         if (m_wallet->daemonBlockChainTargetHeight() == 0) {
@@ -290,8 +289,10 @@ void MainWindow::initStatusBar() {
         }
 
         if (QMessageBox::question(this, tr("Skip Sync"), msg) == QMessageBox::Yes) {
+            this->setStatusText(tr("Saving wallet... (this may freeze the UI for a few seconds)"), true);
+            QApplication::processEvents();
             m_wallet->skipToTip();
-            this->setStatusText(tr("Skipped sync to tip."));
+            this->setStatusText(tr("Skipped sync to tip."), true);
         }
     });
 
@@ -316,11 +317,12 @@ void MainWindow::initStatusBar() {
         QString msg = tr("Sync Unconfirmed (Smart Sync) will scan only the specific blocks required to unlock your pending funds (e.g. 10 confirmations).\n\n"
                           "This minimizes data usage and processing time by seeking out only the blocks required to unlock your pending funds and pausing immediately after verification.\n\n"
                           "NOTE: You need to manually add all Tx IDs or scan the range of all transactions to ensure an accurate balance and use all features.\n\n"
+                          "Note: This process could take 30 seconds or more.\n\n"
                           "Continue?");
 
         if (QMessageBox::question(this, tr("Sync Unconfirmed"), msg) == QMessageBox::Yes) {
             m_wallet->startSmartSync();
-            this->setStatusText(tr("Scanning to tip..."));
+            this->setStatusText(tr("Scanning to tip..."), true);
         }
     });
 
@@ -363,7 +365,7 @@ void MainWindow::initStatusBar() {
                 }
 
                 m_wallet->rescanBlockchainAsync();
-                this->setStatusText(tr("Rescan started..."));
+                this->setStatusText(tr("Rescan started..."), true);
             }
         }
     });
@@ -953,6 +955,11 @@ void MainWindow::updateSyncStatusToolTip() {
 }
 
 void MainWindow::setStatusText(const QString &text, bool override, int timeout) {
+    if (!override && m_statusLabelStatus->text() == text) {
+        return;
+    }
+
+    qDebug() << "Status label updated:" << text;
 
     if (override) {
         m_statusOverrideActive = true;
@@ -2254,7 +2261,11 @@ void MainWindow::onImportHistoryDescriptionsCSV() {
 
     QString error = m_wallet->history()->importLabelsFromCSV(fileName);
     if (!error.isEmpty()) {
-        Utils::showError(this, "Unable to import transaction descriptions from CSV", error);
+        if (error.startsWith("Warning:")) {
+             Utils::showInfo(this, "Import Complete with Warnings", "Successfully imported transaction descriptions.\n\n" + error);
+        } else {
+             Utils::showError(this, "Unable to import transaction descriptions from CSV", error);
+        }
     }
     else {
         Utils::showInfo(this, "Successfully imported transaction descriptions from CSV");

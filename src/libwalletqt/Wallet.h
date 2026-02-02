@@ -249,6 +249,7 @@ public:
 
     Q_INVOKABLE void rescanBlockchainAsync();
     bool importTransaction(const QString &txid);
+    bool importTransactions(const QStringList &txids);
 
     void refreshModels();
 

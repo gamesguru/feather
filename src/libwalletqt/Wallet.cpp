@@ -11,6 +11,7 @@
 
 #include <QMetaObject>
 
+
 #include "AddressBook.h"
 #include "Coins.h"
 #include "Subaddress.h"
@@ -694,6 +695,7 @@ void Wallet::skipToTip() {
     m_stopHeight = target;
     m_rangeSyncActive = true;
     m_wallet2->set_refresh_from_block_height(target);
+    this->storeSafer();
     m_lastSyncTime = QDateTime::currentDateTime().toMSecsSinceEpoch();
 
     if (m_syncState == SyncState::Active) {
@@ -754,6 +756,9 @@ void Wallet::startSmartSync(quint64 requestedTarget) {
     }
 
     uint64_t current = blockChainHeight();
+    if (current == 0) {
+        current = m_wallet2->get_refresh_from_block_height();
+    }
     uint64_t target = tip;
     uint64_t unlockTarget = getUnlockTargetHeight();
     
@@ -776,6 +781,8 @@ void Wallet::startSmartSync(quint64 requestedTarget) {
              return;
         }
     }
+
+    qInfo() << "startSmartSync: current=" << current << " tip=" << tip << " target=" << target;
 
     QMutexLocker locker(&m_asyncMutex);
     m_stopHeight = target;
@@ -895,6 +902,47 @@ bool Wallet::importTransaction(const QString &txid) {
     return false;
 }
 
+bool Wallet::importTransactions(const QStringList &txids) {
+    if (!m_wallet2 || txids.empty())
+        return false;
+        
+    // If scanning specific TXs, we shouldn't be constrained by range sync
+    if (m_rangeSyncActive) {
+        m_rangeSyncActive = false;
+    }
+
+    try {
+        std::unordered_set<crypto::hash> hashes;
+        for (const auto &txid : txids) {
+            crypto::hash txid_hash;
+            if (epee::string_tools::hex_to_pod(txid.toStdString(), txid_hash)) {
+                hashes.insert(txid_hash);
+            } else {
+                 qWarning() << "Invalid transaction id in batch import: " << txid;
+            }
+        }
+
+        if (hashes.empty()) {
+            return false;
+        }
+
+    try {
+        m_wallet2->scan_tx(hashes);
+    } catch (const std::exception &e) {
+        qWarning() << "Failed to import transactions:" << e.what();
+        return false;
+    }
+        qInfo() << "Successfully batch imported" << hashes.size() << "transactions.";
+        this->storeSafer();
+        this->updateBalance();
+        this->history()->refresh();
+        return true;
+    } catch (const std::exception &e) {
+        qWarning() << "Failed to batch import transactions, error: " << e.what();
+    }
+    return false;
+}
+
 
 
 void Wallet::onNewBlock(uint64_t walletHeight) {
@@ -912,10 +960,14 @@ void Wallet::onNewBlock(uint64_t walletHeight) {
 
     this->syncStatusUpdated(walletHeight, daemonHeight);
 
-    if (this->isSynchronized()) {
+    static qint64 lastRefresh = 0;
+    qint64 now = QDateTime::currentMSecsSinceEpoch();
+
+    if (this->isSynchronized() || (now - lastRefresh) > 2000) {
         m_history->refresh();
         m_coins->refresh();
         this->subaddress()->updateUsed(this->currentSubaddressAccount());
+        lastRefresh = now;
     }
 }
 
@@ -939,14 +991,21 @@ void Wallet::onRefreshed(bool success, const QString &message) {
     if (!this->refreshedOnce) {
         this->refreshedOnce = true;
         emit walletRefreshed();
-        // store wallet immediately upon finishing synchronization
-        this->storeSafer();
     }
+    // store wallet immediately upon finishing synchronization
+    this->storeSafer();
 }
 
 void Wallet::rescanBlockchainAsync() {
     m_wallet2->rescan_blockchain(false, false, false);
-    // After rescan, the wallet's local height is reset to the refresh-from height.
+    
+    // Restore creation height to avoid scanning from 0
+    QString storedHeight = this->getCacheAttribute("feather.creation_height");
+    if (!storedHeight.isEmpty()) {
+        uint64_t height = storedHeight.toULongLong();
+        m_wallet2->set_refresh_from_block_height(height);
+        qInfo() << "Rescan: Restored creation height to" << height;
+    }
 }
 
 void Wallet::refreshModels() {
@@ -1060,6 +1119,7 @@ void Wallet::store() {
     m_walletImpl->store();
 }
 
+// Safe to call from main thread
 void Wallet::storeSafer() {
     // Do not store a synchronizing wallet: store() is NOT thread safe and may crash the wallet
     if (!this->isSynchronized()) {
@@ -1888,13 +1948,16 @@ void Wallet::performSync(bool haveHeights, quint64 daemonHeight)
         }
 
         if (m_rangeSyncActive) {
-            quint64 walletHeight = m_walletImpl->blockChainHeight();
+            quint64 walletHeight = m_wallet2->get_blockchain_current_height();
             uint64_t max_blocks = (m_stopHeight > walletHeight) ? (m_stopHeight - walletHeight) : 1;
             uint64_t blocks_fetched = 0;
             bool received_money = false;
 
             // Ensure we respect the wallet creation height (restore height) if it's set higher than current
-            uint64_t startHeight = std::max((uint64_t)walletHeight, m_wallet2->get_refresh_from_block_height());
+            uint64_t restoreHeight = m_wallet2->get_refresh_from_block_height();
+            uint64_t startHeight = std::max((uint64_t)walletHeight, restoreHeight);
+            
+            qDebug() << "performSync: walletHeight=" << walletHeight << " restoreHeight=" << restoreHeight << " startHeight=" << startHeight << " stopHeight=" << m_stopHeight;
 
             m_wallet2->refresh(m_wallet2->is_trusted_daemon(), startHeight, blocks_fetched, received_money, true, true, max_blocks);
 
@@ -1950,6 +2013,17 @@ void Wallet::refreshLoopStep()
     bool success = fetchNetworkStats(daemonHeight, targetHeight);
 
     handleSyncResult(success);
+
+    // If we failed to get network stats, we might be disconnected.
+    // Ensure we trigger a reconnection attempt if we are supposed to be active.
+    if (!success) {
+        if (m_syncState == SyncState::Active || m_syncState == SyncState::SyncingOneShot || m_rangeSyncActive) {
+             if (this->connectionStatus() != Wallet::ConnectionStatus_Disconnected) {
+                 // Force status to Disconnected so Nodes logic can pick it up and reconnect
+                 setConnectionStatus(Wallet::ConnectionStatus_Disconnected);
+             }
+        }
+    }
 
     bool haveHeights = (daemonHeight > 0 && targetHeight > 0);
     emit heightsRefreshed(haveHeights, daemonHeight, targetHeight);

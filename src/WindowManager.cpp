@@ -348,6 +348,7 @@ void WindowManager::onWalletOpened(Wallet *wallet) {
             // Don't show incorrect password when we try with empty password for the first time
             bool showIncorrectPassword = m_openWalletTriedOnce;
             m_openWalletTriedOnce = true;
+            m_splashDialog->hide();
             this->onWalletOpenPasswordRequired(showIncorrectPassword, wallet->keysPath());
             return; // Do not remove this
         }

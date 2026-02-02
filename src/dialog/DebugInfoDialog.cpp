@@ -141,6 +141,8 @@ QString DebugInfoDialog::statusToString(Wallet::ConnectionStatus status) {
             return "Synchronizing";
         case Wallet::ConnectionStatus_Synchronized:
             return "Synchronized";
+        case Wallet::ConnectionStatus_Idle:
+            return "Idle";
         default:
             return "Unknown";
     }

@@ -32,6 +32,11 @@ HistoryWidget::HistoryWidget(Wallet *wallet, QWidget *parent)
     m_contextMenu->addMenu(m_copyMenu);
     m_contextMenu->addAction(icons()->icon("info2.svg"), "Show details", this, &HistoryWidget::showTxDetails);
     m_contextMenu->addAction("View on block explorer", this, &HistoryWidget::onViewOnBlockExplorer);
+    m_contextMenu->addAction("Sync missing transactions", this, [this]{
+        int count = m_wallet->history()->scanMissingTransactions();
+        QString msg = count > 0 ? QString("Scanned %1 missing transactions.").arg(count) : "No missing transactions found.";
+        QMessageBox::information(this, "Quick Sync", msg);
+    });
 
     // copy menu
     m_copyMenu->addAction("Transaction ID", this, [this]{copy(copyField::TxID);});
