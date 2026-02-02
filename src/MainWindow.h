@@ -195,6 +195,7 @@ private:
     void updateNetStats();
     void rescanSpent();
     void setStatusText(const QString &text, bool override = false, int timeout = 1000);
+    void updateStatusText();
     void showBalanceDialog();
     QString statusDots();
     QString getHardwareDevice();
@@ -271,6 +272,7 @@ private:
     bool m_constructingTransaction = false;
     bool m_statusOverrideActive = false;
     bool m_showDeviceError = false;
+    bool m_daemonSync = false;
     QTimer m_txTimer;
 
     bool cleanedUp = false;

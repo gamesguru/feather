@@ -340,21 +340,17 @@ void MainWindow::initStatusBar() {
                 estSize = QString("~%1").arg(Utils::formatBytes(estimatedBytes));
             }
 
-            QString msg = tr("Full sync will rescan from your restore height.\n\n"
+            QString msg = tr("Full sync will clear the wallet cache and rescan from your restore height.\n\n"
                              "Blocks to scan: %1\n"
                              "Estimated data: %2\n\n"
-                             "Note: Cached blocks will be skipped.\n\n"
+                             "Use this to resolve missing transactions or cache corruption.\n\n"
                              "Continue?")
                           .arg(estBlocks)
                           .arg(estSize);
 
             if (QMessageBox::question(this, tr("Full Sync"), msg) == QMessageBox::Yes) {
-                m_wallet->fullSync();
-                if (estBlocks.startsWith("Unknown")) {
-                    this->setStatusText(tr("Full sync started..."));
-                } else {
-                    this->setStatusText(tr("Full sync started (%1 blocks)...").arg(estBlocks));
-                }
+                m_wallet->rescanBlockchainAsync();
+                this->setStatusText(tr("Rescan started..."));
             }
         }
     });
@@ -964,6 +960,90 @@ void MainWindow::setStatusText(const QString &text, bool override, int timeout) 
     }
 }
 
+void MainWindow::updateStatusText() {
+    if (m_statusOverrideActive || m_constructingTransaction) {
+        return;
+    }
+
+    if (conf()->get(Config::offlineMode).toBool()) {
+        this->setStatusText("Offline mode");
+        return;
+    }
+
+    if (!m_wallet) return;
+
+    int status = m_wallet->connectionStatus();
+    QString statusStr;
+
+    switch (status) {
+        case Wallet::ConnectionStatus_Disconnected: {
+            qint64 seconds = m_wallet->secondsUntilNextRefresh();
+            if (seconds > 0) {
+                QString timeStr;
+                if (seconds > 60) timeStr = QString("%1 min").arg((seconds + 59) / 60);
+                else timeStr = QString("%1s").arg(seconds);
+                statusStr = tr("Disconnected (Retry in %1)").arg(timeStr);
+            } else if (m_wallet->lastSyncTime().isValid()) {
+                qint64 secsSinceLastSync = m_wallet->lastSyncTime().secsTo(QDateTime::currentDateTime());
+                quint64 estimatedBlocksBehind = std::max(qint64(0), secsSinceLastSync) / 120;
+                if (estimatedBlocksBehind > 0) {
+                    statusStr = tr("~%1 blocks behind").arg(QLocale().toString(estimatedBlocksBehind));
+                } else {
+                    statusStr = tr("Disconnected");
+                }
+            } else {
+                if (conf()->get(Config::syncPaused).toBool()) {
+                    statusStr = this->getPausedStatusText();
+                } else {
+                    statusStr = tr("Disconnected");
+                }
+            }
+            break;
+        }
+        case Wallet::ConnectionStatus_Connecting:
+            statusStr = tr("Connecting to node");
+            break;
+        case Wallet::ConnectionStatus_WrongVersion:
+            statusStr = tr("Node Incompatible");
+            break;
+        case Wallet::ConnectionStatus_Synchronizing: {
+            quint64 walletHeight = m_wallet->blockChainHeight();
+            quint64 targetHeight = m_wallet->daemonBlockChainTargetHeight();
+            quint64 blocksBehind = Utils::blocksBehind(walletHeight, targetHeight);
+
+            if (targetHeight == 0) {
+                statusStr = tr("Connecting...");
+            } else if (conf()->get(Config::syncPaused).toBool()) {
+                statusStr = this->getPausedStatusText();
+            } else {
+                QString blocksStr = QLocale().toString(blocksBehind);
+                QString type = m_daemonSync ? tr("Blockchain") : tr("Wallet");
+                statusStr = tr("%1 sync: %2 blocks behind").arg(type, blocksStr);
+            }
+            break;
+        }
+        case Wallet::ConnectionStatus_Synchronized:
+            if (conf()->get(Config::syncPaused).toBool()) {
+                statusStr = this->getPausedStatusText();
+            } else {
+                statusStr = tr("Synchronized");
+            }
+            break;
+        case Wallet::ConnectionStatus_Idle:
+            if (m_updateNetworkInfoAction->isChecked()) {
+                statusStr = tr("Idle");
+            } else {
+                statusStr = this->getPausedStatusText();
+            }
+            break;
+        default:
+            statusStr = tr("Disconnected");
+            break;
+    }
+
+    this->setStatusText(statusStr);
+}
+
 void MainWindow::tryStoreWallet() {
     if (m_wallet->connectionStatus() == Wallet::ConnectionStatus::ConnectionStatus_Synchronizing) {
         Utils::showError(this, "Unable to save wallet", "Can't save wallet during synchronization", {"Wait until synchronization is finished and try again"}, "synchronization");
@@ -1069,9 +1149,8 @@ void MainWindow::onSyncStatus(quint64 height, quint64 target, bool daemonSync) {
         lastConfigSave = QDateTime::currentDateTime();
     }
 
+    m_daemonSync = daemonSync;
     // qDebug() << "onSyncStatus: Height" << height << "Target" << target << "DaemonSync" << daemonSync;
-
-    quint64 blocksBehind = Utils::blocksBehind(height, target);
 
     // Throttle UI updates to 10Hz to prevent spam during sync
     static QDateTime lastThrottleTime = QDateTime::currentDateTime();
@@ -1089,20 +1168,9 @@ void MainWindow::onSyncStatus(quint64 height, quint64 target, bool daemonSync) {
         // Persist sync state for next boot
         conf()->set(Config::lastKnownNetworkHeight, static_cast<qulonglong>(target));
         m_wallet->setCacheAttribute("feather.lastSync", QString::number(QDateTime::currentSecsSinceEpoch()));
-    } else {
-        if (target == 0) {
-            this->setStatusText(tr("Connecting..."));
-            return;
-        }
+    } 
 
-        QString blocksStr = QLocale().toString(blocksBehind);
-        if (conf()->get(Config::syncPaused).toBool()) {
-             this->setStatusText(this->getPausedStatusText());
-        } else {
-             QString type = daemonSync ? tr("Blockchain") : tr("Wallet");
-             this->setStatusText(tr("%1 sync: %2 blocks behind").arg(type, blocksStr));
-        }
-    }
+    this->updateStatusText();
 
     this->updateSyncStatusToolTip();
 }
@@ -1121,10 +1189,8 @@ void MainWindow::onConnectionStatusChanged(int status)
     // Update connection info in status bar.
 
     QIcon icon;
-    QString statusStr;
     if (conf()->get(Config::offlineMode).toBool()) {
         icon = icons()->icon("status_offline.svg");
-        statusStr = "Offline mode";
     } else {
         switch(status){
             case Wallet::ConnectionStatus_Idle:
@@ -1140,45 +1206,20 @@ void MainWindow::onConnectionStatusChanged(int status)
                     // "True Idle" - just waiting, no network activity
                     icon = icons()->icon("status_offline.svg");
                 }
-                statusStr = this->getPausedStatusText();
                 m_statusLabelNetStats->hide();
                 break;
             }
             case Wallet::ConnectionStatus_Disconnected:
-            {
                 icon = icons()->icon("status_offline.svg");
-                statusStr = "Disconnected";
-
-                // If we are waiting for a retry or scheduled sync, show that instead of "Disconnected"
-                if (m_wallet) {
-                    qint64 seconds = m_wallet->secondsUntilNextRefresh();
-                    if (seconds > 0) {
-                        QString timeStr;
-                        if (seconds > 60) timeStr = QString("%1 min").arg((seconds + 59) / 60);
-                        else timeStr = QString("%1s").arg(seconds);
-                        statusStr = tr("Disconnected (Retry in %1)").arg(timeStr);
-                    } else if (m_wallet->lastSyncTime().isValid()) {
-                         // Fallback to estimation only if not waiting for retry
-                         qint64 secsSinceLastSync = m_wallet->lastSyncTime().secsTo(QDateTime::currentDateTime());
-                         quint64 estimatedBlocksBehind = std::max(qint64(0), secsSinceLastSync) / 120;
-                         if (estimatedBlocksBehind > 0) {
-                             statusStr = tr("~%1 blocks behind").arg(QLocale().toString(estimatedBlocksBehind));
-                         }
-                    }
-                }
                 break;
-            }
             case Wallet::ConnectionStatus_Connecting:
                 icon = icons()->icon("status_lagging.svg");
-                statusStr = "Connecting to node";
                 break;
             case Wallet::ConnectionStatus_WrongVersion:
                 icon = icons()->icon("status_disconnected.svg");
-                statusStr = "Node Incompatible";
                 break;
             case Wallet::ConnectionStatus_Synchronizing:
                 icon = icons()->icon("status_waiting.svg");
-                statusStr = "Synchronizing";
                 break;
             case Wallet::ConnectionStatus_Synchronized:
                 if (conf()->get(Config::proxy).toInt() == Config::Proxy::Tor) {
@@ -1186,32 +1227,17 @@ void MainWindow::onConnectionStatusChanged(int status)
                 } else {
                     icon = icons()->icon("status_connected.svg");
                 }
-                statusStr = "Synchronized";
                 break;
             default:
                 icon = icons()->icon("status_disconnected.svg");
-                statusStr = "Disconnected";
                 break;
-        }
+         }
     }
 
-    this->setStatusText(statusStr);
+    this->updateStatusText();
 
     this->updateSyncStatusToolTip();
 
-    if (m_wallet) {
-        quint64 walletHeight = m_wallet->blockChainHeight();
-        quint64 daemonHeight = m_wallet->daemonBlockChainHeight();
-        quint64 targetHeight = m_wallet->daemonBlockChainTargetHeight();
-
-        if (walletHeight > 0) {
-            statusStr += QString("\nWallet %1. Daemon %2. Network %3")
-                    .arg(QLocale::system().toString(walletHeight))
-                    .arg(QLocale::system().toString(daemonHeight))
-                    .arg(QLocale::system().toString(targetHeight));
-        }
-    }
-    // m_statusBtnConnectionStatusIndicator->setToolTip(statusStr);
     m_statusBtnConnectionStatusIndicator->setIcon(icon);
     this->updateBalance();
 }
@@ -1772,7 +1798,7 @@ void MainWindow::onResendTransaction(const QString &txid) {
     // Connect to a different node so chances of successful relay are higher
     m_nodes->autoConnect(true);
 
-    TxBroadcastDialog dialog{this, m_nodes, txHex};
+    TxBroadcastDialog dialog{this, m_wallet, m_nodes, txHex};
     dialog.exec();
 }
 
@@ -1865,7 +1891,7 @@ void MainWindow::loadSignedTx() {
 }
 
 void MainWindow::loadSignedTxFromText() {
-    TxBroadcastDialog dialog{this, m_nodes};
+    TxBroadcastDialog dialog{this, m_wallet, m_nodes};
     dialog.exec();
 }
 
@@ -2017,42 +2043,14 @@ void MainWindow::updateNetStats() {
                        || (m_wallet->connectionStatus() == Wallet::ConnectionStatus_Synchronized && !m_coinsRefreshing && !showTraffic))
     {
         m_statusLabelNetStats->hide();
-
-        if (m_wallet && m_wallet->connectionStatus() == Wallet::ConnectionStatus_Synchronized) {
-             qint64 seconds = m_wallet->secondsUntilNextRefresh();
-             this->setStatusText(tr("Synchronized"));
-             // if (seconds > 0) { ... } // Removed countdown display per user feedback
-        }
-        else if (m_wallet && m_wallet->connectionStatus() == Wallet::ConnectionStatus_Disconnected) {
-             qint64 seconds = m_wallet->secondsUntilNextRefresh();
-             if (seconds > 0) {
-                 QString timeStr;
-                 if (seconds > 60) timeStr = QString("%1 min").arg((seconds + 59) / 60);
-                 else timeStr = QString("%1s").arg(seconds);
-                 this->setStatusText(QString("Disconnected (Retry in %1)").arg(timeStr));
-             } else {
-                 if (conf()->get(Config::syncPaused).toBool()) {
-                     this->setStatusText(this->getPausedStatusText());
-                 } else {
-                     this->setStatusText(tr("Connecting..."));
-                 }
-             }
-        }
-        return;
-    }
-
-    if (conf()->get(Config::syncPaused).toBool()) {
+    } else if (conf()->get(Config::syncPaused).toBool()) {
         m_statusLabelNetStats->hide();
-        this->setStatusText(this->getPausedStatusText());
-        return;
+    } else {
+        m_statusLabelNetStats->show();
+        m_statusLabelNetStats->setText(QString("(D: %1)").arg(Utils::formatBytes(m_wallet->getBytesReceived())));
     }
 
-    if (m_wallet && m_wallet->connectionStatus() == Wallet::ConnectionStatus_Synchronized) {
-        this->setStatusText(tr("Synchronized"));
-    }
-
-    m_statusLabelNetStats->show();
-    m_statusLabelNetStats->setText(QString("(D: %1)").arg(Utils::formatBytes(m_wallet->getBytesReceived())));
+    this->updateStatusText();
 }
 
 void MainWindow::rescanSpent() {
