@@ -165,18 +165,31 @@ void Settings::setupAppearanceTab() {
 
 void Settings::setupNetworkTab() {
     // Node
-    if (m_nodes) {
-        ui->nodeWidget->setupUI(m_nodes);
-        connect(ui->nodeWidget, &NodeWidget::nodeSourceChanged, m_nodes, &Nodes::onNodeSourceChanged);
-        connect(ui->nodeWidget, &NodeWidget::connectToNode, m_nodes, QOverload<const FeatherNode&>::of(&Nodes::connectToNode));
-    } else {
-        m_nodes = new Nodes(this, nullptr);
-        ui->nodeWidget->setupUI(m_nodes);
-        ui->nodeWidget->setCanConnect(false);
-    }
+    std::function<void()> setupNodeWidget = [this]{
+        if (m_nodes) {
+            ui->nodeWidget->setupUI(m_nodes);
+            connect(ui->nodeWidget, &NodeWidget::nodeSourceChanged, m_nodes, &Nodes::onNodeSourceChanged);
+            connect(ui->nodeWidget, &NodeWidget::connectToNode, m_nodes, QOverload<const FeatherNode&>::of(&Nodes::connectToNode));
+        } else {
+            m_nodes = new Nodes(this, nullptr);
+            ui->nodeWidget->setupUI(m_nodes);
+            ui->nodeWidget->setCanConnect(false);
+        }
+    };
+    setupNodeWidget();
+
+
 
     // Proxy
     connect(ui->proxyWidget, &NetworkProxyWidget::proxySettingsChanged, this, &Settings::onProxySettingsChanged);
+
+    // Offline mode
+    ui->checkBox_offlineMode->setChecked(conf()->get(Config::offlineMode).toBool());
+    connect(ui->checkBox_offlineMode, &QCheckBox::toggled, [this](bool checked){
+        conf()->set(Config::offlineMode, checked);
+        this->enableWebsocket(!checked && !conf()->get(Config::disableWebsocket).toBool());
+        emit offlineMode(checked);
+    });
 
     // Websocket
     // [Obtain third-party data]
@@ -186,13 +199,19 @@ void Settings::setupNetworkTab() {
         this->enableWebsocket(checked);
     });
 
-    // Overview
-    ui->checkBox_offlineMode->setChecked(conf()->get(Config::offlineMode).toBool());
-    connect(ui->checkBox_offlineMode, &QCheckBox::toggled, [this](bool checked){
-        conf()->set(Config::offlineMode, checked);
-        emit offlineMode(checked);
-        this->enableWebsocket(!checked);
-    });
+    // Add to Node tab
+    if (auto *layout = qobject_cast<QVBoxLayout*>(ui->Node->layout())) {
+
+        // Sync (Data Saving Mode)
+        QCheckBox *cbDataSaver = new QCheckBox("Data Saving Mode (Pause Sync on startup)", this);
+        cbDataSaver->setChecked(conf()->get(Config::syncPaused).toBool());
+        cbDataSaver->setToolTip("Prevents the wallet from automatically connecting to nodes on startup.");
+
+        connect(cbDataSaver, &QCheckBox::toggled, [](bool checked){
+            conf()->set(Config::syncPaused, checked);
+        });
+        layout->addWidget(cbDataSaver);
+    }
 }
 
 void Settings::setupStorageTab() {
@@ -234,10 +253,25 @@ void Settings::setupStorageTab() {
         WalletManager::instance()->setLogLevel(toggled ? conf()->get(Config::logLevel).toInt() : -1);
     });
 
+    // [Disable terminal output]
+    QCheckBox *cbDisableStdout = new QCheckBox("Disable terminal output (silence most logs)", this);
+    cbDisableStdout->setChecked(conf()->get(Config::disableLoggingStdout).toBool());
+    connect(cbDisableStdout, &QCheckBox::toggled, [](bool toggled){
+        conf()->set(Config::disableLoggingStdout, toggled);
+    });
+    // Insert into the logging layout (verticalLayout_2)
+    // We add it after checkBox_enableLogging
+    int index = ui->verticalLayout_2->indexOf(ui->checkBox_enableLogging);
+    ui->verticalLayout_2->insertWidget(index + 1, cbDisableStdout);
+
     // [Log level]
+    ui->comboBox_logLevel->clear();
+    ui->comboBox_logLevel->addItems({"Fatal", "Warning", "Info", "Debug"});
     ui->comboBox_logLevel->setCurrentIndex(conf()->get(Config::logLevel).toInt());
+
     connect(ui->comboBox_logLevel, QOverload<int>::of(&QComboBox::currentIndexChanged), [](int index){
        conf()->set(Config::logLevel, index);
+       qInfo() << "Log level changed to:" << index;
        if (!conf()->get(Config::disableLogging).toBool()) {
            WalletManager::instance()->setLogLevel(index);
        }
@@ -314,6 +348,7 @@ void Settings::setupDisplayTab() {
     connect(ui->checkBox_showTrayIcon, &QCheckBox::toggled, [this](bool toggled) {
         conf()->set(Config::showTrayIcon, toggled);
         ui->checkBox_minimizeToTray->setEnabled(toggled);
+        ui->checkBox_trayLeftClickTogglesFocus->setEnabled(toggled);
         emit showTrayIcon(toggled);
     });
 
@@ -323,6 +358,12 @@ void Settings::setupDisplayTab() {
     connect(ui->checkBox_minimizeToTray, &QCheckBox::toggled, [this](bool toggled) {
         conf()->set(Config::minimizeToTray, toggled);
     });
+
+    // [Left click system tray icon to toggle focus]
+    ui->checkBox_trayLeftClickTogglesFocus->setEnabled(ui->checkBox_showTrayIcon->isChecked());
+    ui->checkBox_trayLeftClickTogglesFocus->setChecked(conf()->get(Config::trayLeftClickTogglesFocus).toBool());
+    connect(ui->checkBox_trayLeftClickTogglesFocus, &QCheckBox::toggled,
+            [this](bool toggled) { conf()->set(Config::trayLeftClickTogglesFocus, toggled); });
 }
 
 void Settings::setupMemoryTab() {

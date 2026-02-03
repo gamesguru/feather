@@ -24,8 +24,8 @@ struct PayToLineError {
 
     QString lineContent;
     QString error;
-    int idx;
-    bool isMultiline;
+    int idx = 0;
+    bool isMultiline = false;
 };
 
 class PayToEdit : public QPlainTextEdit

@@ -4,6 +4,8 @@
 #include "SendWidget.h"
 #include "ui_SendWidget.h"
 
+#include <QMessageBox>
+
 #include "ColorScheme.h"
 #include "constants.h"
 #include "utils/AppData.h"
@@ -11,6 +13,7 @@
 #include "Icons.h"
 #include "libwalletqt/Wallet.h"
 #include "libwalletqt/WalletManager.h"
+#include "WindowManager.h"
 
 #if defined(WITH_SCANNER)
 #include "wizard/offline_tx_signing/OfflineTxSigningWizard.h"
@@ -143,14 +146,37 @@ void SendWidget::scanClicked() {
 }
 
 void SendWidget::sendClicked() {
-    if (!m_wallet->isConnected()) {
+    bool syncPaused = conf()->get(Config::syncPaused).toBool();
+
+    if (syncPaused) {
+        QMessageBox msgBox(this);
+        msgBox.setIcon(QMessageBox::Warning);
+        msgBox.setWindowTitle("Are you sure? Create transaction?");
+        msgBox.setText("<b>Are you sure? Create transaction?</b>");
+        msgBox.setInformativeText("Wallet sync is paused. This may result in an invalid transaction or balance.\n\n• Go to File -> Settings -> Network -> Sync to resume sync.");
+        msgBox.setStandardButtons(QMessageBox::Ok | QMessageBox::Cancel | QMessageBox::Help);
+        msgBox.setDefaultButton(QMessageBox::Cancel);
+
+        auto ret = msgBox.exec();
+
+        if (ret == QMessageBox::Help) {
+            WindowManager::instance()->showDocs(this, "synchronization");
+            return;
+        }
+
+        if (ret != QMessageBox::Ok) {
+            return;
+        }
+    }
+
+    if (!m_wallet->isConnected() && !syncPaused) {
         Utils::showError(this, "Unable to create transaction", "Wallet is not connected to a node.",
                          {"Wait for the wallet to automatically connect to a node.", "Go to File -> Settings -> Network -> Node to manually connect to a node."},
                          "nodes");
         return;
     }
 
-    if (!m_wallet->isSynchronized()) {
+    if (!m_wallet->isSynchronized() && !syncPaused) {
         Utils::showError(this, "Unable to create transaction", "Wallet is not synchronized", {"Wait for wallet synchronization to complete"}, "synchronization");
         return;
     }

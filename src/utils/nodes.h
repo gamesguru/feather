@@ -167,6 +167,7 @@ public:
 public slots:
     void connectToNode();
     void connectToNode(const FeatherNode &node);
+    void disconnectCurrentNode();
     void onWSNodesReceived(QList<FeatherNode>& nodes);
     void onNodeSourceChanged(NodeSource nodeSource);
     void setCustomNodes(const QList<FeatherNode>& nodes);
@@ -174,6 +175,7 @@ public slots:
 
 private slots:
     void onWalletRefreshed();
+    void onConnectionStatusChanged(int status);
 
 private:
     Wallet *m_wallet = nullptr;
@@ -192,6 +194,7 @@ private:
     bool m_enableAutoconnect = true;
 
     bool m_allowConnection = false;
+    bool m_privacySwitchDone = false;  // Tracks if allTorExceptInitSync switch has fired
 
     FeatherNode pickEligibleNode();
 

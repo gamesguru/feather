@@ -3,6 +3,7 @@
 
 #include "NodeWidget.h"
 #include "ui_NodeWidget.h"
+#include <QtGlobal>
 
 #include <QAction>
 #include <QDesktopServices>
@@ -21,8 +22,13 @@ NodeWidget::NodeWidget(QWidget *parent)
 
     connect(ui->btn_addCustomNodes, &QPushButton::clicked, this, &NodeWidget::onCustomAddClicked);
 
-    connect(ui->checkBox_websocketList, &QCheckBox::stateChanged, [this](int id){
-        bool custom = (id == 0);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 7, 0)
+    connect(ui->checkBox_websocketList, &QCheckBox::checkStateChanged, [this](Qt::CheckState state){
+        bool custom = (state == Qt::Unchecked);
+#else
+    connect(ui->checkBox_websocketList, &QCheckBox::stateChanged, [this](int state){
+        bool custom = (state == Qt::Unchecked);
+#endif
         ui->stackedWidget->setCurrentIndex(custom);
         ui->frame_addCustomNodes->setVisible(custom);
         conf()->set(Config::nodeSource, custom);

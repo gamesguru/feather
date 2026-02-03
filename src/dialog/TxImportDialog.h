@@ -14,20 +14,25 @@ namespace Ui {
     class TxImportDialog;
 }
 
+class Nodes;
+
 class TxImportDialog : public WindowModalDialog
 {
 Q_OBJECT
 
 public:
-    explicit TxImportDialog(QWidget *parent, Wallet *wallet);
+    explicit TxImportDialog(QWidget *parent, Wallet *wallet, Nodes *nodes);
     ~TxImportDialog() override;
 
 private slots:
     void onImport();
 
 private:
+    void updateStatus(int status);
+
     QScopedPointer<Ui::TxImportDialog> ui;
     Wallet *m_wallet;
+    Nodes *m_nodes;
 };
 
 

@@ -19,7 +19,7 @@ class TxBroadcastDialog : public WindowModalDialog
     Q_OBJECT
 
 public:
-    explicit TxBroadcastDialog(QWidget *parent, Nodes *nodes, const QString &transactionHex = "");
+    explicit TxBroadcastDialog(QWidget *parent, Wallet *wallet, Nodes *nodes, const QString &transactionHex = "");
     ~TxBroadcastDialog() override;
 
 private slots:
@@ -28,6 +28,7 @@ private slots:
 
 private:
     QScopedPointer<Ui::TxBroadcastDialog> ui;
+    Wallet *m_wallet;
     Nodes *m_nodes;
     DaemonRpc *m_rpc;
 };

@@ -3,8 +3,14 @@
 
 #include "Wallet.h"
 
+
+
 #include <chrono>
 #include <thread>
+#include <tuple>
+
+#include <QMetaObject>
+
 
 #include "AddressBook.h"
 #include "Coins.h"
@@ -14,6 +20,7 @@
 #include "WalletManager.h"
 #include "WalletListenerImpl.h"
 
+#include "utils/config.h"
 #include "config.h"
 #include "constants.h"
 
@@ -25,6 +32,8 @@
 #include "model/CoinsModel.h"
 
 #include "utils/ScopeGuard.h"
+#include "utils/RestoreHeightLookup.h"
+#include "utils/Utils.h"
 
 #include "wallet/wallet2.h"
 
@@ -42,6 +51,7 @@ Wallet::Wallet(Monero::Wallet *wallet, QObject *parent)
         , m_addressBookModel(nullptr)
         , m_daemonBlockChainHeight(0)
         , m_daemonBlockChainTargetHeight(0)
+        , m_lastSyncTime(0)
         , m_connectionStatus(Wallet::ConnectionStatus_Disconnected)
         , m_currentSubaddressAccount(0)
         , m_subaddress(new Subaddress(this, wallet->getWallet(), this))
@@ -52,6 +62,7 @@ Wallet::Wallet(Monero::Wallet *wallet, QObject *parent)
         , m_useSSL(true)
         , m_coins(new Coins(this, wallet->getWallet(), this))
         , m_storeTimer(new QTimer(this))
+        , m_lastRefreshTime(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count())
 {
     m_walletListener = new WalletListenerImpl(this);
     m_walletImpl->setListener(m_walletListener);
@@ -63,7 +74,7 @@ Wallet::Wallet(Monero::Wallet *wallet, QObject *parent)
     m_coinsModel = new CoinsModel(this, m_coins);
 
     if (this->status() == Status_Ok) {
-        startRefreshThread();
+        // startRefreshThread(); // Moved to startRefresh()
 
         // Store the wallet every 2 minutes
         m_storeTimer->start(2 * 60 * 1000);
@@ -79,10 +90,28 @@ Wallet::Wallet(Monero::Wallet *wallet, QObject *parent)
     connect(this, &Wallet::updated, this, &Wallet::onUpdated);
     connect(this, &Wallet::heightsRefreshed, this, &Wallet::onHeightsRefreshed);
     connect(this, &Wallet::transactionCommitted, this, &Wallet::onTransactionCommitted);
+    connect(this, &Wallet::moneyReceived, m_history, &TransactionHistory::refresh);
+    connect(this, &Wallet::unconfirmedMoneyReceived, m_history, &TransactionHistory::refresh);
+    connect(this, &Wallet::moneySpent, m_history, &TransactionHistory::refresh);
 
     connect(m_subaddress, &Subaddress::corrupted, [this]{
        emit keysCorrupted();
     });
+
+    // Store original creation height if not already present
+    // This protects the restore height from being overwritten by "Skip Sync" or range syncs
+    if (!cacheAttributeExists("feather.creation_height")) {
+        quint64 height = m_wallet2->get_refresh_from_block_height();
+        setCacheAttribute("feather.creation_height", QString::number(height));
+    }
+
+    QString lastSyncStr = getCacheAttribute("feather.lastSync");
+    if (!lastSyncStr.isEmpty()) {
+        qint64 lastSync = lastSyncStr.toLongLong();
+        if (lastSync > 0) {
+            m_lastSyncTime = lastSync * 1000;
+        }
+    }
 }
 
 // #################### Status ####################
@@ -92,16 +121,16 @@ Wallet::Status Wallet::status() const {
 }
 
 Wallet::ConnectionStatus Wallet::connectionStatus() const {
-    return m_connectionStatus;
+    return static_cast<ConnectionStatus>(m_connectionStatus.load());
 }
 
 void Wallet::setConnectionStatus(ConnectionStatus value) {
-    if (m_connectionStatus == value) {
+    if (m_connectionStatus.load() == value) {
         return;
     }
 
-    m_connectionStatus = value;
-    emit connectionStatusChanged(m_connectionStatus);
+    m_connectionStatus.store(value);
+    emit connectionStatusChanged(value);
 }
 
 bool Wallet::isSynchronized() const {
@@ -406,20 +435,56 @@ void Wallet::setDaemonLogin(const QString &daemonUsername, const QString &daemon
 void Wallet::initAsync(const QString &daemonAddress, bool trustedDaemon, quint64 upperTransactionLimit, const QString &proxyAddress)
 {
     qDebug() << "initAsync: " + daemonAddress;
+
+    if (daemonAddress.isEmpty()) {
+        m_scheduler.run([this] {
+            m_wallet2->set_offline(true);
+        });
+        setConnectionStatus(Wallet::ConnectionStatus_Disconnected);
+        return;
+    }
+
     const auto future = m_scheduler.run([this, daemonAddress, trustedDaemon, upperTransactionLimit, proxyAddress] {
         // Beware! This code does not run in the GUI thread.
 
         bool success;
         {
             QMutexLocker locker(&m_proxyMutex);
-            success = m_walletImpl->init(daemonAddress.toStdString(), upperTransactionLimit, m_daemonUsername.toStdString(), m_daemonPassword.toStdString(), m_useSSL, false, proxyAddress.toStdString());
+            QString safeAddress = daemonAddress;
+            if (safeAddress.endsWith(".onion") || safeAddress.contains(".onion:")) {
+                 if (!safeAddress.contains("://")) {
+                     safeAddress.prepend("http://");
+                 }
+            }
+            qInfo() << "Refresher: Initializing wallet with daemon address:" << safeAddress;
+            qDebug() << "InitAsync: connecting to" << safeAddress;
+            m_wallet2->set_offline(false);
+            success = m_walletImpl->init(safeAddress.toStdString(), upperTransactionLimit, m_daemonUsername.toStdString(), m_daemonPassword.toStdString(), m_useSSL, false, proxyAddress.toStdString());
+        }
+
+        if (m_scheduler.stopping()) {
+            return;
         }
 
         setTrustedDaemon(trustedDaemon);
 
         if (success) {
-            qDebug() << "init async finished - starting refresh";
-            startRefresh();
+            bool paused = (m_syncState == SyncState::Paused) || (m_syncState == SyncState::PausedScanning);
+            qInfo() << "init async finished - starting refresh. Paused:" << paused;
+
+            if (m_syncState == SyncState::Paused) {
+                m_wallet2->set_offline(true);
+                setConnectionStatus(ConnectionStatus_Disconnected);
+            } else {
+                // Fetch initial heights so UI can update even if paused
+                quint64 daemonHeight = m_walletImpl->daemonBlockChainHeight();
+                quint64 targetHeight = m_walletImpl->daemonBlockChainTargetHeight();
+                emit heightsRefreshed(daemonHeight > 0, daemonHeight, targetHeight);
+
+                if (m_syncState == SyncState::Active) {
+                    startRefresh();
+                }
+            }
         }
     });
     if (future.first)
@@ -430,22 +495,44 @@ void Wallet::initAsync(const QString &daemonAddress, bool trustedDaemon, quint64
 
 // #################### Synchronization (Refresh) ####################
 
-void Wallet::startRefresh() {
+void Wallet::startRefresh(bool force) {
+    startRefreshThread();
     m_refreshEnabled = true;
-    m_refreshEnabled = true;
-    m_refreshNow = true;
+    if (force || m_syncState == SyncState::Active) {
+        m_refreshNow = true;
+    }
 }
 
 void Wallet::pauseRefresh() {
     m_refreshEnabled = false;
 }
 
+void Wallet::updateNetworkStatus() {
+    const auto future = m_scheduler.run([this] {
+        if (!isHwBacked() || isDeviceConnected()) {
+            quint64 daemonHeight = m_walletImpl->daemonBlockChainHeight();
+            bool success = daemonHeight > 0;
+
+            quint64 targetHeight = 0;
+            if (success) {
+                targetHeight = m_walletImpl->daemonBlockChainTargetHeight();
+            }
+            bool haveHeights = (daemonHeight > 0 && targetHeight > 0);
+
+            emit heightsRefreshed(haveHeights, daemonHeight, targetHeight);
+        }
+    });
+}
+
 void Wallet::startRefreshThread()
 {
-    const auto future = m_scheduler.run([this] {
-        // Beware! This code does not run in the GUI thread.
+    bool expected = false;
+    if (!m_refreshThreadStarted.compare_exchange_strong(expected, true)) {
+        return;
+    }
 
-        constexpr const std::chrono::seconds refreshInterval{10};
+    // Beware! This code does not run in the GUI thread.
+    const auto future = m_scheduler.run([this] {
         constexpr const std::chrono::milliseconds intervalResolution{100};
 
         auto last = std::chrono::steady_clock::now();
@@ -455,36 +542,9 @@ void Wallet::startRefreshThread()
             {
                 const auto now = std::chrono::steady_clock::now();
                 const auto elapsed = now - last;
-                if (elapsed >= refreshInterval || m_refreshNow)
+                if (elapsed >= std::chrono::seconds(m_refreshInterval) || m_refreshNow)
                 {
-                    m_refreshNow = false;
-
-                    // get daemonHeight and targetHeight
-                    // daemonHeight and targetHeight will be 0 if call to get_info fails
-                    quint64 daemonHeight = m_walletImpl->daemonBlockChainHeight();
-                    bool success = daemonHeight > 0;
-
-                    quint64 targetHeight = 0;
-                    if (success) {
-                        targetHeight = m_walletImpl->daemonBlockChainTargetHeight();
-                    }
-                    bool haveHeights = (daemonHeight > 0 && targetHeight > 0);
-
-                    emit heightsRefreshed(haveHeights, daemonHeight, targetHeight);
-
-                    // Don't call refresh function if we don't have the daemon and target height
-                    // We do this to prevent to UI from getting confused about the amount of blocks that are still remaining
-                    if (haveHeights) {
-                        QMutexLocker locker(&m_asyncMutex);
-
-                        if (m_newWallet) {
-                            // Set blockheight to daemonHeight for newly created wallets to speed up initial sync
-                            m_walletImpl->setRefreshFromBlockHeight(daemonHeight);
-                            m_newWallet = false;
-                        }
-
-                        m_walletImpl->refresh();
-                    }
+                    refreshLoopStep();
                     last = std::chrono::steady_clock::now();
                 }
             }
@@ -507,12 +567,17 @@ void Wallet::onHeightsRefreshed(bool success, quint64 daemonHeight, quint64 targ
 
         if (daemonHeight < targetHeight) {
             emit syncStatus(daemonHeight, targetHeight, true);
-        }
-        else {
+        } else {
             this->syncStatusUpdated(walletHeight, daemonHeight);
+            emit syncStatus(daemonHeight, targetHeight, false);
         }
 
-        if (walletHeight < (targetHeight - 1)) {
+        if (m_syncState <= SyncState::PausedScanning) {
+            if (m_scanMempoolEnabled)
+                setConnectionStatus(ConnectionStatus_Idle);
+            else
+                setConnectionStatus(ConnectionStatus_Disconnected);
+        } else if (walletHeight < targetHeight) {
             setConnectionStatus(ConnectionStatus_Synchronizing);
         } else {
             setConnectionStatus(ConnectionStatus_Synchronized);
@@ -520,11 +585,35 @@ void Wallet::onHeightsRefreshed(bool success, quint64 daemonHeight, quint64 targ
     } else {
         setConnectionStatus(ConnectionStatus_Disconnected);
     }
+
+    if (success) {
+        m_lastSyncTime = QDateTime::currentDateTime().toMSecsSinceEpoch();
+    }
 }
 
 quint64 Wallet::blockChainHeight() const {
     // Can not block UI
     return m_wallet2->get_blockchain_current_height();
+}
+
+qint64 Wallet::secondsUntilNextRefresh() const {
+    if (m_syncState < SyncState::SyncingOneShot || !m_refreshEnabled) {
+        return -1;
+    }
+
+    if (this->isHwBacked() && !this->isDeviceConnected()) {
+        return -2;
+    }
+
+    auto now = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    auto elapsed = std::chrono::microseconds(now - m_lastRefreshTime.load());
+    auto interval = std::chrono::seconds(m_refreshInterval);
+
+    if (elapsed >= interval) {
+        return 0;
+    }
+
+    return std::chrono::duration_cast<std::chrono::seconds>(interval - elapsed).count();
 }
 
 quint64 Wallet::daemonBlockChainHeight() const {
@@ -535,16 +624,251 @@ quint64 Wallet::daemonBlockChainTargetHeight() const {
     return m_daemonBlockChainTargetHeight;
 }
 
-void Wallet::syncStatusUpdated(quint64 height, quint64 target) {
-    if (height >= (target - 1)) {
-        // TODO: is this needed?
-        this->updateBalance();
-    }
+void Wallet::setSyncPaused(bool paused) {
+    if (paused) {
+        pauseRefresh();
+        m_syncState = m_scanMempoolEnabled ? SyncState::PausedScanning : SyncState::Paused;
 
-    emit syncStatus(height, target, false);
+        if (!m_scanMempoolEnabled) {
+            m_wallet2->set_offline(true);
+            setConnectionStatus(ConnectionStatus_Disconnected);
+        } else {
+             // Paused with mempool scanning: stay online but don't sync blocks
+             // Only set Idle if we already have a daemon connection
+             m_wallet2->set_offline(false);
+             if (!m_wallet2->get_daemon_address().empty()) {
+                 setConnectionStatus(ConnectionStatus_Idle);
+             }
+             startRefresh(true);
+        }
+    } else {
+        m_syncState = SyncState::Active;
+        m_wallet2->set_offline(false);
+        // Let the refresh loop set the appropriate connection status
+        startRefresh(true);
+    }
 }
 
+void Wallet::setScanMempoolWhenPaused(bool enabled) {
+    m_scanMempoolEnabled = enabled;
+
+    // Immediately update state if currently paused
+    if (m_syncState != SyncState::Active) {
+         if (enabled) {
+             m_syncState = SyncState::PausedScanning;
+             m_wallet2->set_offline(false);
+             // Only set Idle if we already have a daemon connection
+             if (!m_wallet2->get_daemon_address().empty()) {
+                 setConnectionStatus(ConnectionStatus_Idle);
+             }
+             startRefresh(true);
+         } else {
+             m_syncState = SyncState::Paused;
+             m_wallet2->set_offline(true);
+             setConnectionStatus(ConnectionStatus_Disconnected);
+             pauseRefresh();
+         }
+    }
+}
+
+QDateTime Wallet::lastSyncTime() const {
+    qint64 syncTime = m_lastSyncTime.load();
+    if (syncTime == 0)
+        return QDateTime();
+    return QDateTime::fromMSecsSinceEpoch(syncTime);
+}
+
+void Wallet::setRefreshInterval(int seconds) {
+    m_refreshInterval = seconds;
+}
+
+void Wallet::skipToTip() {
+    if (!m_wallet2) return;
+    
+    uint64_t target = m_daemonBlockChainTargetHeight;
+    if (target == 0) {
+        qWarning() << "Cannot skip to tip: Network target unknown. Connect first.";
+        return;
+    }
+
+    QMutexLocker locker(&m_asyncMutex);
+    m_wallet2->set_refresh_from_block_height(target);
+    this->storeSafer();
+    m_lastSyncTime = QDateTime::currentDateTime().toMSecsSinceEpoch();
+
+    if (m_syncState == SyncState::Active) {
+        setConnectionStatus(ConnectionStatus_Synchronizing);
+        startRefresh(true);
+    }
+    emit syncStatus(target, target, true);
+}
+
+quint64 Wallet::getUnlockTargetHeight() const {
+    if (!m_wallet2) return 0;
+
+    uint64_t current = blockChainHeight();
+    uint64_t target = 0;
+    
+    // Check incoming transfers (last 1000 blocks)
+    uint64_t min_height = (current > 1000) ? current - 1000 : 0;
+    uint64_t max_height = (uint64_t)-1;
+    
+    std::list<std::pair<crypto::hash, tools::wallet2::payment_details>> in_payments;
+    m_wallet2->get_payments(in_payments, min_height, max_height);
+    
+    for (const auto &p : in_payments) {
+        // Standard unlock time is block_height + 10
+        uint64_t unlock_height = p.second.m_block_height + 10;
+        // Explicit unlock_time override
+        if (p.second.m_unlock_time > 0) {
+             unlock_height = p.second.m_unlock_time;
+        }
+        
+        if (unlock_height > current) {
+             target = std::max(target, unlock_height);
+        }
+    }
+    
+    // Check outgoing transfers (change)
+    std::list<std::pair<crypto::hash, tools::wallet2::confirmed_transfer_details>> out_payments;
+    m_wallet2->get_payments_out(out_payments, min_height, max_height);
+    
+    for (const auto &p : out_payments) {
+         // Change is locked for 10 blocks
+         uint64_t unlock_height = p.second.m_block_height + 10;
+         if (unlock_height > current) {
+              target = std::max(target, unlock_height);
+         }
+    }
+    
+    return target;
+}
+
+void Wallet::startSmartSync(quint64 requestedTarget) {
+    if (!m_wallet2) return;
+
+    qInfo() << "startSmartSync: triggering standard refresh";
+    
+    // Simplified: Just ensure we are syncing
+    setConnectionStatus(ConnectionStatus_Synchronizing);
+    startRefresh(true);
+}
+
+void Wallet::syncDateRange(const QDate &start, const QDate &end) {
+    if (!m_wallet2) return;
+
+    qInfo() << "syncDateRange: triggering standard refresh (range optimization disabled for stability)";
+    setConnectionStatus(ConnectionStatus_Synchronizing);
+    startRefresh(true);
+}
+
+
+
+void Wallet::fullSync() {
+    if (!m_wallet2)
+        return;
+
+    // Retrieve original creation height from persistent storage
+    uint64_t originalHeight = 0;
+    QString storedHeight = this->getCacheAttribute("feather.creation_height");
+    if (!storedHeight.isEmpty()) {
+        originalHeight = storedHeight.toULongLong();
+    } else {
+        // Fallback: if skipToTip() was used, this may be the current tip, missing all transactions
+        originalHeight = m_wallet2->get_refresh_from_block_height();
+        qWarning() << "fullSync: No stored creation height found (feather.creation_height). "
+                   << "Falling back to current refresh height:" << originalHeight
+                   << ". This may miss transactions if skipToTip() was previously used.";
+    }
+
+    {
+        QMutexLocker locker(&m_asyncMutex);
+        m_wallet2->set_refresh_from_block_height(originalHeight);
+    }
+    // Trigger rescan
+    setConnectionStatus(ConnectionStatus_Synchronizing);
+    startRefresh(true);
+
+    qInfo() << "Full Sync triggered. Rescanning from original restore height:" << originalHeight;
+}
+
+void Wallet::syncStatusUpdated(quint64 height, quint64 targetHeight) {
+    if (height >= (targetHeight - 1)) {
+        this->updateBalance();
+    }
+    emit syncStatus(height, targetHeight, false);
+}
+
+bool Wallet::importTransaction(const QString &txid) {
+    if (!m_wallet2 || txid.isEmpty())
+        return false;
+    
+    try {
+        std::unordered_set<crypto::hash> txids;
+        crypto::hash txid_hash;
+        if (!epee::string_tools::hex_to_pod(txid.toStdString(), txid_hash)) {
+            qWarning() << "Invalid transaction id: " << txid;
+            return false;
+        }
+        txids.insert(txid_hash);
+        m_wallet2->scan_tx(txids);
+        qInfo() << "Successfully imported transaction:" << txid;
+        this->updateBalance();
+        this->history()->refresh();
+        return true;
+    } catch (const std::exception &e) {
+        qWarning() << "Failed to import transaction: " << txid << ", error: " << e.what();
+    }
+    return false;
+}
+
+bool Wallet::importTransactions(const QStringList &txids) {
+    if (!m_wallet2 || txids.empty())
+        return false;
+
+    if (!isConnected()) {
+        qWarning() << "Cannot batch import transactions: Wallet is offline";
+        return false;
+    }
+
+    try {
+        std::unordered_set<crypto::hash> hashes;
+        for (const auto &txid : txids) {
+            crypto::hash txid_hash;
+            if (epee::string_tools::hex_to_pod(txid.toStdString(), txid_hash)) {
+                hashes.insert(txid_hash);
+            } else {
+                 qWarning() << "Invalid transaction id in batch import: " << txid;
+            }
+        }
+
+        if (hashes.empty()) {
+            return false;
+        }
+
+    try {
+        m_wallet2->scan_tx(hashes);
+    } catch (...) {
+        qWarning() << "Failed to import transactions: Exception during scan_tx";
+        return false;
+    }
+        qInfo() << "Successfully batch imported" << hashes.size() << "transactions.";
+        this->storeSafer();
+        this->updateBalance();
+        this->history()->refresh();
+        return true;
+    } catch (const std::exception &e) {
+        qWarning() << "Failed to batch import transactions, error: " << e.what();
+    }
+    return false;
+}
+
+
+
 void Wallet::onNewBlock(uint64_t walletHeight) {
+    if (m_syncState != SyncState::Active && m_syncState != SyncState::SyncingOneShot) {
+        return;
+    }
     // Called whenever a new block gets scanned by the wallet
     quint64 daemonHeight = m_daemonBlockChainTargetHeight;
 
@@ -556,10 +880,14 @@ void Wallet::onNewBlock(uint64_t walletHeight) {
 
     this->syncStatusUpdated(walletHeight, daemonHeight);
 
-    if (this->isSynchronized()) {
+    static qint64 lastRefresh = 0;
+    qint64 now = QDateTime::currentMSecsSinceEpoch();
+
+    if (this->isSynchronized() || (now - lastRefresh) > 2000) {
         m_history->refresh();
         m_coins->refresh();
         this->subaddress()->updateUsed(this->currentSubaddressAccount());
+        lastRefresh = now;
     }
 }
 
@@ -583,8 +911,20 @@ void Wallet::onRefreshed(bool success, const QString &message) {
     if (!this->refreshedOnce) {
         this->refreshedOnce = true;
         emit walletRefreshed();
-        // store wallet immediately upon finishing synchronization
-        this->storeSafer();
+    }
+    // store wallet immediately upon finishing synchronization
+    this->storeSafer();
+}
+
+void Wallet::rescanBlockchainAsync() {
+    m_wallet2->rescan_blockchain(false, false, false);
+    
+    // Restore creation height to avoid scanning from 0
+    QString storedHeight = this->getCacheAttribute("feather.creation_height");
+    if (!storedHeight.isEmpty()) {
+        uint64_t height = storedHeight.toULongLong();
+        m_wallet2->set_refresh_from_block_height(height);
+        qInfo() << "Rescan: Restored creation height to" << height;
     }
 }
 
@@ -693,17 +1033,13 @@ bool Wallet::importOutputsFromStr(const std::string &outputs) {
     return m_walletImpl->importOutputsFromStr(outputs);
 }
 
-bool Wallet::importTransaction(const QString& txid) {
-    std::vector<std::string> txids = {txid.toStdString()};
-    return m_walletImpl->scanTransactions(txids);
-}
-
 // #################### Wallet cache ####################
 
 void Wallet::store() {
     m_walletImpl->store();
 }
 
+// Safe to call from main thread
 void Wallet::storeSafer() {
     // Do not store a synchronizing wallet: store() is NOT thread safe and may crash the wallet
     if (!this->isSynchronized()) {
@@ -900,7 +1236,9 @@ void Wallet::createTransaction(const QString &address, quint64 amount, const QSt
                                                                              currentSubaddressAccount(), subaddr_indices, m_selectedInputs, subtractFeeFromAmount);
 
         QVector<QString> addresses{address};
-        this->onTransactionCreated(ptImpl, addresses);
+        QMetaObject::invokeMethod(this, [this, ptImpl, addresses] {
+            this->onTransactionCreated(ptImpl, addresses);
+        }, Qt::QueuedConnection);
     });
 }
 
@@ -924,7 +1262,9 @@ void Wallet::createTransactionMultiDest(const QVector<QString> &addresses, const
                                                                                      static_cast<Monero::PendingTransaction::Priority>(feeLevel),
                                                                                      currentSubaddressAccount(), subaddr_indices, m_selectedInputs, subtractFeeFromAmount);
 
-        this->onTransactionCreated(ptImpl, addresses);
+        QMetaObject::invokeMethod(this, [this, ptImpl, addresses] {
+            this->onTransactionCreated(ptImpl, addresses);
+        }, Qt::QueuedConnection);
     });
 }
 
@@ -945,7 +1285,9 @@ void Wallet::sweepOutputs(const QVector<QString> &keyImages, QString address, bo
                                                                                      static_cast<Monero::PendingTransaction::Priority>(feeLevel));
 
         QVector<QString> addresses {address};
-        this->onTransactionCreated(ptImpl, addresses);
+        QMetaObject::invokeMethod(this, [this, ptImpl, addresses] {
+            this->onTransactionCreated(ptImpl, addresses);
+        }, Qt::QueuedConnection);
     });
 }
 
@@ -953,7 +1295,6 @@ void Wallet::sweepOutputs(const QVector<QString> &keyImages, QString address, bo
 
 void Wallet::onTransactionCreated(Monero::PendingTransaction *mtx, const QVector<QString> &address) {
     qDebug() << Q_FUNC_INFO;
-    startRefresh();
 
     PendingTransaction *tx = new PendingTransaction(mtx, this);
 
@@ -1452,12 +1793,139 @@ void Wallet::getTxPoolStatsAsync() {
     });
 }
 
+void Wallet::scanMempool() {
+    {
+        QMutexLocker locker(&m_asyncMutex);
+        try {
+            std::vector<std::tuple<cryptonote::transaction, crypto::hash, bool>> process_txs;
+            m_wallet2->update_pool_state(process_txs, false, false);
+            // Refresh models so the UI picks up the new transaction(s)
+            // We invoke this on the main thread to ensure signals (beginResetModel) are processed synchronously
+            // with the data update, preventing race conditions or ignored updates in the view.
+            QMetaObject::invokeMethod(this, [this]{
+                if (m_history) m_history->refresh();
+                if (m_coins) m_coins->refresh();
+                if (m_subaddress) m_subaddress->refresh();
+            }, Qt::QueuedConnection);
+
+        } catch (const std::exception &e) {
+            qWarning() << "Failed to scan mempool:" << e.what();
+        }
+    }
+    emit updated();
+}
+
+void Wallet::handlePausedState()
+{
+    // Use integer comparison: any state < Active but >= PausedScanning implies we should scan mempool if scheduled?
+    // Actually, only PausedScanning (20) triggers scan in paused mode.
+    // Active (30) or SyncingOneShot (25) use full refresh.
+    // Paused (0) does nothing.
+    bool shouldScanMempool = m_refreshNow || (m_syncState == SyncState::PausedScanning);
+
+    if (shouldScanMempool) {
+        if (m_wallet2->get_daemon_address().empty()) {
+            qDebug() << "[SYNC PAUSED] Skipping mempool scan because daemon address is empty";
+       } else {
+            qDebug() << "[SYNC PAUSED] Scanning mempool because scans are enabled";
+            if (m_scheduler.stopping()) return;
+            scanMempool();
+        }
+    }
+
+    // Update network stats if we just scanned OR if we don't have stats yet (startup recovery)
+    // But only if we actually have a daemon address configured
+    if ((shouldScanMempool || m_daemonBlockChainHeight == 0) && !m_wallet2->get_daemon_address().empty()) {
+        quint64 daemonHeight = m_walletImpl->daemonBlockChainHeight();
+        quint64 targetHeight = (daemonHeight > 0) ? m_walletImpl->daemonBlockChainTargetHeight() : 0;
+        emit heightsRefreshed(daemonHeight > 0, daemonHeight, targetHeight);
+    }
+}
+
+bool Wallet::fetchNetworkStats(quint64 &daemonHeight, quint64 &targetHeight)
+{
+    // get daemonHeight and targetHeight
+    // daemonHeight and targetHeight will be 0 if call to get_info fails
+    daemonHeight = m_walletImpl->daemonBlockChainHeight();
+    bool success = daemonHeight > 0;
+
+    targetHeight = 0;
+    if (success) {
+        targetHeight = m_walletImpl->daemonBlockChainTargetHeight();
+    }
+    return success;
+}
+
+void Wallet::performSync(bool haveHeights, quint64 daemonHeight)
+{
+    if (haveHeights) {
+        // If the wallet is disconnected, we want to try to reconnect
+        if (this->connectionStatus() == Wallet::ConnectionStatus_Disconnected) {
+            m_wallet2->set_offline(false);
+            setConnectionStatus(Wallet::ConnectionStatus_Connecting);
+        }
+
+        // Simplify sync logic to restore stability.
+        // Previously supported "Smart Sync" / "Range Sync" here, but it caused race conditions.
+        m_walletImpl->refresh();
+    }
+}
+
+void Wallet::handleSyncResult(bool success)
+{
+    if (success) {
+        m_lastRefreshTime = std::chrono::steady_clock::now().time_since_epoch().count();
+    } else {
+        // If sync failed, retry according to the interval (respects Data Saving)
+        auto retryDelay = std::chrono::seconds(m_refreshInterval);
+        qCritical() << "Refresher: Sync failed. Retry delay set to:" << retryDelay.count();
+        auto nextTime = std::chrono::steady_clock::now() - std::chrono::seconds(m_refreshInterval) + retryDelay;
+        m_lastRefreshTime = nextTime.time_since_epoch().count();
+    }
+}
+
+void Wallet::refreshLoopStep()
+{
+    if (m_syncState < SyncState::SyncingOneShot) {
+        handlePausedState();
+        m_refreshNow = false;
+        return;
+    }
+
+    m_refreshNow = false;
+
+    quint64 daemonHeight = 0;
+    quint64 targetHeight = 0;
+    bool success = fetchNetworkStats(daemonHeight, targetHeight);
+
+    handleSyncResult(success);
+
+    // If we failed to get network stats, we might be disconnected.
+    // Ensure we trigger a reconnection attempt if we are supposed to be active.
+    if (!success) {
+        if (m_syncState == SyncState::Active || m_syncState == SyncState::SyncingOneShot) {
+             if (this->connectionStatus() != Wallet::ConnectionStatus_Disconnected) {
+                 // Force status to Disconnected so Nodes logic can pick it up and reconnect
+                 setConnectionStatus(Wallet::ConnectionStatus_Disconnected);
+             }
+        }
+    }
+
+    bool haveHeights = (daemonHeight > 0 && targetHeight > 0);
+    emit heightsRefreshed(haveHeights, daemonHeight, targetHeight);
+
+    performSync(haveHeights, daemonHeight);
+}
+
 Wallet::~Wallet()
 {
     qDebug() << "~Wallet: Closing wallet" << QThread::currentThreadId();
 
     pauseRefresh();
     m_walletImpl->stop();
+    // Stop the wallet2 instance to interrupt any blocking network calls (e.g. init)
+    if (m_wallet2)
+        m_wallet2->stop();
 
     m_scheduler.shutdownWaitForFinished();
 

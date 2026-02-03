@@ -15,6 +15,7 @@
 #include "rows/TxBacklogEntry.h"
 
 #include <set>
+#include <atomic>
 
 class WalletListenerImpl;
 
@@ -111,7 +112,8 @@ public:
         ConnectionStatus_WrongVersion    = 2,
         ConnectionStatus_Connecting = 9,
         ConnectionStatus_Synchronizing = 10,
-        ConnectionStatus_Synchronized = 11
+        ConnectionStatus_Synchronized = 11,
+        ConnectionStatus_Idle = 12
     };
 
     Q_ENUM(ConnectionStatus)
@@ -138,11 +140,15 @@ public:
     //! returns if view only wallet
     bool viewOnly() const;
 
+    QDateTime lastSyncTime() const;
+    void setRefreshInterval(int seconds);
+    qint64 secondsUntilNextRefresh() const;
+
     //! return true if deterministic keys
     bool isDeterministic() const;
 
     QString walletName() const;
-    
+
     // ##### Balance #####
     //! returns balance
     quint64 balance() const;
@@ -153,7 +159,7 @@ public:
     quint64 unlockedBalance() const;
     quint64 unlockedBalance(quint32 accountIndex) const;
     quint64 unlockedBalanceAll() const;
-    
+
     quint64 viewOnlyBalance(quint32 accountIndex) const;
 
     void updateBalance();
@@ -215,8 +221,13 @@ public:
                    const QString &proxyAddress = "");
 
     // ##### Synchronization (Refresh) #####
-    void startRefresh();
+    void startRefresh(bool force = false);
     void pauseRefresh();
+    Q_INVOKABLE void updateNetworkStatus();
+
+    bool syncPaused() const;
+    void setSyncPaused(bool paused);
+    void setScanMempoolWhenPaused(bool enabled);
 
     //! returns current wallet's block height
     //! (can be less than daemon's blockchain height when wallet sync in progress)
@@ -229,6 +240,16 @@ public:
     quint64 daemonBlockChainTargetHeight() const;
 
     void syncStatusUpdated(quint64 height, quint64 target);
+    quint64 getUnlockTargetHeight() const;
+    Q_INVOKABLE void skipToTip();
+    Q_INVOKABLE void startSmartSync(quint64 target = 0);
+    Q_INVOKABLE void syncDateRange(const QDate &start, const QDate &end);
+
+    void fullSync(); // Rescans from wallet creation height, not genesis block
+
+    Q_INVOKABLE void rescanBlockchainAsync();
+    bool importTransaction(const QString &txid);
+    bool importTransactions(const QStringList &txids);
 
     void refreshModels();
 
@@ -250,24 +271,21 @@ public:
     void setForceKeyImageSync(bool enabled);
     bool hasUnknownKeyImages() const;
     bool keyImageSyncNeeded(quint64 amount, bool sendAll) const;
-    
+
     //! export/import key images
     bool exportKeyImages(const QString& path, bool all = false);
     bool exportKeyImagesToStr(std::string &keyImages, bool all = false);
     bool exportKeyImagesForOutputsFromStr(const std::string &outputs, std::string &keyImages);
-    
+
     bool importKeyImages(const QString& path);
     bool importKeyImagesFromStr(const std::string &keyImages);
 
     //! export/import outputs
     bool exportOutputs(const QString& path, bool all = false);
     bool exportOutputsToStr(std::string& outputs, bool all);
-    
+
     bool importOutputs(const QString& path);
     bool importOutputsFromStr(const std::string &outputs);
-
-    //! import a transaction
-    bool importTransaction(const QString& txid);
 
     // ##### Wallet cache #####
     //! saves wallet to the file by given path
@@ -342,7 +360,7 @@ public:
     //! Sign a transfer from file
     UnsignedTransaction * loadTxFile(const QString &fileName);
     UnsignedTransaction * loadUnsignedTransactionFromStr(const std::string &data);
-    
+
     //! Load an unsigned transaction from a base64 encoded string
     UnsignedTransaction * loadTxFromBase64Str(const QString &unsigned_tx);
 
@@ -455,7 +473,6 @@ signals:
     void connectionStatusChanged(int status) const;
     void currentSubaddressAccountChanged() const;
 
-
     void syncStatus(quint64 height, quint64 target, bool daemonSync = false);
 
     void balanceUpdated(quint64 balance, quint64 spendable);
@@ -486,8 +503,16 @@ private:
     void onTransactionCreated(Monero::PendingTransaction *mtx, const QVector<QString> &address);
 
 private:
+    void scanMempool();
     friend class WalletManager;
     friend class WalletListenerImpl;
+
+    // Refresh Thread Helpers
+    void refreshLoopStep();
+    void handlePausedState();
+    bool fetchNetworkStats(quint64 &daemonHeight, quint64 &targetHeight);
+    void performSync(bool haveHeights, quint64 daemonHeight);
+    void handleSyncResult(bool success);
 
     Monero::Wallet *m_walletImpl;
     tools::wallet2 *m_wallet2;
@@ -499,10 +524,11 @@ private:
     AddressBook *m_addressBook;
     AddressBookModel *m_addressBookModel;
 
-    quint64 m_daemonBlockChainHeight;
-    quint64 m_daemonBlockChainTargetHeight;
+    std::atomic<quint64> m_daemonBlockChainHeight;
+    std::atomic<quint64> m_daemonBlockChainTargetHeight;
+    std::atomic<qint64> m_lastSyncTime;
 
-    ConnectionStatus m_connectionStatus;
+    std::atomic<int> m_connectionStatus;
 
     uint32_t m_currentSubaddressAccount;
     Subaddress *m_subaddress;
@@ -512,6 +538,8 @@ private:
 
     Coins *m_coins;
     CoinsModel *m_coinsModel;
+
+    std::atomic<int> m_refreshInterval{10};
 
     QMutex m_asyncMutex;
     QString m_daemonUsername;
@@ -529,6 +557,22 @@ private:
 
     QTimer *m_storeTimer = nullptr;
     std::set<std::string> m_selectedInputs;
+
+
+
+    enum class SyncState : int {
+        Paused = 0,
+        PausedScanning = 20,
+        SyncingOneShot = 25,
+        Active = 30
+    };
+
+    std::atomic<SyncState> m_syncState{SyncState::Active};
+    std::atomic<bool> m_scanMempoolEnabled{false};
+
+    std::atomic<quint64> m_lastRefreshTime{0};
+    std::atomic<bool> m_refreshThreadStarted{false};
 };
 
 #endif // FEATHER_WALLET_H
+
