@@ -572,7 +572,7 @@ void Wallet::onHeightsRefreshed(bool success, quint64 daemonHeight, quint64 targ
             emit syncStatus(daemonHeight, targetHeight, false);
         }
 
-        if (m_syncState <= SyncState::PausedScanning && !m_rangeSyncActive) {
+        if (m_syncState <= SyncState::PausedScanning) {
             if (m_scanMempoolEnabled)
                 setConnectionStatus(ConnectionStatus_Idle);
             else
@@ -692,8 +692,6 @@ void Wallet::skipToTip() {
     }
 
     QMutexLocker locker(&m_asyncMutex);
-    m_stopHeight = target;
-    m_rangeSyncActive = true;
     m_wallet2->set_refresh_from_block_height(target);
     this->storeSafer();
     m_lastSyncTime = QDateTime::currentDateTime().toMSecsSinceEpoch();
@@ -749,73 +747,17 @@ quint64 Wallet::getUnlockTargetHeight() const {
 void Wallet::startSmartSync(quint64 requestedTarget) {
     if (!m_wallet2) return;
 
-    uint64_t tip = m_daemonBlockChainTargetHeight;
-    if (tip == 0) {
-        qWarning() << "Cannot start smart sync: Network target unknown. Connect first.";
-        return;
-    }
-
-    uint64_t current = blockChainHeight();
-    if (current == 0) {
-        current = m_wallet2->get_refresh_from_block_height();
-    }
-    uint64_t target = tip;
-    uint64_t unlockTarget = getUnlockTargetHeight();
+    qInfo() << "startSmartSync: triggering standard refresh";
     
-    // "Smart Sync": Only scan what is needed to unlock funds
-    if (requestedTarget > 0) {
-        target = std::min((uint64_t)requestedTarget, tip);
-        qInfo() << "Smart Sync: Scanning to requested target:" << target;
-    } else if (unlockTarget > current) {
-        // If we have locked funds, scan to their unlock height (clamped to tip)
-        target = std::min(unlockTarget, tip);
-        qInfo() << "Smart Sync: Scanning to unlock target:" << target;
-    } else {
-        // No locked funds.
-        if (tip > current) {
-             // Minimal connectivity check
-             target = std::min(current + 10, tip);
-             qInfo() << "Smart Sync: No locked funds. Scanning small buffer to:" << target;
-        } else {
-             qInfo() << "Smart Sync: Already at tip.";
-             return;
-        }
-    }
-
-    qInfo() << "startSmartSync: current=" << current << " tip=" << tip << " target=" << target;
-
-    QMutexLocker locker(&m_asyncMutex);
-    m_stopHeight = target;
-    m_rangeSyncActive = true;
-    m_syncState = SyncState::SyncingOneShot;
-    m_lastSyncTime = QDateTime::currentDateTime().toMSecsSinceEpoch();
-
+    // Simplified: Just ensure we are syncing
     setConnectionStatus(ConnectionStatus_Synchronizing);
     startRefresh(true);
-    emit syncStatus(target, target, true);
 }
 
 void Wallet::syncDateRange(const QDate &start, const QDate &end) {
-    if (!m_wallet2)
-        return;
+    if (!m_wallet2) return;
 
-    // Convert dates to heights with internal table lookup
-    cryptonote::network_type nettype = m_wallet2->nettype();
-    QString filename = Utils::getRestoreHeightFilename(static_cast<NetworkType::Type>(nettype));
-
-    std::unique_ptr<RestoreHeightLookup> lookup(RestoreHeightLookup::fromFile(filename, static_cast<NetworkType::Type>(nettype)));
-    uint64_t startHeight = lookup->dateToHeight(start.startOfDay().toSecsSinceEpoch());
-    uint64_t endHeight = lookup->dateToHeight(end.startOfDay().toSecsSinceEpoch());
-
-    if (startHeight >= endHeight)
-        return;
-
-    {
-        QMutexLocker locker(&m_asyncMutex);
-        m_stopHeight = endHeight;
-        m_rangeSyncActive = true;
-        m_wallet2->set_refresh_from_block_height(startHeight);
-    }
+    qInfo() << "syncDateRange: triggering standard refresh (range optimization disabled for stability)";
     setConnectionStatus(ConnectionStatus_Synchronizing);
     startRefresh(true);
 }
@@ -825,9 +767,6 @@ void Wallet::syncDateRange(const QDate &start, const QDate &end) {
 void Wallet::fullSync() {
     if (!m_wallet2)
         return;
-
-    // Reset range sync just in case
-    m_rangeSyncActive = false;
 
     // Retrieve original creation height from persistent storage
     uint64_t originalHeight = 0;
@@ -854,20 +793,6 @@ void Wallet::fullSync() {
 }
 
 void Wallet::syncStatusUpdated(quint64 height, quint64 targetHeight) {
-    if (m_rangeSyncActive && height >= m_stopHeight) {
-        // At end of requested date range, jump to tip
-        m_rangeSyncActive = false;
-
-        if (m_syncState == SyncState::SyncingOneShot) {
-             // We reached the tip via scan. Just go back to paused/idle.
-             setSyncPaused(true);
-        } else {
-             // Normal date range sync behavior: skip the rest
-             this->skipToTip();
-        }
-        return;
-    }
-
     if (height >= (targetHeight - 1)) {
         this->updateBalance();
     }
@@ -877,12 +802,7 @@ void Wallet::syncStatusUpdated(quint64 height, quint64 targetHeight) {
 bool Wallet::importTransaction(const QString &txid) {
     if (!m_wallet2 || txid.isEmpty())
         return false;
-
-    // If scanning a specific TX, we shouldn't be constrained by range sync
-    if (m_rangeSyncActive) {
-        m_rangeSyncActive = false;
-    }
-
+    
     try {
         std::unordered_set<crypto::hash> txids;
         crypto::hash txid_hash;
@@ -909,11 +829,6 @@ bool Wallet::importTransactions(const QStringList &txids) {
     if (!isConnected()) {
         qWarning() << "Cannot batch import transactions: Wallet is offline";
         return false;
-    }
-        
-    // If scanning specific TXs, we shouldn't be constrained by range sync
-    if (m_rangeSyncActive) {
-        m_rangeSyncActive = false;
     }
 
     try {
@@ -1943,8 +1858,6 @@ bool Wallet::fetchNetworkStats(quint64 &daemonHeight, quint64 &targetHeight)
 
 void Wallet::performSync(bool haveHeights, quint64 daemonHeight)
 {
-    // Don' call refreshfnction if we don't have the daemon and target height
-    // We do this to revent to UI from getting confused about the amount of blocks that are still remaining
     if (haveHeights) {
         // If the wallet is disconnected, we want to try to reconnect
         if (this->connectionStatus() == Wallet::ConnectionStatus_Disconnected) {
@@ -1952,44 +1865,9 @@ void Wallet::performSync(bool haveHeights, quint64 daemonHeight)
             setConnectionStatus(Wallet::ConnectionStatus_Connecting);
         }
 
-        bool rangeSync;
-        uint64_t stopHeight;
-        {
-            QMutexLocker locker(&m_asyncMutex);
-            rangeSync = m_rangeSyncActive;
-            stopHeight = m_stopHeight;
-        }
-
-        if (rangeSync) {
-            quint64 walletHeight = m_wallet2->get_blockchain_current_height();
-            uint64_t max_blocks = (stopHeight > walletHeight) ? (stopHeight - walletHeight) : 1;
-            uint64_t blocks_fetched = 0;
-            bool received_money = false;
-
-            // Ensure we respect the wallet creation height (restore height) if it's set higher than current
-            uint64_t restoreHeight = m_wallet2->get_refresh_from_block_height();
-            uint64_t startHeight = std::max((uint64_t)walletHeight, restoreHeight);
-            
-            qDebug() << "performSync: walletHeight=" << walletHeight << " restoreHeight=" << restoreHeight << " startHeight=" << startHeight << " stopHeight=" << stopHeight;
-
-            m_wallet2->refresh(m_wallet2->is_trusted_daemon(), startHeight, blocks_fetched, received_money, true, true, max_blocks);
-
-            if (m_walletImpl->blockChainHeight() >= stopHeight) {
-                QMutexLocker locker(&m_asyncMutex);
-                m_rangeSyncActive = false;
-                if (m_syncState == SyncState::SyncingOneShot) {
-                     // We reached the tip via scan. Just go back to paused/idle.
-                     setSyncPaused(true);
-                } else if (m_syncState == SyncState::Paused) {
-                    if (m_scanMempoolEnabled)
-                        setConnectionStatus(ConnectionStatus_Idle);
-                    else
-                        setConnectionStatus(ConnectionStatus_Disconnected);
-                }
-            }
-        } else {
-            m_walletImpl->refresh();
-        }
+        // Simplify sync logic to restore stability.
+        // Previously supported "Smart Sync" / "Range Sync" here, but it caused race conditions.
+        m_walletImpl->refresh();
     }
 }
 
@@ -2008,13 +1886,7 @@ void Wallet::handleSyncResult(bool success)
 
 void Wallet::refreshLoopStep()
 {
-    // If we are not active enough to sync (Active or SyncingOneShot), check if we should just handle paused state.
-    // SyncingOneShot is 25, Active is 30. PausedScanning is 20.
-    // So if state < SyncingOneShot (i.e. <= 20) AND not range sync active?
-    // Wait, m_rangeSyncActive forces activity regardless of state? Previous logic was:
-    // if (m_syncState != Active && m_syncState != SyncingOneShot && !m_rangeSyncActive)
-
-    if (m_syncState < SyncState::SyncingOneShot && !m_rangeSyncActive) {
+    if (m_syncState < SyncState::SyncingOneShot) {
         handlePausedState();
         m_refreshNow = false;
         return;
@@ -2031,7 +1903,7 @@ void Wallet::refreshLoopStep()
     // If we failed to get network stats, we might be disconnected.
     // Ensure we trigger a reconnection attempt if we are supposed to be active.
     if (!success) {
-        if (m_syncState == SyncState::Active || m_syncState == SyncState::SyncingOneShot || m_rangeSyncActive) {
+        if (m_syncState == SyncState::Active || m_syncState == SyncState::SyncingOneShot) {
              if (this->connectionStatus() != Wallet::ConnectionStatus_Disconnected) {
                  // Force status to Disconnected so Nodes logic can pick it up and reconnect
                  setConnectionStatus(Wallet::ConnectionStatus_Disconnected);

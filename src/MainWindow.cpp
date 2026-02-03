@@ -258,18 +258,14 @@ void MainWindow::initStatusBar() {
     QAction *syncRangeAction = new QAction(tr("Sync Date Range..."), this);
     m_statusLabelStatus->addAction(syncRangeAction);
 
-    QAction *scanToTipAction = new QAction(tr("Sync Unconfirmed"), this);
+    QAction *scanToTipAction = new QAction(tr("Scan for missing transactions"), this);
     m_statusLabelStatus->addAction(scanToTipAction);
 
     QAction *fullSyncAction = new QAction(tr("Full Sync"), this);
     m_statusLabelStatus->addAction(fullSyncAction);
 
-    QAction *scanTxAction = new QAction(tr("Import Transaction"), this);
+    QAction *scanTxAction = new QAction(tr("Import Transaction (list or CSV)"), this);
     m_statusLabelStatus->addAction(scanTxAction);
-
-    QAction *syncMissingAction = new QAction(tr("Sync missing transactions"), this);
-    connect(syncMissingAction, &QAction::triggered, this, &MainWindow::onSyncMissingTransactions);
-    m_statusLabelStatus->addAction(syncMissingAction);
 
     m_updateNetworkInfoAction = new QAction(tr("Scan mempool when paused"), this);
     m_statusLabelStatus->addAction(m_updateNetworkInfoAction);
@@ -315,20 +311,7 @@ void MainWindow::initStatusBar() {
         }
     });
 
-    connect(scanToTipAction, &QAction::triggered, this, [this](){
-        if (!m_wallet) return;
-
-        QString msg = tr("Sync Unconfirmed (Smart Sync) will scan only the specific blocks required to unlock your pending funds (e.g. 10 confirmations).\n\n"
-                          "This minimizes data usage and processing time by seeking out only the blocks required to unlock your pending funds and pausing immediately after verification.\n\n"
-                          "NOTE: You need to manually add all Tx IDs or scan the range of all transactions to ensure an accurate balance and use all features.\n\n"
-                          "Note: This process could take 30 seconds or more.\n\n"
-                          "Continue?");
-
-        if (QMessageBox::question(this, tr("Sync Unconfirmed"), msg) == QMessageBox::Yes) {
-            m_wallet->startSmartSync();
-            this->setStatusText(tr("Scanning to tip..."), true);
-        }
-    });
+    connect(scanToTipAction, &QAction::triggered, this, &MainWindow::onSyncMissingTransactions);
 
     connect(fullSyncAction, &QAction::triggered, this, [this](){
         if (m_wallet) {
@@ -2281,12 +2264,22 @@ void MainWindow::onSyncMissingTransactions() {
         return m_wallet->history()->scanMissingTransactions();
     }, this, [this](int count) {
         if (count < 0) {
-            QMessageBox::warning(this, "Quick Sync", "Failed to scan transactions. Check your connection to the node/daemon.");
+            QMessageBox::warning(this, "Scan for missing transactions", "Failed to scan transactions. Check your connection to the node/daemon.");
             return;
         }
 
-        QString msg = count > 0 ? QString("Scanned %1 missing transactions.").arg(count) : "No missing transactions found.";
-        QMessageBox::information(this, "Quick Sync", msg);
+        QString msg;
+        if (count > 0) {
+            msg = QString("Found %1 missing transactions in your history descriptions.\n\n").arg(count);
+        }
+
+        msg += "Do you want to scan the network for unconfirmed transactions (Sync to Tip)?\n"
+               "This will try to find any recent transactions that haven't appeared yet.";
+
+        if (QMessageBox::question(this, "Scan for missing transactions", msg) == QMessageBox::Yes) {
+             m_wallet->startSmartSync();
+             this->setStatusText(tr("Scanning to tip..."), true);
+        }
     });
 }
 

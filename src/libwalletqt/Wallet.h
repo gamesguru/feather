@@ -558,8 +558,7 @@ private:
     QTimer *m_storeTimer = nullptr;
     std::set<std::string> m_selectedInputs;
 
-    std::atomic<quint64> m_stopHeight{0};
-    std::atomic<bool> m_rangeSyncActive{false};
+
 
     enum class SyncState : int {
         Paused = 0,
