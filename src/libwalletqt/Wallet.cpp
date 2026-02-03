@@ -905,6 +905,11 @@ bool Wallet::importTransaction(const QString &txid) {
 bool Wallet::importTransactions(const QStringList &txids) {
     if (!m_wallet2 || txids.empty())
         return false;
+
+    if (!isConnected()) {
+        qWarning() << "Cannot batch import transactions: Wallet is offline";
+        return false;
+    }
         
     // If scanning specific TXs, we shouldn't be constrained by range sync
     if (m_rangeSyncActive) {
@@ -928,8 +933,8 @@ bool Wallet::importTransactions(const QStringList &txids) {
 
     try {
         m_wallet2->scan_tx(hashes);
-    } catch (const std::exception &e) {
-        qWarning() << "Failed to import transactions:" << e.what();
+    } catch (...) {
+        qWarning() << "Failed to import transactions: Exception during scan_tx";
         return false;
     }
         qInfo() << "Successfully batch imported" << hashes.size() << "transactions.";
@@ -1941,15 +1946,23 @@ void Wallet::performSync(bool haveHeights, quint64 daemonHeight)
     // Don' call refreshfnction if we don't have the daemon and target height
     // We do this to revent to UI from getting confused about the amount of blocks that are still remaining
     if (haveHeights) {
-        // If the wallet is isconnected, we want to try to reconnect
+        // If the wallet is disconnected, we want to try to reconnect
         if (this->connectionStatus() == Wallet::ConnectionStatus_Disconnected) {
             m_wallet2->set_offline(false);
             setConnectionStatus(Wallet::ConnectionStatus_Connecting);
         }
 
-        if (m_rangeSyncActive) {
+        bool rangeSync;
+        uint64_t stopHeight;
+        {
+            QMutexLocker locker(&m_asyncMutex);
+            rangeSync = m_rangeSyncActive;
+            stopHeight = m_stopHeight;
+        }
+
+        if (rangeSync) {
             quint64 walletHeight = m_wallet2->get_blockchain_current_height();
-            uint64_t max_blocks = (m_stopHeight > walletHeight) ? (m_stopHeight - walletHeight) : 1;
+            uint64_t max_blocks = (stopHeight > walletHeight) ? (stopHeight - walletHeight) : 1;
             uint64_t blocks_fetched = 0;
             bool received_money = false;
 
@@ -1957,11 +1970,12 @@ void Wallet::performSync(bool haveHeights, quint64 daemonHeight)
             uint64_t restoreHeight = m_wallet2->get_refresh_from_block_height();
             uint64_t startHeight = std::max((uint64_t)walletHeight, restoreHeight);
             
-            qDebug() << "performSync: walletHeight=" << walletHeight << " restoreHeight=" << restoreHeight << " startHeight=" << startHeight << " stopHeight=" << m_stopHeight;
+            qDebug() << "performSync: walletHeight=" << walletHeight << " restoreHeight=" << restoreHeight << " startHeight=" << startHeight << " stopHeight=" << stopHeight;
 
             m_wallet2->refresh(m_wallet2->is_trusted_daemon(), startHeight, blocks_fetched, received_money, true, true, max_blocks);
 
-            if (m_walletImpl->blockChainHeight() >= m_stopHeight) {
+            if (m_walletImpl->blockChainHeight() >= stopHeight) {
+                QMutexLocker locker(&m_asyncMutex);
                 m_rangeSyncActive = false;
                 if (m_syncState == SyncState::SyncingOneShot) {
                      // We reached the tip via scan. Just go back to paused/idle.

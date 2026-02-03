@@ -407,7 +407,9 @@ QString TransactionHistory::importLabelsFromCSV(const QString &fileName) {
 
         qInfo() << "Attempting to import" << foundTxIds.size() << "transactions from CSV.";
         if (!m_wallet->importTransactions(foundTxIds)) {
-             return "Warning: Failed to scan transactions from the network.\nDescriptions have been saved, but transactions may not appear until the wallet is synchronized.";
+             return "Warning: Failed to scan transactions from the network.\n\n"
+                    "Descriptions have been saved.\n"
+                    "You can retry syncing these later by right-clicking the history list and selecting 'Sync missing transactions'.";
         }
     }
 
@@ -423,8 +425,11 @@ int TransactionHistory::scanMissingTransactions()
     
     // Build set of known payments for O(1) lookup
     QSet<QString> knownTxIds;
-    for (const auto &row : m_rows) {
-        knownTxIds.insert(row.hash);
+    {
+        QReadLocker locker(&m_lock);
+        for (const auto &row : m_rows) {
+            knownTxIds.insert(row.hash);
+        }
     }
 
     for (const auto &txid : importedTxIds) {
@@ -436,7 +441,7 @@ int TransactionHistory::scanMissingTransactions()
     if (!missingTxIds.isEmpty()) {
         qInfo() << "Scanning" << missingTxIds.size() << "missing transactions found in notes.";
         bool success = m_wallet->importTransactions(missingTxIds);
-        if (!success) return 0;
+        if (!success) return -1;
         return missingTxIds.size();
     }
     

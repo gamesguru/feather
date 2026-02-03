@@ -267,6 +267,10 @@ void MainWindow::initStatusBar() {
     QAction *scanTxAction = new QAction(tr("Import Transaction"), this);
     m_statusLabelStatus->addAction(scanTxAction);
 
+    QAction *syncMissingAction = new QAction(tr("Sync missing transactions"), this);
+    connect(syncMissingAction, &QAction::triggered, this, &MainWindow::onSyncMissingTransactions);
+    m_statusLabelStatus->addAction(syncMissingAction);
+
     m_updateNetworkInfoAction = new QAction(tr("Scan mempool when paused"), this);
     m_statusLabelStatus->addAction(m_updateNetworkInfoAction);
 
@@ -2262,7 +2266,7 @@ void MainWindow::onImportHistoryDescriptionsCSV() {
     QString error = m_wallet->history()->importLabelsFromCSV(fileName);
     if (!error.isEmpty()) {
         if (error.startsWith("Warning:")) {
-             Utils::showInfo(this, "Import Complete with Warnings", "Successfully imported transaction descriptions.\n\n" + error);
+             Utils::showInfo(this, "Import Complete with Warnings", error);
         } else {
              Utils::showError(this, "Unable to import transaction descriptions from CSV", error);
         }
@@ -2270,6 +2274,20 @@ void MainWindow::onImportHistoryDescriptionsCSV() {
     else {
         Utils::showInfo(this, "Successfully imported transaction descriptions from CSV");
     }
+}
+
+void MainWindow::onSyncMissingTransactions() {
+    AsyncTask::runThenCallback([this] {
+        return m_wallet->history()->scanMissingTransactions();
+    }, this, [this](int count) {
+        if (count < 0) {
+            QMessageBox::warning(this, "Quick Sync", "Failed to scan transactions. Check your connection to the node/daemon.");
+            return;
+        }
+
+        QString msg = count > 0 ? QString("Scanned %1 missing transactions.").arg(count) : "No missing transactions found.";
+        QMessageBox::information(this, "Quick Sync", msg);
+    });
 }
 
 void MainWindow::onCreateDesktopEntry() {

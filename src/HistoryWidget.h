@@ -41,6 +41,7 @@ private slots:
     void setSearchFilter(const QString &filter);
     void onResendTransaction();
     void onRemoveFromHistory();
+    void onSyncMissingTransactions();
     void createTxProof();
 
 private:

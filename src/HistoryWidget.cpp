@@ -13,6 +13,7 @@
 #include "libwalletqt/WalletManager.h"
 #include "utils/config.h"
 #include "utils/Icons.h"
+#include "utils/AsyncTask.h"
 #include "WebsocketNotifier.h"
 
 #include <QClipboard>
@@ -32,11 +33,8 @@ HistoryWidget::HistoryWidget(Wallet *wallet, QWidget *parent)
     m_contextMenu->addMenu(m_copyMenu);
     m_contextMenu->addAction(icons()->icon("info2.svg"), "Show details", this, &HistoryWidget::showTxDetails);
     m_contextMenu->addAction("View on block explorer", this, &HistoryWidget::onViewOnBlockExplorer);
-    m_contextMenu->addAction("Sync missing transactions", this, [this]{
-        int count = m_wallet->history()->scanMissingTransactions();
-        QString msg = count > 0 ? QString("Scanned %1 missing transactions.").arg(count) : "No missing transactions found.";
-        QMessageBox::information(this, "Quick Sync", msg);
-    });
+    // deleted constructor lambda
+
 
     // copy menu
     m_copyMenu->addAction("Transaction ID", this, [this]{copy(copyField::TxID);});
@@ -115,6 +113,7 @@ void HistoryWidget::showContextMenu(const QPoint &point) {
     menu.addMenu(m_copyMenu);
     menu.addAction("Show details", this, &HistoryWidget::showTxDetails);
     menu.addAction("View on block explorer", this, &HistoryWidget::onViewOnBlockExplorer);
+    menu.addAction("Sync missing transactions", this, &HistoryWidget::onSyncMissingTransactions);
     menu.addAction("Create Tx Proof", this, &HistoryWidget::createTxProof);
 
     menu.exec(ui->history->viewport()->mapToGlobal(point));
@@ -140,6 +139,20 @@ void HistoryWidget::onRemoveFromHistory() {
     if (result == QMessageBox::Yes) {
         m_wallet->removeFailedTx(tx.hash);
     }
+}
+
+void HistoryWidget::onSyncMissingTransactions() {
+    AsyncTask::runThenCallback([this] {
+        return m_wallet->history()->scanMissingTransactions();
+    }, this, [this](int count) {
+        if (count < 0) {
+            QMessageBox::warning(this, "Quick Sync", "Failed to scan transactions. Check your connection to the node/daemon.");
+            return;
+        }
+
+        QString msg = count > 0 ? QString("Scanned %1 missing transactions.").arg(count) : "No missing transactions found.";
+        QMessageBox::information(this, "Quick Sync", msg);
+    });
 }
 
 void HistoryWidget::resetModel()

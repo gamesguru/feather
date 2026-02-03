@@ -116,6 +116,7 @@ private slots:
     void menuClearHistoryClicked();
     void onExportHistoryCSV();
     void onImportHistoryDescriptionsCSV();
+    void onSyncMissingTransactions();
     void onCreateDesktopEntry();
     void onShowDocumentation();
     void onReportBug();
