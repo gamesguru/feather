@@ -28,9 +28,15 @@ PageNetwork::PageNetwork(QWidget *parent)
     QPixmap infoIcon = QPixmap(":/assets/images/info2.svg");
     ui->infoIcon->setPixmap(infoIcon.scaledToWidth(32, Qt::SmoothTransformation));
 
+#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
     connect(ui->btnGroup_network, &QButtonGroup::idClicked, [this](int id) {
+#else
+    // Qt 5.12: Explicitly select the 'int' overload of buttonClicked
+    connect(ui->btnGroup_network, QOverload<int>::of(&QButtonGroup::buttonClicked), [this](int id) {
+#endif
         ui->frame_customNode->setVisible(id == Button::CUSTOM);
     });
+
     connect(ui->line_customNode, &QLineEdit::textEdited, [this]{
         this->completeChanged();
     });

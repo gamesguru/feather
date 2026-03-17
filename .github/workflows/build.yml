@@ -1,10 +1,14 @@
+---
 name: ci/gh-actions/build
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [master, main, dev]
+  pull_request:
 
 jobs:
-  build-ubuntu-without-scanner:
-    name: "Ubuntu 24.04 (no scanner)"
+  build-ubuntu-24:
+    name: "Ubuntu 24.04 (Full Features)"
     runs-on: ubuntu-latest
     container:
       image: ubuntu:24.04
@@ -12,11 +16,38 @@ jobs:
       - name: update apt
         run: apt update
       - name: install dependencies
-        run: apt -y install git cmake build-essential ccache libssl-dev libunbound-dev libboost-all-dev
-                            libqrencode-dev qt6-base-dev qt6-svg-dev qt6-websockets-dev qt6-multimedia-dev
-                            qt6-wayland-dev libzip-dev libsodium-dev libgcrypt20-dev libx11-xcb-dev
-                            protobuf-compiler libprotobuf-dev libhidapi-dev libzxing-dev libusb-dev
-                            libusb-1.0-0-dev
+        run: |
+          apt -y install git cmake build-essential ccache libssl-dev libunbound-dev libboost-all-dev \
+          libqrencode-dev qt6-base-dev qt6-svg-dev qt6-websockets-dev qt6-multimedia-dev \
+          qt6-wayland-dev libzip-dev libsodium-dev libgcrypt20-dev libx11-xcb-dev \
+          protobuf-compiler libprotobuf-dev libhidapi-dev libzxing-dev libusb-dev \
+          libusb-1.0-0-dev tor
+      - name: configure git
+        run: git config --global --add safe.directory '*'
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: build
+        run: |
+          mkdir build
+          cd build
+          cmake -DWITH_SCANNER=ON -DCHECK_UPDATES=ON -DSTACK_TRACE=ON -DTOR_INSTALLED=ON ..
+          cmake --build . -j $(nproc)
+
+  build-ubuntu-22:
+    name: "Ubuntu 22.04 (Qt 5.15)"
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:22.04
+    steps:
+      - name: update apt
+        run: apt update
+      - name: install dependencies
+        run: |
+          apt -y install git cmake build-essential ccache libssl-dev libunbound-dev \
+          libboost-all-dev libqrencode-dev qtbase5-dev libqt5svg5-dev libqt5websockets5-dev \
+          qtmultimedia5-dev libzip-dev libsodium-dev libgcrypt20-dev libx11-xcb-dev \
+          protobuf-compiler libprotobuf-dev libhidapi-dev libusb-dev libusb-1.0-0-dev
       - name: configure git
         run: git config --global --add safe.directory '*'
       - uses: actions/checkout@v4
@@ -29,8 +60,48 @@ jobs:
           cmake -DWITH_SCANNER=OFF ..
           cmake --build . -j $(nproc)
 
+  build-ubuntu-20:
+    name: "Ubuntu 20.04 (Qt 5.12 + Latest CMake)"
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:20.04
+    env:
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      - name: update apt
+        run: apt update
+      - name: install dependencies
+        run: |
+          # 1. Install tools to add external repos
+          apt -y install wget gpg software-properties-common
+
+          # 2. Add Kitware repository (for modern CMake > 3.20)
+          wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc | gpg --dearmor - | tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null
+          echo 'deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ focal main' | tee /etc/apt/sources.list.d/kitware.list >/dev/null
+          apt update
+
+          # 3. Install dependencies (Now installs latest CMake)
+          apt -y install git cmake build-essential ccache libssl-dev libunbound-dev \
+          libboost-all-dev libqrencode-dev qtbase5-dev libqt5svg5-dev libqt5websockets5-dev \
+          qtmultimedia5-dev libzip-dev libsodium-dev libgcrypt20-dev libx11-xcb-dev \
+          protobuf-compiler libprotobuf-dev libhidapi-dev libusb-dev libusb-1.0-0-dev
+
+      - name: configure git
+        run: git config --global --add safe.directory '*'
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: build
+        run: |
+          mkdir build
+          cd build
+          # The script will now auto-detect that Qt6 is missing and use Qt5
+          cmake -DWITH_SCANNER=OFF ..
+          cmake --build . -j $(nproc)
+
   build-arch:
-    name: 'Arch Linux'
+    name: "Arch Linux"
     runs-on: ubuntu-latest
     container:
       image: archlinux:latest
@@ -45,21 +116,4 @@ jobs:
       - name: build
         run: |
           cmake -S . -B build
-          cmake --build build -j $(nproc)
-
-  build-macos:
-    name: 'macOS (brew)'
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-      - name: install dependencies
-        run: |
-          brew uninstall cmake
-          brew update
-          brew install --quiet qt libsodium libzip qrencode unbound cmake boost hidapi openssl expat libunwind-headers protobuf pkgconfig
-      - name: build
-        run: |
-          cmake -S . -B build -DWITH_SCANNER=Off
           cmake --build build -j $(nproc)

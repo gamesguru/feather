@@ -15,6 +15,7 @@
 #include "rows/TxBacklogEntry.h"
 
 #include <set>
+#include <atomic>
 
 class WalletListenerImpl;
 
@@ -138,11 +139,15 @@ public:
     //! returns if view only wallet
     bool viewOnly() const;
 
+    QDateTime lastSyncTime() const;
+    void setRefreshInterval(int seconds);
+    qint64 secondsUntilNextRefresh() const;
+
     //! return true if deterministic keys
     bool isDeterministic() const;
 
     QString walletName() const;
-    
+
     // ##### Balance #####
     //! returns balance
     quint64 balance() const;
@@ -153,7 +158,7 @@ public:
     quint64 unlockedBalance() const;
     quint64 unlockedBalance(quint32 accountIndex) const;
     quint64 unlockedBalanceAll() const;
-    
+
     quint64 viewOnlyBalance(quint32 accountIndex) const;
 
     void updateBalance();
@@ -217,6 +222,7 @@ public:
     // ##### Synchronization (Refresh) #####
     void startRefresh();
     void pauseRefresh();
+    Q_INVOKABLE void updateNetworkStatus();
 
     //! returns current wallet's block height
     //! (can be less than daemon's blockchain height when wallet sync in progress)
@@ -229,6 +235,12 @@ public:
     quint64 daemonBlockChainTargetHeight() const;
 
     void syncStatusUpdated(quint64 height, quint64 target);
+    void setSyncPaused(bool paused);
+    Q_INVOKABLE void skipToTip();
+    Q_INVOKABLE void syncDateRange(const QDate &start, const QDate &end);
+    void fullSync(); // Rescans from wallet creation height, not genesis block
+
+    bool importTransaction(const QString &txid);
 
     void refreshModels();
 
@@ -250,24 +262,21 @@ public:
     void setForceKeyImageSync(bool enabled);
     bool hasUnknownKeyImages() const;
     bool keyImageSyncNeeded(quint64 amount, bool sendAll) const;
-    
+
     //! export/import key images
     bool exportKeyImages(const QString& path, bool all = false);
     bool exportKeyImagesToStr(std::string &keyImages, bool all = false);
     bool exportKeyImagesForOutputsFromStr(const std::string &outputs, std::string &keyImages);
-    
+
     bool importKeyImages(const QString& path);
     bool importKeyImagesFromStr(const std::string &keyImages);
 
     //! export/import outputs
     bool exportOutputs(const QString& path, bool all = false);
     bool exportOutputsToStr(std::string& outputs, bool all);
-    
+
     bool importOutputs(const QString& path);
     bool importOutputsFromStr(const std::string &outputs);
-
-    //! import a transaction
-    bool importTransaction(const QString& txid);
 
     // ##### Wallet cache #####
     //! saves wallet to the file by given path
@@ -342,7 +351,7 @@ public:
     //! Sign a transfer from file
     UnsignedTransaction * loadTxFile(const QString &fileName);
     UnsignedTransaction * loadUnsignedTransactionFromStr(const std::string &data);
-    
+
     //! Load an unsigned transaction from a base64 encoded string
     UnsignedTransaction * loadTxFromBase64Str(const QString &unsigned_tx);
 
@@ -455,7 +464,6 @@ signals:
     void connectionStatusChanged(int status) const;
     void currentSubaddressAccountChanged() const;
 
-
     void syncStatus(quint64 height, quint64 target, bool daemonSync = false);
 
     void balanceUpdated(quint64 balance, quint64 spendable);
@@ -501,6 +509,7 @@ private:
 
     quint64 m_daemonBlockChainHeight;
     quint64 m_daemonBlockChainTargetHeight;
+    QDateTime m_lastSyncTime;
 
     ConnectionStatus m_connectionStatus;
 
@@ -512,6 +521,8 @@ private:
 
     Coins *m_coins;
     CoinsModel *m_coinsModel;
+
+    std::atomic<int> m_refreshInterval{10};
 
     QMutex m_asyncMutex;
     QString m_daemonUsername;
@@ -529,6 +540,12 @@ private:
 
     QTimer *m_storeTimer = nullptr;
     std::set<std::string> m_selectedInputs;
+
+    std::atomic<quint64> m_stopHeight{0};
+    std::atomic<bool> m_rangeSyncActive{false};
+    std::atomic<bool> m_syncPaused{false};
+    std::atomic<int64_t> m_lastRefreshTime{0};
 };
 
 #endif // FEATHER_WALLET_H
+

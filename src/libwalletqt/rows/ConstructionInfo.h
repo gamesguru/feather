@@ -5,6 +5,7 @@
 #define FEATHER_CONSTRUCTIONINFO_H
 
 #include <QSet>
+#include <QVector>  // Qt 5.12 support (Ubuntu 20.04)
 
 #include "Output.h"
 #include "Input.h"

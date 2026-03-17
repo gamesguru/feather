@@ -248,6 +248,20 @@ void Nodes::connectToNode(const FeatherNode &node) {
     this->updateModels();
 }
 
+void Nodes::disconnectCurrentNode() {
+    if (!m_wallet) return;
+
+    // Stop any ongoing connection attempt
+    m_connection.isActive = false;
+    m_connection.isConnecting = false;
+
+    // Connect to empty "node" effectively disconnects
+    m_wallet->initAsync("", false, 0);
+
+    this->resetLocalState();
+    this->updateModels();
+}
+
 void Nodes::autoConnect(bool forceReconnect) {
     if (!m_wallet) {
         return;
@@ -261,12 +275,20 @@ void Nodes::autoConnect(bool forceReconnect) {
         return;
     }
 
+    if (conf()->get(Config::syncPaused).toBool()) {
+        return;
+    }
+
     // this function is responsible for automatically connecting to a daemon.
     if (m_wallet == nullptr || !m_enableAutoconnect) {
         return;
     }
 
     Wallet::ConnectionStatus status = m_wallet->connectionStatus();
+    if (status == Wallet::ConnectionStatus_Connecting && !forceReconnect) {
+        return;
+    }
+
     bool wsMode = (this->source() == NodeSource::websocket);
 
     if (wsMode && !m_wsNodesReceived && websocketNodes().count() == 0) {
@@ -276,6 +298,15 @@ void Nodes::autoConnect(bool forceReconnect) {
     }
 
     if (status == Wallet::ConnectionStatus_Disconnected || forceReconnect) {
+        // If we had a working connection and it dropped (transient disconnect),
+        // try reconnecting to the same node instead of picking a new one
+        if (m_connection.isValid() && m_connection.isActive && !forceReconnect) {
+            qDebug() << "Transient disconnect, reconnecting to same node:" << m_connection.toAddress();
+            this->connectToNode(m_connection);
+            return;
+        }
+
+        // Otherwise, mark the failed node and pick a new one
         if (m_connection.isValid() && !forceReconnect) {
             m_recentFailures << m_connection.toAddress();
         }
@@ -416,6 +447,10 @@ void Nodes::setCustomNodes(const QList<FeatherNode> &nodes) {
 
 void Nodes::onWalletRefreshed() {
     if (conf()->get(Config::proxy) == Config::Proxy::Tor && conf()->get(Config::torPrivacyLevel).toInt() == Config::allTorExceptInitSync) {
+        // Privacy switch already triggered this session, don't repeat
+        if (m_privacySwitchDone)
+            return;
+
         // Don't reconnect if we're connected to a local node (traffic will not be routed through Tor)
         if (m_connection.isLocal())
             return;
@@ -424,7 +459,12 @@ void Nodes::onWalletRefreshed() {
         if (m_connection.isOnion())
             return;
 
-        this->autoConnect(true);
+        // If want onion node but aren't connected to one, trigger the switch
+        if (this->useOnionNodes()) {
+            qInfo() << "Privacy switch: switching from clearnet to onion after initial sync";
+            m_privacySwitchDone = true;
+            this->autoConnect(true);
+        }
     }
 }
 
@@ -525,7 +565,9 @@ void Nodes::resetLocalState() {
 }
 
 void Nodes::exhausted() {
-    // Do nothing
+    // All nodes have been tried and failed - clear the failure list to allow a new retry cycle
+    qInfo() << "All nodes exhausted, clearing recent failures to retry";
+    m_recentFailures.clear();
 }
 
 QList<FeatherNode> Nodes::nodes() {

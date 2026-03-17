@@ -26,6 +26,7 @@
 #include "utils/os/tails.h"
 #include "utils/os/whonix.h"
 #include "libwalletqt/Wallet.h"
+#include "utils/nodes.h"
 #include "WindowManager.h"
 
 namespace Utils {
@@ -71,7 +72,12 @@ QString loadQrc(const QString &qrc) {
 bool fileWrite(const QString &path, const QString &data) {
     QFile file(path);
     if (file.open(QIODevice::WriteOnly)) {
-        QTextStream out(&file); out << data << Qt::endl;
+        QTextStream out(&file);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+        out << data << Qt::endl;
+#else
+        out << data << endl; // Legacy Qt 5.12 uses the global/stream 'endl'
+#endif
         file.close();
         return true;
     }
@@ -558,6 +564,20 @@ QTextCharFormat addressTextFormat(const SubaddressIndex &index, quint64 amount) 
 }
 
 void applicationLogHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg) {
+    if (conf()->get(Config::disableLoggingStdout).toBool())
+        return;
+
+    int level = conf()->get(Config::logLevel).toInt();
+
+    // Mapping:
+    // 0: Critical/Fatal [always reported under below scheme]
+    // 1: + Warning
+    // 2: + Info
+    // 3+: + Debug
+    if (level < 3 && type == QtDebugMsg) return;
+    if (level < 2 && type == QtInfoMsg) return;
+    if (level < 1 && type == QtWarningMsg) return;
+
     const QString fn = context.function ? QString::fromUtf8(context.function) : "";
     const QString date = QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss");
     QString line;
@@ -602,6 +622,32 @@ QFont relativeFont(int delta) {
     auto font = QApplication::font();
     font.setPointSize(font.pointSize() + delta);
     return font;
+}
+
+QString timeAgo(const QDateTime &dt) {
+    qint64 diff = dt.secsTo(QDateTime::currentDateTime());
+
+    if (diff < 0) return "in the future";
+    if (diff < 60) return QString("%1 second%2 ago").arg(diff).arg(diff == 1 ? "" : "s");
+
+    diff /= 60; // minutes
+    if (diff < 60) return QString("%1 minute%2 ago").arg(diff).arg(diff == 1 ? "" : "s");
+
+    qint64 minutes = diff % 60;
+    diff /= 60; // hours
+    if (diff < 24) {
+        if (minutes > 0)
+            return QString("%1 hour%2 %3 minute%4 ago").arg(diff).arg(diff == 1 ? "" : "s").arg(minutes).arg(minutes == 1 ? "" : "s");
+        return QString("%1 hour%2 ago").arg(diff).arg(diff == 1 ? "" : "s");
+    }
+
+    diff /= 24; // days
+    if (diff < 30) return QString("%1 day%2 ago").arg(diff).arg(diff == 1 ? "" : "s");
+
+    diff /= 30; // months (approx)
+    if (diff < 12) return QString("%1 month%2 ago").arg(diff).arg(diff == 1 ? "" : "s");
+
+    return QString("%1 year%2 ago").arg(diff / 12).arg((diff / 12) == 1 ? "" : "s");
 }
 
 bool isLocalUrl(const QUrl &url) {
@@ -702,6 +748,10 @@ void clearLayout(QLayout* layout, bool deleteWidgets)
     }
 }
 
+quint64 blocksBehind(quint64 height, quint64 target) {
+    return (target > height) ? (target - height) : 0;
+}
+
 QString formatSyncStatus(quint64 height, quint64 target, bool daemonSync) {
     if (height < (target - 1)) {
         QString blocks = (target >= height) ? QString::number(target - height) : "?";
@@ -710,6 +760,26 @@ QString formatSyncStatus(quint64 height, quint64 target, bool daemonSync) {
     }
 
     return "Synchronized";
+}
+
+QString formatSyncTimeEstimate(quint64 blocks) {
+    quint64 minutes = blocks * 2;
+    quint64 days = minutes / (60 * 24);
+
+    QString timeStr;
+    if (days > 0) {
+        timeStr = QObject::tr("~%1 days").arg(days);
+    } else if (minutes >= 60) {
+        timeStr = QObject::tr("~%1 hours").arg(minutes / 60);
+    } else {
+        timeStr = QObject::tr("< 1 hour");
+    }
+    return timeStr;
+}
+
+quint64 estimateSyncDataSize(quint64 blocks) {
+    // Estimate 30KB per block for wallet scanning.
+    return blocks * 30 * 1024;
 }
 
 QString formatRestoreHeight(quint64 height) {
@@ -723,5 +793,14 @@ QString getVersion() {
     version += " (release)";
 #endif
     return version;
+}
+
+QString getRestoreHeightFilename(NetworkType::Type nettype) {
+    if (nettype == NetworkType::MAINNET)
+        return ":/assets/restore_heights_monero_mainnet.txt";
+    else if (nettype == NetworkType::TESTNET)
+        return ":/assets/restore_heights_monero_testnet.txt";
+    else
+        return ":/assets/restore_heights_monero_stagenet.txt";
 }
 }

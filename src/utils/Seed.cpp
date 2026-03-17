@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: The Monero Project
 
 #include "Seed.h"
+#include <QDebug>
 
 #include "constants.h"
 #include "monero_seed/monero_seed.hpp"

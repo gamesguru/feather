@@ -133,7 +133,12 @@ void LegacySeedRecovery::checkSeed() {
     ui->progressBar->setMaximum(39024);
     ui->progressBar->setValue(0);
 
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
     QStringList words = ui->seed->toPlainText().replace("\n", " ").replace("\r", "").trimmed().split(" ", Qt::SkipEmptyParts);
+#else
+    QStringList words = ui->seed->toPlainText().replace("\n", " ").replace("\r", "").trimmed().split(" ", QString::SkipEmptyParts);
+#endif
+
     if (words.length() < 24) {
         Utils::showError(this, "Invalid seed", "Less than 24 words were entered", {"Remember to use a single space between each word."});
         return;
@@ -202,7 +207,7 @@ void LegacySeedRecovery::checkSeed() {
 
             for (int i = 0; i < 24; i++) {
                 QStringList seed = words;
-                seed.swapItemsAt(i, i+1);
+                std::swap(seed[i], seed[i+1]);
 
                 QString m = seed.join(" ");
                 bool done = this->testSeed(m, spkey);
@@ -211,7 +216,7 @@ void LegacySeedRecovery::checkSeed() {
                 }
 
                 // Swap back
-                seed.swapItemsAt(i, i+1);
+                std::swap(seed[i], seed[i+1]);
             }
 
             if (m_cancelled) {

@@ -275,10 +275,16 @@ void CoinsWidget::onSweepOutputs() {
     bool churn = dialog.churn();
     int outputs = dialog.outputs();
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     QtFuture::connect(m_wallet, &Wallet::preTransactionChecksComplete)
             .then([this, keyImages, address, churn, outputs](int feeLevel){
                 m_wallet->sweepOutputs(keyImages, address, churn, outputs, feeLevel);
             });
+#else
+    QObject::connect(m_wallet, &Wallet::preTransactionChecksComplete, [this, keyImages, address, churn, outputs](int feeLevel){
+        m_wallet->sweepOutputs(keyImages, address, churn, outputs, feeLevel);
+    });
+#endif
 
     m_wallet->preTransactionChecks(dialog.feeLevel());
 }

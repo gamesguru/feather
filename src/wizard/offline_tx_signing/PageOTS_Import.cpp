@@ -32,7 +32,7 @@ PageOTS_Import::PageOTS_Import(QWidget *parent, Wallet *wallet, TxWizardFields *
     ui->frame_status->hide();
 
     connect(ui->btn_import, &QPushButton::clicked, this, &PageOTS_Import::importFromFile);
-    connect(ui->combo_method, &QComboBox::currentIndexChanged, [this](int index){
+    connect(ui->combo_method, QOverload<int>::of(&QComboBox::currentIndexChanged), [this](int index){
         conf()->set(Config::offlineTxSigningMethod, index);
         ui->stackedWidget->setCurrentIndex(index);
     });

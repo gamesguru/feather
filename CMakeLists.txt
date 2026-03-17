@@ -1,7 +1,40 @@
-cmake_minimum_required(VERSION 3.18)
+cmake_minimum_required(VERSION 3.16)
+
+# Configurable options
+option(FEATHER_VERSION_DEBUG_BUILD "Enable git describe version string" OFF)
+
+if(EXISTS "${CMAKE_SOURCE_DIR}/.git")
+    find_package(Git)
+    if(GIT_FOUND)
+        execute_process(
+            COMMAND ${GIT_EXECUTABLE} describe --tags --dirty --always
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+            OUTPUT_VARIABLE GIT_DESCRIBE_VERSION
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+        )
+        if(GIT_DESCRIBE_VERSION)
+            message(STATUS "Feather build version (git): ${GIT_DESCRIBE_VERSION}")
+            add_compile_definitions(FEATHER_BUILD_TAG="${GIT_DESCRIBE_VERSION}")
+        endif()
+    endif()
+endif()
+
+if(FEATHER_VERSION_DEBUG_BUILD AND GIT_DESCRIBE_VERSION)
+    set(DETECTED_FEATHER_VERSION ${GIT_DESCRIBE_VERSION})
+endif()
+
+if(NOT DETECTED_FEATHER_VERSION)
+    set(DETECTED_FEATHER_VERSION "2.8.1")
+endif()
+
+# Extract standard version format for project()
+string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" PROJECT_VERSION_CLEAN "${DETECTED_FEATHER_VERSION}")
+if(NOT PROJECT_VERSION_CLEAN)
+    set(PROJECT_VERSION_CLEAN "2.8.1")
+endif()
 
 project(feather
-  VERSION "2.8.1"
+  VERSION ${PROJECT_VERSION_CLEAN}
   DESCRIPTION "A free Monero desktop wallet"
   LANGUAGES CXX C ASM
 )
@@ -15,7 +48,11 @@ set(PACKAGE_URL "https://featherwallet.org/")
 set(COPYRIGHT_YEAR "2025")
 set(COPYRIGHT_HOLDERS "The Monero Project")
 
-cmake_policy(SET CMP0074 NEW)
+# Policies for better dependency finding
+cmake_policy(SET CMP0074 NEW) # find_package() uses <PackageName>_ROOT variables
+if(POLICY CMP0148)
+    cmake_policy(SET CMP0148 OLD) # Python modules
+endif()
 
 # Configurable options
 option(STATIC "Link libraries statically, requires static Qt" OFF)
@@ -268,6 +305,7 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${MINGW_FLAG} -std=c11 ${C_SECURITY_FLAGS} $
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${MINGW_FLAG} ${CXX_SECURITY_FLAGS} ${ANTI_AV_FLAGS}")
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${LD_SECURITY_FLAGS} ${STATIC_FLAGS}")
 
+# Ensure src sees all flags
 add_subdirectory(src)
 
 configure_file("${CMAKE_SOURCE_DIR}/contrib/installers/windows/setup.nsi.in" "${CMAKE_SOURCE_DIR}/contrib/installers/windows/setup.nsi" @ONLY)

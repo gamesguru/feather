@@ -7,6 +7,7 @@
 
 #include <QCoreApplication>
 #include <QStandardPaths>
+#include <QDebug>
 
 #include "utils/Utils.h"
 #include "utils/os/tails.h"
@@ -74,9 +75,17 @@ static const QHash<Config::ConfigKey, ConfigDirective> configStrings = {
         {Config::inactivityLockTimeout, {QS("inactivityLockTimeout"), 10}},
         {Config::lockOnMinimize, {QS("lockOnMinimize"), false}},
         {Config::showTrayIcon, {QS("showTrayIcon"), true}},
-        {Config::minimizeToTray, {QS("minimizeToTray"), false}},
+        {Config::minimizeToTray, {QS("minimizeToTray"), true}},
+        {Config::trayLeftClickTogglesFocus, {QS("trayLeftClickTogglesFocus"), true}},
         {Config::disableWebsocket, {QS("disableWebsocket"), false}},
+        {Config::disableAutoRefresh, {QS("disableAutoRefresh"), false}},
         {Config::offlineMode, {QS("offlineMode"), false}},
+        {Config::syncPaused, {QS("syncPaused"), false}},
+        {Config::syncPausedAlsoDisconnectWebSocket, {QS("syncPausedAlsoDisconnectWebSocket"), false}},
+        {Config::syncInterval, {QS("syncInterval"), 30}},
+        {Config::lastKnownNetworkHeight, {QS("lastKnownNetworkHeight"), 0}},
+        {Config::lastSyncTimestamp, {QS("lastSyncTimestamp"), 0}},
+        {Config::lastPriceUpdateTimestamp, {QS("lastPriceUpdateTimestamp"), 0}},
 
         // Transactions
         {Config::multiBroadcast, {QS("multiBroadcast"), true}},
@@ -90,6 +99,7 @@ static const QHash<Config::ConfigKey, ConfigDirective> configStrings = {
         {Config::hideNotifications, {QS("hideNotifications"), false}},
         {Config::hideUpdateNotifications, {QS("hideUpdateNotifications"), false}},
         {Config::disableLogging, {QS("disableLogging"), true}},
+        {Config::disableLoggingStdout, {QS("disableLoggingStdout"), false}},
         {Config::writeStackTraceToDisk, {QS("writeStackTraceToDisk"), true}},
         {Config::writeRecentlyOpenedWallets, {QS("writeRecentlyOpenedWallets"), true}},
 

@@ -88,11 +88,13 @@ public:
         disableWebsocket,
 
         // Network -> Offline
+        disableAutoRefresh,
         offlineMode,
 
         // Storage -> Logging
         writeStackTraceToDisk,
         disableLogging,
+        disableLoggingStdout,
         logLevel,
 
         // Storage -> Misc
@@ -108,6 +110,7 @@ public:
         lockOnMinimize,
         showTrayIcon,
         minimizeToTray,
+        trayLeftClickTogglesFocus,
 
         // Transactions
         multiBroadcast,
@@ -120,7 +123,7 @@ public:
         blockExplorers,
         blockExplorer,
         lastPath,
-        
+
         // UR
         URmsPerFragment,
         URfragmentLength,
@@ -139,6 +142,14 @@ public:
         // Tickers
         tickers,
         tickersShowFiatBalance,
+
+        // Sync & data saver
+        syncPaused,
+        syncPausedAlsoDisconnectWebSocket,
+        syncInterval,
+        lastKnownNetworkHeight,
+        lastSyncTimestamp,
+        lastPriceUpdateTimestamp,
     };
 
     enum PrivacyLevel {
@@ -169,7 +180,7 @@ public:
         UnifiedResources = 0,
         FileTransfer
     };
-    
+
     ~Config() override;
     QVariant get(ConfigKey key);
     QString getFileName();

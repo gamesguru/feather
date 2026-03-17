@@ -47,6 +47,24 @@ WindowManager::WindowManager(QObject *parent)
     this->buildTrayMenu();
     m_tray->setVisible(conf()->get(Config::showTrayIcon).toBool());
 
+    connect(m_tray, &QSystemTrayIcon::activated, [this](QSystemTrayIcon::ActivationReason reason) {
+        if (reason == QSystemTrayIcon::Trigger) {
+            if (conf()->get(Config::trayLeftClickTogglesFocus).toBool()) {
+                for (const auto &window : m_windows) {
+                    if (window->isVisible() && window->isActiveWindow()) {
+                        window->hide();
+                    } else {
+                        window->show();
+                        window->raise();
+                        window->activateWindow();
+                    }
+                }
+            } else {
+                m_tray->contextMenu()->popup(QCursor::pos());
+            }
+        }
+    });
+
     this->initSkins();
     this->patchMacStylesheet();
 
@@ -71,9 +89,13 @@ void WindowManager::setEventFilter(EventFilter *ef) {
 
 WindowManager::~WindowManager() {
     qDebug() << "~WindowManager";
-    m_cleanupThread->quit();
-    m_cleanupThread->wait();
-    qDebug() << "WindowManager: cleanup thread done" << QThread::currentThreadId();
+    if (m_cleanupThread && m_cleanupThread->isRunning()) {
+        m_cleanupThread->quit();
+        m_cleanupThread->wait();
+        qDebug() << "WindowManager: cleanup thread done" << QThread::currentThreadId();
+    } else {
+        qDebug() << "WindowManager: cleanup thread already stopped";
+    }
 }
 
 // ######################## APPLICATION LIFECYCLE ########################
@@ -89,8 +111,35 @@ void WindowManager::quitAfterLastWindow() {
 
 void WindowManager::close() {
     qDebug() << Q_FUNC_INFO << QThread::currentThreadId();
-    for (const auto &window: m_windows) {
+
+    if (m_closing) {
+        return;
+    }
+    m_closing = true;
+
+
+    // Stop all threads before application shutdown to avoid QThreadStorage warnings
+    if (m_cleanupThread && m_cleanupThread->isRunning()) {
+        m_cleanupThread->quit();
+        m_cleanupThread->wait();
+        qDebug() << "WindowManager: cleanup thread stopped in close()";
+    }
+
+    // Close all windows first to ensure they cancel their tasks/connections
+    // Iterate over a copy because close() modifies m_windows
+    auto windows = m_windows;
+    for (const auto &window: windows) {
         window->close();
+    }
+
+    // Stop Tor manager threads
+    torManager()->stop();
+
+    // Wait for all threads in the global thread pool with timeout to prevent indefinite blocking
+    if (!QThreadPool::globalInstance()->waitForDone(15000)) {
+        qCritical() << "WindowManager: Thread pool tasks did not complete within 15s timeout. "
+                    << "Forcing exit to prevent use-after-free.";
+        std::_Exit(1);  // Fast exit without cleanup - threads may still hold resources
     }
 
     if (m_splashDialog) {
@@ -106,8 +155,6 @@ void WindowManager::close() {
         m_docsDialog->deleteLater();
     }
 
-    torManager()->stop();
-
     deleteLater();
 
     qDebug() << "Calling QApplication::quit()";
@@ -117,6 +164,7 @@ void WindowManager::close() {
 void WindowManager::closeWindow(MainWindow *window) {
     qDebug() << "WindowManager: closing Window";
     m_windows.removeOne(window);
+    this->buildTrayMenu();
 
     // Move Wallet to a different thread for cleanup, so it doesn't block GUI thread
     window->m_wallet->moveToThread(m_cleanupThread);
@@ -472,12 +520,12 @@ void WindowManager::handleDeviceError(const QString &error, Utils::Message &msg)
     // Ledger
     if (error.contains("No device found")) {
         msg.description = "No Ledger device found.";
-        msg.helpItems = {"Make sure the Monero app is open on the device.", "If the problem persists, try restarting Feather."};
+        msg.helpItems = QStringList{"Make sure the Monero app is open on the device.", "If the problem persists, try restarting Feather."};
         msg.doc = "create_wallet_hardware_device";
     }
     else if (error.contains("Unable to open device")) {
         msg.description = "Unable to open device.";
-        msg.helpItems = {"The device might be in use by a different application."};
+        msg.helpItems = QStringList{"The device might be in use by a different application."};
 #if defined(Q_OS_LINUX)
         msg.helpItems.append("On Linux you may need to follow the instructions in the link below before the device can be opened:\n"
                          "https://support.ledger.com/article/115005165269-zd");
@@ -488,15 +536,15 @@ void WindowManager::handleDeviceError(const QString &error, Utils::Message &msg)
     // Trezor
     else if (error.contains("Unable to claim libusb device")) {
         msg.description = "Unable to claim Trezor device";
-        msg.helpItems = {"Please make sure the device is not used by another program, like Trezor Suite or trezord, and try again."};
+        msg.helpItems = QStringList{"Please make sure the device is not used by another program, like Trezor Suite or trezord, and try again."};
     }
     else if (error.contains("Cannot get a device address")) {
         msg.description = "Cannot get a device address";
-        msg.helpItems = {"Reattach the Trezor device and try again"};
+        msg.helpItems = QStringList{"Reattach the Trezor device and try again"};
     }
     else if (error.contains("Could not connect to the device Trezor") || error.contains("Device connect failed")) {
         msg.description = "Could not connect to the Trezor device";
-        msg.helpItems = {"Make sure the device is connected to your computer and unlocked."};
+        msg.helpItems = QStringList{"Make sure the device is connected to your computer and unlocked."};
 #if defined(Q_OS_LINUX)
         msg.helpItems.append("On Linux you may need to follow the instructions in the link below before the device can be opened:\n"
                          "https://trezor.io/guides/trezorctl/udev-rules");
@@ -504,17 +552,17 @@ void WindowManager::handleDeviceError(const QString &error, Utils::Message &msg)
 #endif
     }
     else if (error.contains("Failed to acquire device")) {
-        msg.helpItems = {"Make sure Trezor Suite and trezord are closed."};
+        msg.helpItems = QStringList{"Make sure Trezor Suite and trezord are closed."};
     }
     else if (error.contains("SW_CLIENT_NOT_SUPPORTED")) {
-        msg.helpItems = {"Upgrade your Ledger device firmware to the latest version using Ledger Live.\n"
+        msg.helpItems = QStringList{"Upgrade your Ledger device firmware to the latest version using Ledger Live.\n"
                      "Then upgrade the Monero app for the Ledger device to the latest version."};
     }
     else if (error.contains("Wrong Device Status")) {
-        msg.helpItems = {"The device may need to be unlocked."};
+        msg.helpItems = QStringList{"The device may need to be unlocked."};
     }
     else if (error.contains("Wrong Channel")) {
-        msg.helpItems = {"Restart the hardware device and try again."};
+        msg.helpItems = QStringList{"Restart the hardware device and try again."};
     }
     else {
         msg.doc = "report_an_issue";
@@ -689,7 +737,7 @@ void WindowManager::onProxySettingsChanged() {
         getNetworkSocks5()->setProxy(proxy);
     }
 
-    qWarning() << "Proxy: " << proxy.hostName() << " " << proxy.port();
+    qDebug() << "Proxy: " << proxy.hostName() << " " << proxy.port();
 
     // Switch websocket to new proxy and update URL
     websocketNotifier()->websocketClient->stop();
@@ -773,7 +821,10 @@ QString WindowManager::loadStylesheet(const QString &resource) {
         return "";
     }
 
-    f.open(QFile::ReadOnly | QFile::Text);
+    if (!f.open(QFile::ReadOnly | QFile::Text)) {
+        qWarning() << "Failed to open stylesheet:" << resource;
+        return "";
+    }
     QTextStream ts(&f);
     QString data = ts.readAll();
     f.close();

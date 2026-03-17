@@ -26,7 +26,7 @@ PageOTS_ExportSignedTx::PageOTS_ExportSignedTx(QWidget *parent, Wallet *wallet, 
     ui->label_instructions->setText("Scan this animated QR code with your view-only wallet.");
 
     connect(ui->btn_export, &QPushButton::clicked, this, &PageOTS_ExportSignedTx::exportSignedTx);
-    connect(ui->combo_method, &QComboBox::currentIndexChanged, [this](int index){
+    connect(ui->combo_method, QOverload<int>::of(&QComboBox::currentIndexChanged), [this](int index){
         conf()->set(Config::offlineTxSigningMethod, index);
         ui->stackedWidget->setCurrentIndex(index);
     });

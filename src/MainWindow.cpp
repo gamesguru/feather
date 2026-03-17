@@ -7,7 +7,15 @@
 #include <QFileDialog>
 #include <QInputDialog>
 #include <QMessageBox>
+#include <QClipboard>
+#include <QLocale>
+#include <QHBoxLayout>
 #include <QCheckBox>
+#include <QFormLayout>
+#include <QSpinBox>
+#include <QDateEdit>
+#include <QComboBox>
+#include <QDialogButtonBox>
 
 #include "constants.h"
 #include "dialog/AddressCheckerIndexDialog.h"
@@ -24,16 +32,19 @@
 #include "dialog/ViewOnlyDialog.h"
 #include "dialog/WalletInfoDialog.h"
 #include "dialog/WalletCacheDebugDialog.h"
+#include "dialog/SyncRangeDialog.h"
 #include "libwalletqt/AddressBook.h"
 #include "libwalletqt/rows/CoinsInfo.h"
 #include "libwalletqt/rows/Output.h"
 #include "libwalletqt/TransactionHistory.h"
 #include "model/AddressBookModel.h"
 #include "plugins/PluginRegistry.h"
+#include "plugins/Plugin.h"
 #include "utils/AppData.h"
 #include "utils/AsyncTask.h"
 #include "utils/ColorScheme.h"
 #include "utils/Icons.h"
+#include "utils/RestoreHeightLookup.h"
 #include "utils/TorManager.h"
 #include "utils/WebsocketNotifier.h"
 
@@ -80,7 +91,7 @@ MainWindow::MainWindow(WindowManager *windowManager, Wallet *wallet, QWidget *pa
 
     this->onOfflineMode(conf()->get(Config::offlineMode).toBool());
     conf()->set(Config::restartRequired, false);
-    
+
     // Websocket notifier
 #ifdef CHECK_UPDATES
     connect(websocketNotifier(), &WebsocketNotifier::UpdatesReceived, m_updater.data(), &Updater::wsUpdatesReceived);
@@ -93,6 +104,7 @@ MainWindow::MainWindow(WindowManager *windowManager, Wallet *wallet, QWidget *pa
 
     connect(m_windowManager, &WindowManager::proxySettingsChanged, this, &MainWindow::onProxySettingsChangedConnect);
     connect(m_windowManager, &WindowManager::updateBalance, m_wallet, &Wallet::updateBalance);
+    connect(m_windowManager, &WindowManager::websocketStatusChanged, m_wallet, &Wallet::updateBalance);
     connect(m_windowManager, &WindowManager::offlineMode, this, &MainWindow::onOfflineMode);
     connect(m_windowManager, &WindowManager::manualFeeSelectionEnabled, this, &MainWindow::onManualFeeSelectionEnabled);
     connect(m_windowManager, &WindowManager::subtractFeeFromAmountEnabled, this, &MainWindow::onSubtractFeeFromAmountEnabled);
@@ -109,11 +121,19 @@ MainWindow::MainWindow(WindowManager *windowManager, Wallet *wallet, QWidget *pa
 
     // Timers
     connect(&m_updateBytes, &QTimer::timeout, this, &MainWindow::updateNetStats);
+    connect(&m_updateBytes, &QTimer::timeout, this, &MainWindow::updateStatusToolTip);
     connect(&m_txTimer, &QTimer::timeout, [this]{
-        m_statusLabelStatus->setText("Constructing transaction" + this->statusDots());
+        QString text = "Constructing transaction" + this->statusDots();
+        m_statusLabelStatus->setText(text);
     });
 
     conf()->set(Config::firstRun, false);
+
+    connect(conf(), &Config::changed, this, [this](Config::ConfigKey key){
+        if (key == Config::syncInterval && m_wallet) {
+            m_wallet->setRefreshInterval(conf()->get(Config::syncInterval).toInt());
+        }
+    });
 
     this->onWalletOpened();
 
@@ -135,7 +155,7 @@ void MainWindow::initStatusBar() {
     this->statusBar()->setFixedHeight(30);
 
     m_statusLabelStatus = new QLabel("Idle", this);
-    m_statusLabelStatus->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    m_statusLabelStatus->setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::LinksAccessibleByMouse);
     this->statusBar()->addWidget(m_statusLabelStatus);
 
     m_statusLabelNetStats = new QLabel("", this);
@@ -151,10 +171,24 @@ void MainWindow::initStatusBar() {
 
     m_statusLabelBalance = new ClickableLabel(this);
     m_statusLabelBalance->setText("Balance: 0 XMR");
-    m_statusLabelBalance->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    m_statusLabelBalance->setCursor(Qt::PointingHandCursor);
+    m_statusLabelBalance->setContextMenuPolicy(Qt::ActionsContextMenu);
     this->statusBar()->addPermanentWidget(m_statusLabelBalance);
-    connect(m_statusLabelBalance, &ClickableLabel::clicked, this, &MainWindow::showBalanceDialog);
+
+    connect(m_statusLabelBalance, &ClickableLabel::clicked, this, [this](){
+        QMenu menu;
+        menu.addActions(m_statusLabelBalance->actions());
+        menu.exec(QCursor::pos());
+    });
+
+    QAction *copyBalanceAction = new QAction(tr("Copy amount"), this);
+    connect(copyBalanceAction, &QAction::triggered, this, [this](){
+        QApplication::clipboard()->setText(m_statusLabelBalance->property("copyableValue").toString());
+    });
+    m_statusLabelBalance->addAction(copyBalanceAction);
+
+    QAction *showBalanceAction = new QAction(tr("Show details"), this);
+    connect(showBalanceAction, &QAction::triggered, this, &MainWindow::showBalanceDialog);
+    m_statusLabelBalance->addAction(showBalanceAction);
 
     m_statusBtnConnectionStatusIndicator = new StatusBarButton(icons()->icon("status_disconnected.svg"), "Connection status", this);
     connect(m_statusBtnConnectionStatusIndicator, &StatusBarButton::clicked, [this](){
@@ -188,6 +222,136 @@ void MainWindow::initStatusBar() {
     connect(m_statusBtnHwDevice, &StatusBarButton::clicked, this, &MainWindow::menuHwDeviceClicked);
     this->statusBar()->addPermanentWidget(m_statusBtnHwDevice);
     m_statusBtnHwDevice->hide();
+
+    m_statusLabelStatus->setContextMenuPolicy(Qt::ActionsContextMenu);
+
+    QAction *pauseSyncAction = new QAction(tr("Pause Sync"), this);
+    pauseSyncAction->setCheckable(true);
+    pauseSyncAction->setChecked(conf()->get(Config::syncPaused).toBool());
+    m_statusLabelStatus->addAction(pauseSyncAction);
+
+    m_actionEnableWebsocket = new QAction(tr("Enable Websocket"), this);
+    m_actionEnableWebsocket->setCheckable(true);
+    m_actionEnableWebsocket->setChecked(!conf()->get(Config::disableWebsocket).toBool());
+
+    connect(m_actionEnableWebsocket, &QAction::toggled, this, [](bool checked){
+        conf()->set(Config::disableWebsocket, !checked);
+        if (checked) {
+            websocketNotifier()->websocketClient->restart();
+        } else {
+            websocketNotifier()->websocketClient->stop();
+        }
+        WindowManager::instance()->onWebsocketStatusChanged(checked);
+    });
+
+
+    QAction *skipSyncAction = new QAction(tr("Skip Sync"), this);
+    m_statusLabelStatus->addAction(skipSyncAction);
+
+    QAction *syncRangeAction = new QAction(tr("Sync Date Range..."), this);
+    m_statusLabelStatus->addAction(syncRangeAction);
+
+    QAction *fullSyncAction = new QAction(tr("Full Sync"), this);
+    m_statusLabelStatus->addAction(fullSyncAction);
+
+    QAction *scanTxAction = new QAction(tr("Import Transaction"), this);
+    m_statusLabelStatus->addAction(scanTxAction);
+
+    m_updateNetworkInfoAction = new QAction(tr("Scan Now"), this);
+    m_updateNetworkInfoAction->setEnabled(!pauseSyncAction->isChecked());
+    m_statusLabelStatus->addAction(m_updateNetworkInfoAction);
+
+    connect(pauseSyncAction, &QAction::toggled, this, [this](bool checked) {
+        qInfo() << "Pause Sync toggled. Checked =" << checked;
+        conf()->set(Config::syncPaused, checked);
+
+        m_updateNetworkInfoAction->setEnabled(!checked);
+
+        if (m_wallet) {
+            if (checked) {
+                m_wallet->setSyncPaused(true);
+                m_nodes->disconnectCurrentNode();
+                this->onConnectionStatusChanged(Wallet::ConnectionStatus_Disconnected);
+            } else {
+                // Ensure we reconnect everything when unpausing
+                m_wallet->setSyncPaused(false);
+                m_nodes->connectToNode();
+                websocketNotifier()->websocketClient->restart();
+                this->setStatusText(tr("Resuming sync..."));
+            }
+        }
+    });
+
+    connect(skipSyncAction, &QAction::triggered, this, [this](){
+        if (!m_wallet) return;
+
+        QString msg = tr("Skip sync will set your wallet's restore height to the current network height.\n\n"
+                          "Use this if you know you haven't received any transactions since your last sync.\n"
+                          "You can always use 'Full Sync' to rescan from the beginning.\n\n"
+                          "Continue?");
+
+        if (QMessageBox::question(this, tr("Skip Sync"), msg) == QMessageBox::Yes) {
+            m_wallet->skipToTip();
+            this->setStatusText(tr("Skipped sync to tip."));
+        }
+    });
+
+    connect(syncRangeAction, &QAction::triggered, this, [this](){
+        if (!m_wallet) return;
+
+        SyncRangeDialog dialog(this, m_wallet);
+        if (dialog.exec() == QDialog::Accepted) {
+            m_wallet->syncDateRange(dialog.fromDate(), dialog.toDate());
+
+            this->setStatusText(tr("Syncing range %1 - %2 (~%3 blocks)\nEst. download size: %4")
+                                .arg(dialog.fromDate().toString("yyyy-MM-dd"))
+                                .arg(dialog.toDate().toString("yyyy-MM-dd"))
+                                .arg(QLocale().toString(dialog.estimatedBlocks()))
+                                .arg(Utils::formatBytes(dialog.estimatedSize())));
+        }
+    });
+
+    connect(fullSyncAction, &QAction::triggered, this, [this](){
+        if (m_wallet) {
+            QString estBlocks = "Unknown (waiting for node)";
+            QString estSize = "Unknown";
+
+            quint64 walletCreationHeight = m_wallet->getWalletCreationHeight();
+            quint64 daemonHeight = m_wallet->daemonBlockChainHeight();
+            quint64 blocksBehind = 0;
+
+            if (daemonHeight > 0) {
+                blocksBehind = (daemonHeight > walletCreationHeight) ? (daemonHeight - walletCreationHeight) : 0;
+                quint64 estimatedBytes = Utils::estimateSyncDataSize(blocksBehind);
+                estBlocks = QLocale().toString(blocksBehind);
+                estSize = QString("~%1").arg(Utils::formatBytes(estimatedBytes));
+            }
+
+            QString msg = tr("Full sync will rescan from your restore height.\n\n"
+                             "Blocks to scan: %1\n"
+                             "Estimated data: %2\n\n"
+                             "Note: Cached blocks will be skipped.\n\n"
+                             "Continue?")
+                          .arg(estBlocks)
+                          .arg(estSize);
+
+            if (QMessageBox::question(this, tr("Full Sync"), msg) == QMessageBox::Yes) {
+                m_wallet->fullSync();
+                if (estBlocks.startsWith("Unknown")) {
+                    this->setStatusText(tr("Full sync started..."));
+                } else {
+                    this->setStatusText(tr("Full sync started (%1 blocks)...").arg(estBlocks));
+                }
+            }
+        }
+    });
+
+    connect(scanTxAction, &QAction::triggered, this, [this](){
+        if (m_wallet) {
+            TxImportDialog dialog(this, m_wallet);
+            dialog.exec();
+        }
+    });
 }
 
 void MainWindow::initPlugins() {
@@ -365,9 +529,18 @@ void MainWindow::initMenu() {
         toggleTab->menuAction->setText(toggleTab->name);
         toggleTab->menuAction->setCheckable(true);
         toggleTab->menuAction->setChecked(show);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
         ui->tabWidget->setTabVisible(ui->tabWidget->indexOf(toggleTab->tab), show);
+#else
+        ui->tabWidget->setTabEnabled(ui->tabWidget->indexOf(toggleTab->tab), show);
+#endif
     }
+#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
     connect(m_tabShowHideSignalMapper, &QSignalMapper::mappedString, this, &MainWindow::menuToggleTabVisible);
+#else
+    // Qt 5.14 and older use the overloaded 'mapped' signal
+    connect(m_tabShowHideSignalMapper, QOverload<const QString &>::of(&QSignalMapper::mapped), this, &MainWindow::menuToggleTabVisible);
+#endif
 
     // [Tools]
     connect(ui->actionSignVerify,                  &QAction::triggered, this, &MainWindow::menuSignVerifyClicked);
@@ -453,6 +626,16 @@ void MainWindow::initOffline() {
             ui->radio_airgapUR->setChecked(true);
     }
 
+    connect(m_updateNetworkInfoAction, &QAction::triggered, this, [this]() {
+        if (!m_wallet) return;
+        qDebug() << "Scanning wallet...";
+        this->setStatusText(tr("Scanning..."));
+        QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+        m_wallet->updateNetworkStatus();
+    });
+
+
+    // We do NOT want to start syncing yet here, wait for wallet to be opened
     // We can't use rich text for radio buttons
     connect(ui->label_airgapUR, &ClickableLabel::clicked, [this] {
         ui->radio_airgapUR->setChecked(true);
@@ -487,8 +670,16 @@ void MainWindow::initWalletContext() {
     connect(m_wallet, &Wallet::connectionStatusChanged, [this](int status){
         // Order is important, first inform UI about a potential disconnect, then reconnect
         this->onConnectionStatusChanged(status);
-        m_nodes->autoConnect();
+
+        if (status == Wallet::ConnectionStatus_Disconnected) {
+            QTimer::singleShot(2000, m_nodes, [this]{ m_nodes->autoConnect(); });
+        } else {
+            m_nodes->autoConnect();
+        }
+
+        this->updateBalance();
     });
+
     connect(m_wallet, &Wallet::currentSubaddressAccountChanged, this, &MainWindow::updateTitle);
     connect(m_wallet, &Wallet::walletPassphraseNeeded, this, &MainWindow::onWalletPassphraseNeeded);
 
@@ -509,7 +700,7 @@ void MainWindow::initWalletContext() {
     connect(m_wallet, &Wallet::deviceButtonRequest, this, &MainWindow::onDeviceButtonRequest);
     connect(m_wallet, &Wallet::deviceButtonPressed, this, &MainWindow::onDeviceButtonPressed);
     connect(m_wallet, &Wallet::deviceError,         this, &MainWindow::onDeviceError);
-    
+
     connect(m_wallet, &Wallet::multiBroadcast,      this, &MainWindow::onMultiBroadcast);
 }
 
@@ -527,7 +718,11 @@ void MainWindow::menuToggleTabVisible(const QString &key){
     }
 
     conf()->set(Config::enabledTabs, enabledTabs);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
     ui->tabWidget->setTabVisible(ui->tabWidget->indexOf(toggleTab->tab), show);
+#else
+    ui->tabWidget->setTabEnabled(ui->tabWidget->indexOf(toggleTab->tab), show);
+#endif
     toggleTab->menuAction->setText(toggleTab->name);
 }
 
@@ -553,6 +748,14 @@ void MainWindow::onWalletOpened() {
     m_splashDialog->hide();
 
     m_wallet->setRingDatabase(Utils::ringDatabasePath());
+
+    // Load persisted sync state
+    qint64 lastSync = conf()->get(Config::lastSyncTimestamp).toLongLong();
+    if (lastSync > 0) {
+        m_lastSyncStatusUpdate = QDateTime::fromSecsSinceEpoch(lastSync);
+    }
+
+    m_wallet->setRefreshInterval(conf()->get(Config::syncInterval).toInt());
 
     m_wallet->updateBalance();
     if (m_wallet->isHwBacked()) {
@@ -582,6 +785,16 @@ void MainWindow::onWalletOpened() {
     connect(m_wallet->coins(), &Coins::descriptionChanged, [this] {
         m_wallet->history()->refresh();
     });
+
+    connect(m_wallet->coins(), &Coins::refreshStarted, [this]{
+        m_coinsRefreshing = true;
+        this->updateNetStats();
+    });
+
+    connect(m_wallet->coins(), &Coins::refreshFinished, [this]{
+        m_coinsRefreshing = false;
+        this->updateNetStats();
+    });
     // Vice versa
     connect(m_wallet->transactionHistoryModel(), &TransactionHistoryModel::transactionDescriptionChanged, [this] {
         m_wallet->coins()->refresh();
@@ -590,7 +803,12 @@ void MainWindow::onWalletOpened() {
     this->updatePasswordIcon();
     this->updateTitle();
     m_nodes->allowConnection();
-    m_nodes->connectToNode();
+    if (!conf()->get(Config::disableAutoRefresh).toBool()) {
+        if (conf()->get(Config::syncPaused).toBool()) {
+            m_wallet->setSyncPaused(true);
+        }
+        m_nodes->connectToNode();
+    }
     m_updateBytes.start(250);
 
     if (conf()->get(Config::writeRecentlyOpenedWallets).toBool()) {
@@ -607,34 +825,144 @@ void MainWindow::onBalanceUpdated(quint64 balance, quint64 spendable) {
     int displaySetting = conf()->get(Config::balanceDisplay).toInt();
     int decimals = conf()->get(Config::amountPrecision).toInt();
 
-    QString balance_str = "Balance: ";
+    QString valueStr;
+    QString suffixStr;
+
     if (hide) {
-        balance_str += "HIDDEN";
+        valueStr = "HIDDEN";
     }
     else if (displaySetting == Config::totalBalance) {
-        balance_str += QString("%1 XMR").arg(WalletManager::displayAmount(balance, false, decimals));
+        valueStr = WalletManager::displayAmount(balance, true, decimals);
+        suffixStr = " XMR";
     }
     else if (displaySetting == Config::spendable || displaySetting == Config::spendablePlusUnconfirmed) {
-        balance_str += QString("%1 XMR").arg(WalletManager::displayAmount(spendable, false, decimals));
+        valueStr = WalletManager::displayAmount(spendable, true, decimals);
+        suffixStr = " XMR";
 
         if (displaySetting == Config::spendablePlusUnconfirmed && balance > spendable) {
-            balance_str += QString(" (+%1 XMR unconfirmed)").arg(WalletManager::displayAmount(balance - spendable, false, decimals));
+            suffixStr += QString(" (+%1 XMR unconfirmed)").arg(WalletManager::displayAmount(balance - spendable, true, decimals));
         }
     }
 
+    // Show fiat currency if configured and balance is not hidden or spendable only.
     if (conf()->get(Config::balanceShowFiat).toBool() && !hide) {
         QString fiatCurrency = conf()->get(Config::preferredFiatCurrency).toString();
         double balanceFiatAmount = appData()->prices.convert("XMR", fiatCurrency, balance / constants::cdiv);
-        balance_str += QString(" (%1)").arg(Utils::amountToCurrencyString(balanceFiatAmount, fiatCurrency));
+        bool isCacheValid = appData()->prices.lastUpdateTime.isValid();
+        bool hasXmrPrice = appData()->prices.markets.contains("XMR");
+        bool hasFiatRate = fiatCurrency == "USD" || appData()->prices.rates.contains(fiatCurrency);
+
+        if (balance > 0 && (balanceFiatAmount == 0.0 || !isCacheValid)) {
+            if (conf()->get(Config::offlineMode).toBool() || conf()->get(Config::disableWebsocket).toBool() || m_wallet->connectionStatus() == Wallet::ConnectionStatus_Disconnected) {
+                suffixStr += " (offline)";
+            } else if (!hasXmrPrice || !hasFiatRate) {
+                suffixStr += " (connecting)";
+            } else {
+                suffixStr += " (unknown)";
+            }
+        } else {
+            QString approx = !conf()->get(Config::disableWebsocket).toBool() ? "" : "~ ";
+            suffixStr += QString(" (%1%2)").arg(approx, Utils::amountToCurrencyString(balanceFiatAmount, fiatCurrency));
+        }
     }
 
-    m_statusLabelBalance->setToolTip("Click for details");
-    m_statusLabelBalance->setText(balance_str);
+    this->updateStatusToolTip();
+
+
+    QString finalText = "Balance: " + valueStr + suffixStr;
+
+    m_statusLabelBalance->setText(finalText);
+    m_statusLabelBalance->setProperty("copyableValue", valueStr);
+}
+
+void MainWindow::updateStatusToolTip() {
+    QString toolTip = "Right-click for details";
+    if (appData()->prices.lastUpdateTime.isValid()) {
+        toolTip += QString("\nPrice updated: %1").arg(Utils::timeAgo(appData()->prices.lastUpdateTime));
+    }
+    if (m_wallet && m_wallet->lastSyncTime().isValid()) {
+        toolTip += QString("\nWallet synced: %1").arg(Utils::timeAgo(m_wallet->lastSyncTime()));
+    }
+
+    if (m_wallet) {
+        qint64 nextRefresh = m_wallet->secondsUntilNextRefresh();
+        if (nextRefresh > 0) {
+            toolTip += QString("\nNext sync attempt in: %1s").arg(nextRefresh);
+        } else if (nextRefresh == 0) {
+            toolTip += "\nSync attempt in progress...";
+        } else if (nextRefresh == -2) {
+            toolTip += "\nHardware wallet disconnected";
+        }
+    }
+
+    m_statusLabelBalance->setToolTip(toolTip);
+
+    this->updateSyncStatusToolTip();
+}
+
+void MainWindow::updateSyncStatusToolTip() {
+    if (!m_wallet) return;
+
+    quint64 walletHeight = m_wallet->blockChainHeight();
+    quint64 targetHeight = m_wallet->daemonBlockChainTargetHeight();
+
+    // Fall back to persisted network height if current is 0
+    if (targetHeight == 0) {
+        targetHeight = conf()->get(Config::lastKnownNetworkHeight).toULongLong();
+    }
+
+    // Determine blocks behind
+    quint64 blocksBehindActual = Utils::blocksBehind(walletHeight, targetHeight);
+    quint64 blocksBehindEstimated = 0;
+
+    // Use lastSyncTime, then m_lastSyncStatusUpdate, then persisted timestamp
+    QDateTime lastSync = m_wallet->lastSyncTime().isValid()
+        ? m_wallet->lastSyncTime()
+        : m_lastSyncStatusUpdate;
+
+    if (!lastSync.isValid()) {
+        qint64 persistedTimestamp = conf()->get(Config::lastSyncTimestamp).toLongLong();
+        if (persistedTimestamp > 0) {
+            lastSync = QDateTime::fromSecsSinceEpoch(persistedTimestamp);
+        }
+    }
+
+    if (lastSync.isValid()) {
+        qint64 secsSinceSync = lastSync.secsTo(QDateTime::currentDateTime());
+        if (secsSinceSync > 0) {
+            blocksBehindEstimated = secsSinceSync / 120; // ~2 min per block
+        }
+    }
+
+    quint64 blocksBehind = std::max(blocksBehindActual, blocksBehindEstimated);
+
+    // Build Tooltip
+    QString tooltip;
+    if (targetHeight > 0) {
+        tooltip = tr("Wallet Height: %1 | Network Tip: %2")
+            .arg(QLocale().toString(walletHeight))
+            .arg(QLocale().toString(targetHeight));
+    } else {
+        tooltip = tr("Wallet Height: %1").arg(QLocale().toString(walletHeight));
+    }
+
+    if (lastSync.isValid()) {
+        tooltip += tr("\nLast synchronized: %1").arg(Utils::timeAgo(lastSync));
+    }
+
+    if (blocksBehind > 0) {
+        tooltip += tr("\n~%1 blocks behind").arg(QLocale().toString(blocksBehind));
+    }
+
+    // qDebug() << "Setting Status Tooltip:" << tooltip;
+    m_statusLabelStatus->setToolTip(tooltip);
 }
 
 void MainWindow::setStatusText(const QString &text, bool override, int timeout) {
+
     if (override) {
         m_statusOverrideActive = true;
+        // qDebug() << "STATUS (override):" << text;
         m_statusLabelStatus->setText(text);
         QTimer::singleShot(timeout, [this]{
             m_statusOverrideActive = false;
@@ -646,6 +974,7 @@ void MainWindow::setStatusText(const QString &text, bool override, int timeout) 
     m_statusText = text;
 
     if (!m_statusOverrideActive && !m_constructingTransaction) {
+        // qDebug() << "STATUS:" << text;
         m_statusLabelStatus->setText(text);
     }
 }
@@ -660,6 +989,9 @@ void MainWindow::tryStoreWallet() {
 }
 
 void MainWindow::onWebsocketStatusChanged(bool enabled) {
+    if (m_actionEnableWebsocket) {
+        m_actionEnableWebsocket->setChecked(enabled);
+    }
     ui->actionShow_Home->setVisible(enabled);
 
     QStringList enabledTabs = conf()->get(Config::enabledTabs).toStringList();
@@ -670,8 +1002,15 @@ void MainWindow::onWebsocketStatusChanged(bool enabled) {
         }
 
         if (plugin->requiresWebsocket()) {
+            int tabIndex = this->findTab(plugin->displayName());
+            bool shouldShow = enabled && enabledTabs.contains(plugin->displayName());
             // TODO: unload plugins
-            ui->tabWidget->setTabVisible(this->findTab(plugin->displayName()), enabled && enabledTabs.contains(plugin->displayName()));
+            if (tabIndex != -1)
+#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
+                ui->tabWidget->setTabVisible(tabIndex, shouldShow);
+#else
+                ui->tabWidget->setTabEnabled(tabIndex, shouldShow);
+#endif
         }
     }
 
@@ -742,11 +1081,26 @@ void MainWindow::onMultiBroadcast(const QMap<QString, QString> &txHexMap) {
 }
 
 void MainWindow::onSyncStatus(quint64 height, quint64 target, bool daemonSync) {
-    if (height >= (target - 1)) {
+    // qDebug() << "onSyncStatus: Height" << height << "Target" << target << "DaemonSync" << daemonSync;
+
+    quint64 blocksBehind = Utils::blocksBehind(height, target);
+
+    if (height >= (target - 1) && target > 0) {
+        m_lastSyncStatusUpdate = QDateTime::currentDateTime();
+
         this->updateNetStats();
+        this->setStatusText(QString("Synchronized (%1)").arg(QLocale().toString(height)));
+
+        // Persist sync state for next boot
+        conf()->set(Config::lastKnownNetworkHeight, static_cast<qulonglong>(target));
+        conf()->set(Config::lastSyncTimestamp, QDateTime::currentSecsSinceEpoch());
+    } else {
+        QString type = daemonSync ? tr("Blockchain") : tr("Wallet");
+        QString blocksStr = QLocale().toString(blocksBehind);
+        this->setStatusText(tr("%1 sync: %2 blocks behind").arg(type, blocksStr));
     }
-    this->setStatusText(Utils::formatSyncStatus(height, target, daemonSync));
-    m_statusLabelStatus->setToolTip(QString("Wallet height: %1").arg(QString::number(height)));
+
+    this->updateSyncStatusToolTip();
 }
 
 void MainWindow::onConnectionStatusChanged(int status)
@@ -756,39 +1110,78 @@ void MainWindow::onConnectionStatusChanged(int status)
 
     qDebug() << "Wallet connection status changed " << Utils::QtEnumToString(static_cast<Wallet::ConnectionStatus>(status));
 
+    if (m_updateNetworkInfoAction) {  // Maybe not initialized on first function call
+        m_updateNetworkInfoAction->setEnabled(status != Wallet::ConnectionStatus_Disconnected && !conf()->get(Config::syncPaused).toBool());
+    }
+
     // Update connection info in status bar.
 
     QIcon icon;
+    QString statusStr;
     if (conf()->get(Config::offlineMode).toBool()) {
         icon = icons()->icon("status_offline.svg");
-        this->setStatusText("Offline mode");
+        statusStr = "Offline mode";
     } else {
         switch(status){
             case Wallet::ConnectionStatus_Disconnected:
-                icon = icons()->icon("status_disconnected.svg");
-                this->setStatusText("Disconnected");
+            {
+                icon = icons()->icon("status_offline.svg");
+                // Estimate blocks behind based on time since last sync
+                if (m_wallet && m_wallet->lastSyncTime().isValid()) {
+                    qint64 secsSinceLastSync = m_wallet->lastSyncTime().secsTo(QDateTime::currentDateTime());
+                    if (secsSinceLastSync > 0) {
+                        quint64 estimatedBlocksBehind = secsSinceLastSync / 120; // ~2 min per block
+                        if (estimatedBlocksBehind > 0) {
+                            statusStr = tr("~%1 blocks behind").arg(QLocale().toString(estimatedBlocksBehind));
+                            break;
+                        }
+                    }
+                }
+                statusStr = "Disconnected";
                 break;
+            }
             case Wallet::ConnectionStatus_Connecting:
                 icon = icons()->icon("status_lagging.svg");
-                this->setStatusText("Connecting to node");
+                statusStr = "Connecting to node";
                 break;
             case Wallet::ConnectionStatus_WrongVersion:
                 icon = icons()->icon("status_disconnected.svg");
-                this->setStatusText("Incompatible node");
+                statusStr = "Node Incompatible";
                 break;
             case Wallet::ConnectionStatus_Synchronizing:
                 icon = icons()->icon("status_waiting.svg");
+                statusStr = "Synchronizing";
                 break;
             case Wallet::ConnectionStatus_Synchronized:
                 icon = icons()->icon("status_connected.svg");
+                statusStr = "Synchronized";
                 break;
             default:
                 icon = icons()->icon("status_disconnected.svg");
+                statusStr = "Disconnected";
                 break;
         }
     }
 
+    this->setStatusText(statusStr);
+
+    this->updateSyncStatusToolTip();
+
+    if (m_wallet) {
+        quint64 walletHeight = m_wallet->blockChainHeight();
+        quint64 daemonHeight = m_wallet->daemonBlockChainHeight();
+        quint64 targetHeight = m_wallet->daemonBlockChainTargetHeight();
+
+        if (walletHeight > 0) {
+            statusStr += QString("\nWallet %1. Daemon %2. Network %3")
+                    .arg(QLocale::system().toString(walletHeight))
+                    .arg(QLocale::system().toString(daemonHeight))
+                    .arg(QLocale::system().toString(targetHeight));
+        }
+    }
+    // m_statusBtnConnectionStatusIndicator->setToolTip(statusStr);
     m_statusBtnConnectionStatusIndicator->setIcon(icon);
+    this->updateBalance();
 }
 
 void MainWindow::onTransactionCreated(PendingTransaction *tx, const QVector<QString> &address) {
@@ -821,19 +1214,19 @@ void MainWindow::onTransactionCreated(PendingTransaction *tx, const QVector<QStr
             }
             catch (const tools::error::daemon_busy &e) {
                 message.description = QString("Node was unable to respond. Failed request: %1").arg(QString::fromStdString(e.request()));
-                message.helpItems = {"Try sending the transaction again.", "If this keeps happening, connect to a different node."};
+                message.helpItems = QStringList{"Try sending the transaction again.", "If this keeps happening, connect to a different node."};
             }
             catch (const tools::error::no_connection_to_daemon &e) {
                 message.description = QString("Connection to node lost. Failed request: %1").arg(QString::fromStdString(e.request()));
-                message.helpItems = {"Try sending the transaction again.", "If this keeps happening, connect to a different node."};
+                message.helpItems = QStringList{"Try sending the transaction again.", "If this keeps happening, connect to a different node."};
             }
             catch (const tools::error::wallet_rpc_error &e) {
                 message.description = QString("RPC error: %1").arg(QString::fromStdString(e.to_string()));
-                message.helpItems = {"Try sending the transaction again.", "If this keeps happening, connect to a different node."};
+                message.helpItems = QStringList{"Try sending the transaction again.", "If this keeps happening, connect to a different node."};
             }
             catch (const tools::error::get_outs_error &e) {
                 message.description = "Failed to get enough decoy outputs from node";
-                message.helpItems = {"Your transaction has too many inputs. Try sending a lower amount."};
+                message.helpItems = QStringList{"Your transaction has too many inputs. Try sending a lower amount."};
             }
             catch (const tools::error::not_enough_unlocked_money &e) {
                 QString error;
@@ -844,19 +1237,19 @@ void MainWindow::onTransactionCreated(PendingTransaction *tx, const QVector<QStr
                     error = QString("Spendable balance insufficient to pay for transaction.\n\nSpendable balance: %1\nTransaction needs: %2").arg(WalletManager::displayAmount(e.available()), WalletManager::displayAmount(e.tx_amount() + e.fee()));
                 }
                 message.description = error;
-                message.helpItems = {"Wait for more balance to unlock.", "Click 'Help' to learn more about how balance works."};
+                message.helpItems = QStringList{"Wait for more balance to unlock.", "Click 'Help' to learn more about how balance works."};
                 message.doc = "balance";
             }
             catch (const tools::error::not_enough_money &e) {
                 message.description = QString("Not enough money to transfer\n\nTotal balance: %1\nTransaction amount: %2").arg(WalletManager::displayAmount(e.available()), WalletManager::displayAmount(e.tx_amount()));
-                message.helpItems = {"If you are trying to send your entire balance, click 'Max'."};
+                message.helpItems = QStringList{"If you are trying to send your entire balance, click 'Max'."};
                 message.doc = "balance";
             }
             catch (const tools::error::tx_not_possible &e) {
                 message.description = QString("Not enough money to transfer. Transaction amount + fee exceeds available balance.\n\n"
                                               "Spendable balance: %1\n"
                                               "Transaction needs: %2").arg(WalletManager::displayAmount(e.available()), WalletManager::displayAmount(e.tx_amount() + e.fee()));
-                message.helpItems = {"If you're trying to send your entire balance, click 'Max'."};
+                message.helpItems = QStringList{"If you're trying to send your entire balance, click 'Max'."};
                 message.doc = "balance";
             }
             catch (const tools::error::not_enough_outs_to_mix &e) {
@@ -864,7 +1257,7 @@ void MainWindow::onTransactionCreated(PendingTransaction *tx, const QVector<QStr
             }
             catch (const tools::error::tx_not_constructed&) {
                 message.description = "Transaction was not constructed";
-                message.helpItems = {"You have found a bug. Please contact the developers."};
+                message.helpItems = QStringList{"You have found a bug. Please contact the developers."};
                 message.doc = "report_an_issue";
             }
             catch (const tools::error::tx_rejected &e) {
@@ -873,26 +1266,26 @@ void MainWindow::onTransactionCreated(PendingTransaction *tx, const QVector<QStr
             }
             catch (const tools::error::tx_sum_overflow &e) {
                 message.description = "Transaction tries to spend an unrealistic amount of XMR";
-                message.helpItems = {"You have found a bug. Please contact the developers."};
+                message.helpItems = QStringList{"You have found a bug. Please contact the developers."};
                 message.doc = "report_an_issue";
             }
             catch (const tools::error::zero_amount&) {
                 message.description = "Destination amount is zero";
-                message.helpItems = {"You have found a bug. Please contact the developers."};
+                message.helpItems = QStringList{"You have found a bug. Please contact the developers."};
                 message.doc = "report_an_issue";
             }
             catch (const tools::error::zero_destination&) {
                 message.description = "Transaction has no destination";
-                message.helpItems = {"You have found a bug. Please contact the developers."};
+                message.helpItems = QStringList{"You have found a bug. Please contact the developers."};
                 message.doc = "report_an_issue";
             }
             catch (const tools::error::tx_too_big &e) {
                 message.description = "Transaction too big";
-                message.helpItems = {"Try sending a smaller amount."};
+                message.helpItems = QStringList{"Try sending a smaller amount."};
             }
             catch (const tools::error::transfer_error &e) {
                 message.description = QString("Unknown transfer error: %1").arg(QString::fromStdString(e.what()));
-                message.helpItems = {"You have found a bug. Please contact the developers."};
+                message.helpItems = QStringList{"You have found a bug. Please contact the developers."};
                 message.doc = "report_an_issue";
             }
             catch (const tools::error::wallet_internal_error &e) {
@@ -914,12 +1307,12 @@ void MainWindow::onTransactionCreated(PendingTransaction *tx, const QVector<QStr
                 }
                 if (msg.contains("Failed to get height") || msg.contains("Failed to get earliest fork height")) {
                     message.description = QString("RPC error: %1").arg(QString::fromStdString(e.to_string()));
-                    message.helpItems = {"Try sending the transaction again.", "If this keeps happening, connect to a different node."};
+                    message.helpItems = QStringList{"Try sending the transaction again.", "If this keeps happening, connect to a different node."};
                     bug = false;
                 }
 
                 if (bug) {
-                    message.helpItems = {"You have found a bug. Please contact the developers."};
+                    message.helpItems = QStringList{"You have found a bug. Please contact the developers."};
                     message.doc = "report_an_issue";
                 }
             }
@@ -967,7 +1360,7 @@ void MainWindow::onTransactionCreated(PendingTransaction *tx, const QVector<QStr
 #ifdef WITH_SCANNER
         OfflineTxSigningWizard wizard(this, m_wallet, tx);
         wizard.exec();
-        
+
         if (!wizard.readyToCommit()) {
             return;
         } else {
@@ -1142,7 +1535,7 @@ void MainWindow::showKeyImageSyncWizard() {
 #ifdef WITH_SCANNER
     OfflineTxSigningWizard wizard{this, m_wallet};
     wizard.exec();
-    
+
     if (wizard.readyToSign()) {
         TxConfAdvDialog dialog{m_wallet, "", this, true};
         dialog.setUnsignedTransaction(wizard.unsignedTransaction());
@@ -1256,7 +1649,6 @@ void MainWindow::closeEvent(QCloseEvent *event) {
 
         // Wallet signal may fire after AppContext is gone, causing segv
         m_wallet->disconnect();
-        this->disconnect();
 
         this->saveGeo();
         m_windowManager->closeWindow(this);
@@ -1265,19 +1657,50 @@ void MainWindow::closeEvent(QCloseEvent *event) {
     event->accept();
 }
 
+void MainWindow::showEvent(QShowEvent *event)
+{
+    QMainWindow::showEvent(event);
+}
+
 void MainWindow::changeEvent(QEvent* event)
 {
-    if ((event->type() == QEvent::WindowStateChange) && this->isMinimized()) {
-        if (conf()->get(Config::lockOnMinimize).toBool()) {
-            this->lockWallet();
+    QMainWindow::changeEvent(event);
+
+// In changeEvent:
+    if (event->type() == QEvent::WindowStateChange) {
+        // qDebug() << "changeEvent: WindowStateChange. State:" << this->windowState() << " isMinimized:" << this->isMinimized();
+        if (this->isMinimized()) {
+            if (conf()->get(Config::lockOnMinimize).toBool()) {
+                this->lockWallet();
+            }
+
+            bool showTray = conf()->get(Config::showTrayIcon).toBool();
+            bool minimizeToTray = conf()->get(Config::minimizeToTray).toBool();
+            if (showTray && minimizeToTray)
+                this->hide();
         }
-        if (conf()->get(Config::showTrayIcon).toBool() && conf()->get(Config::minimizeToTray).toBool()) {
-            this->hide();
-        }
-    } else {
-        QMainWindow::changeEvent(event);
+    } else if (event->type() == QEvent::ActivationChange) {
+        // qDebug() << "changeEvent: ActivationChange. Active:" << this->isActiveWindow();
+        // Workaround for some window managers (e.g. GNOME) where isExposed() or isMinimized()
+        // state doesn't update immediately upon minimization animation start.
+        QTimer::singleShot(350, this, [this]() {
+            auto handle = this->windowHandle();
+            if (handle && !handle->isExposed()) {
+                if (conf()->get(Config::lockOnMinimize).toBool())
+                    this->lockWallet();
+
+                bool showTray = conf()->get(Config::showTrayIcon).toBool();
+                bool minimizeToTray = conf()->get(Config::minimizeToTray).toBool();
+                // TODO: Implement better logic here to hide all widgets and dialogs
+                if (showTray && minimizeToTray)
+                    for (const auto &widget : QApplication::topLevelWidgets())
+                        widget->hide();
+            }
+        });
     }
 }
+
+// Add logs to sync methods (need to locate them first, assuming onSyncStatus and setPausedSyncStatus)
 
 void MainWindow::showHistoryTab() {
     this->raise();
@@ -1460,7 +1883,6 @@ void MainWindow::onDeviceError(const QString &error, quint64 errorCode) {
         }
     }
     m_statusBtnHwDevice->setIcon(this->hardwareDevicePairedIcon());
-    m_wallet->startRefresh();
     m_showDeviceError = false;
 }
 
@@ -1527,8 +1949,13 @@ void MainWindow::onWalletPassphraseNeeded(bool on_device) {
 
 void MainWindow::updateNetStats() {
     if (!m_wallet || m_wallet->connectionStatus() == Wallet::ConnectionStatus_Disconnected
-                       || m_wallet->connectionStatus() == Wallet::ConnectionStatus_Synchronized)
+                       || (m_wallet->connectionStatus() == Wallet::ConnectionStatus_Synchronized && !m_coinsRefreshing))
     {
+        m_statusLabelNetStats->hide();
+        return;
+    }
+
+    if (conf()->get(Config::syncPaused).toBool()) {
         m_statusLabelNetStats->hide();
         return;
     }
@@ -1544,12 +1971,12 @@ void MainWindow::rescanSpent() {
                     "Make sure you are connected to a trusted node.\n\n"
                     "Do you want to proceed?");
     warning.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
-    
+
     auto r = warning.exec();
     if (r == QMessageBox::No) {
         return;
     }
-    
+
     if (!m_wallet->rescanSpent()) {
         Utils::showError(this, "Failed to rescan spent outputs", m_wallet->errorString());
     } else {
@@ -1569,6 +1996,7 @@ QString MainWindow::statusDots() {
 }
 
 void MainWindow::showOrHide() {
+    qDebug() << "showOrHide called. isHidden=" << this->isHidden();
     if (this->isHidden())
         this->bringToFront();
     else

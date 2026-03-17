@@ -4,6 +4,7 @@
 #include "SubaddressModel.h"
 #include "Subaddress.h"
 
+#include <QDebug>
 #include <QPoint>
 #include <QColor>
 #include <QBrush>

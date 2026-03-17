@@ -3,27 +3,35 @@
 
 #include "QrCodeUtils.h"
 
-Result QrCodeUtils::ReadBarcode(const QImage& img, const ZXing::DecodeHints& hints)
+Result QrCodeUtils::ReadBarcode(const QImage& img, const ZXing::ReaderOptions& hints)
 {
     auto ImgFmtFromQImg = [](const QImage& img){
         switch (img.format()) {
             case QImage::Format_ARGB32:
             case QImage::Format_RGB32:
 #if Q_BYTE_ORDER == Q_LITTLE_ENDIAN
+#ifdef HAVE_ZXING_BGRA
+                return ZXing::ImageFormat::BGRA;
+#else
                 return ZXing::ImageFormat::BGRX;
+#endif
 
 #else
                 return ZXing::ImageFormat::XRGB;
 
 #endif
-            case QImage::Format_RGB888: 
+            case QImage::Format_RGB888:
                 return ZXing::ImageFormat::RGB;
 
             case QImage::Format_RGBX8888:
-            case QImage::Format_RGBA8888: 
+            case QImage::Format_RGBA8888:
+#ifdef HAVE_ZXING_BGRA
+                return ZXing::ImageFormat::RGBA;
+#else
                 return ZXing::ImageFormat::RGBX;
+#endif
 
-            case QImage::Format_Grayscale8: 
+            case QImage::Format_Grayscale8:
                 return ZXing::ImageFormat::Lum;
 
             default: 
@@ -50,7 +58,7 @@ Result QrCodeUtils::ReadBarcode(const QImage& img, const ZXing::DecodeHints& hin
 
 
 QString QrCodeUtils::scanImage(const QImage &img) {
-    const auto hints = ZXing::DecodeHints()
+    const auto hints = ZXing::ReaderOptions()
             .setFormats(ZXing::BarcodeFormat::QRCode | ZXing::BarcodeFormat::DataMatrix)
             .setTryHarder(true)
             .setBinarizer(ZXing::Binarizer::FixedThreshold);

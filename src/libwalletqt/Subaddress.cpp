@@ -120,14 +120,14 @@ bool Subaddress::emplaceRow(quint32 addressIndex)
     QString addressStr = QString::fromStdString(cryptonote::get_account_address_as_str(m_wallet2->nettype(), !index.is_zero(), address));
 
     bool used = m_wallet2->get_subaddress_used(index);
-    m_rows.emplace_back(
+    m_rows.push_back(SubaddressRow(
         addressStr,
         QString::fromStdString(m_wallet2->get_subaddress_label(index)),
         used,
         this->isHidden(addressStr),
         this->isPinned(addressStr),
         index.is_zero()
-    );
+    ));
     return true;
 }
 
