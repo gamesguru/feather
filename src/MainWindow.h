@@ -6,6 +6,7 @@
 
 #include <QMainWindow>
 #include <QSystemTrayIcon>
+#include <QWindow>
 
 #include "components.h"
 #include "SettingsDialog.h"
@@ -97,6 +98,7 @@ signals:
 
 protected:
     void changeEvent(QEvent* event) override;
+    void showEvent(QShowEvent *event) override;
 
 private slots:
     // TODO: use a consistent naming convention for slots
@@ -114,6 +116,7 @@ private slots:
     void menuClearHistoryClicked();
     void onExportHistoryCSV();
     void onImportHistoryDescriptionsCSV();
+    void onSyncMissingTransactions();
     void onCreateDesktopEntry();
     void onShowDocumentation();
     void onReportBug();
@@ -193,6 +196,7 @@ private:
     void updateNetStats();
     void rescanSpent();
     void setStatusText(const QString &text, bool override = false, int timeout = 1000);
+    void updateStatusText();
     void showBalanceDialog();
     QString statusDots();
     QString getHardwareDevice();
@@ -205,9 +209,13 @@ private:
     void fillSendTab(const QString &address, const QString &description);
     void userActivity();
     void checkUserActivity();
+    void updateStatusToolTip();
+    void updateSyncStatusToolTip();
     void lockWallet();
     void unlockWallet(const QString &password);
     void closeQDialogChildren(QObject *object);
+    void setSyncPaused(bool paused);
+    QString getPausedStatusText();
     int findTab(const QString &title);
 
     QIcon hardwareDevicePairedIcon();
@@ -231,6 +239,12 @@ private:
     CoinsWidget *m_coinsWidget = nullptr;
 
     QPointer<QAction> m_clearRecentlyOpenAction;
+    QPointer<QAction> m_updateNetworkInfoAction;
+    QPointer<QAction> m_actionEnableWebsocket;
+    QPointer<QAction> m_actionPauseSync;
+
+    QDateTime m_lastSyncStatusUpdate;
+    QDateTime m_lastNetInfoUpdate;
 
     // lower status bar
     QPushButton *m_statusUpdateAvailable;
@@ -255,9 +269,11 @@ private:
 
     QString m_statusText;
     int m_statusDots;
+    bool m_coinsRefreshing = false;
     bool m_constructingTransaction = false;
     bool m_statusOverrideActive = false;
     bool m_showDeviceError = false;
+    bool m_daemonSync = false;
     QTimer m_txTimer;
 
     bool cleanedUp = false;
@@ -266,6 +282,8 @@ private:
 
     EventFilter *m_eventFilter = nullptr;
     qint64 m_userLastActive = QDateTime::currentSecsSinceEpoch();
+
+    QMetaObject::Connection m_visibilityConnection;
 
 #ifdef CHECK_UPDATES
     QSharedPointer<Updater> m_updater = nullptr;

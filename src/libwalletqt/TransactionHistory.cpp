@@ -67,6 +67,11 @@ void TransactionHistory::refresh()
 
         std::list<std::pair<crypto::hash, tools::wallet2::payment_details>> in_payments;
         m_wallet2->get_payments(in_payments, min_height, max_height);
+        
+        qDebug() << "TransactionHistory::refresh: Height=" << wallet_height 
+                 << " Account=" << account 
+                 << " Payments found=" << in_payments.size();
+
         for (std::list<std::pair<crypto::hash, tools::wallet2::payment_details>>::const_iterator i = in_payments.begin(); i != in_payments.end(); ++i)
         {
             const tools::wallet2::payment_details &pd = i->second;
@@ -384,12 +389,61 @@ QString TransactionHistory::importLabelsFromCSV(const QString &fileName) {
         descriptions.push_back({row[txidField], row[descriptionField]});
     }
 
+    QStringList foundTxIds;
     for (const auto& description : descriptions) {
         qDebug() << "Setting note for tx:" << description.first << "description:" << description.second;
         this->setTxNote(description.first, description.second);
+        foundTxIds.append(description.first);
+    }
+
+    if (!foundTxIds.isEmpty()) {
+        // Save TxIDs to cache for "Quick Sync" retry
+        QString existing = m_wallet->getCacheAttribute("feather.imported_txids");
+        QStringList allIds = existing.split(",");
+        for (const auto& id : foundTxIds) {
+            if (!allIds.contains(id)) allIds.append(id);
+        }
+        m_wallet->setCacheAttribute("feather.imported_txids", allIds.join(","));
+
+        qInfo() << "Attempting to import" << foundTxIds.size() << "transactions from CSV.";
+        if (!m_wallet->importTransactions(foundTxIds)) {
+             return "Warning: Failed to scan transactions from the network.\n\n"
+                    "Descriptions have been saved.\n"
+                    "You can retry syncing these later by right-clicking the history list and selecting 'Sync missing transactions'.";
+        }
     }
 
     this->refresh();
 
     return {};
+}
+
+int TransactionHistory::scanMissingTransactions()
+{
+    QStringList importedTxIds = m_wallet->getCacheAttribute("feather.imported_txids").split(",");
+    QStringList missingTxIds;
+    
+    // Build set of known payments for O(1) lookup
+    QSet<QString> knownTxIds;
+    {
+        QReadLocker locker(&m_lock);
+        for (const auto &row : m_rows) {
+            knownTxIds.insert(row.hash);
+        }
+    }
+
+    for (const auto &txid : importedTxIds) {
+        if (!txid.isEmpty() && !knownTxIds.contains(txid)) {
+             missingTxIds.append(txid);
+        }
+    }
+
+    if (!missingTxIds.isEmpty()) {
+        qInfo() << "Scanning" << missingTxIds.size() << "missing transactions found in notes.";
+        bool success = m_wallet->importTransactions(missingTxIds);
+        if (!success) return -1;
+        return missingTxIds.size();
+    }
+    
+    return 0;
 }

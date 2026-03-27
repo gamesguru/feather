@@ -12,6 +12,10 @@
 Prices::Prices(QObject *parent)
     : QObject(parent)
 {
+    qint64 lastUpdate = conf()->get(Config::lastPriceUpdateTimestamp).toLongLong();
+    if (lastUpdate > 0) {
+        this->lastUpdateTime = QDateTime::fromSecsSinceEpoch(lastUpdate);
+    }
 }
 
 void Prices::cryptoPricesReceived(const QJsonArray &data) {
@@ -31,13 +35,15 @@ void Prices::cryptoPricesReceived(const QJsonArray &data) {
         this->markets.insert(ms.symbol.toUpper(), ms);
     }
 
+    this->lastUpdateTime = QDateTime::currentDateTime();
+    conf()->set(Config::lastPriceUpdateTimestamp, this->lastUpdateTime.toSecsSinceEpoch());
     emit cryptoPricesUpdated();
 }
 
 void Prices::fiatPricesReceived(const QJsonObject &data) {
     QJsonObject ratesData = data.value("rates").toObject();
     for (const auto &currency : ratesData.keys()) {
-        this->rates.insert(currency, ratesData.value(currency).toDouble());
+        this->rates.insert(currency.toUpper(), ratesData.value(currency).toDouble());
     }
     emit fiatPricesUpdated();
 }

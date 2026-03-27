@@ -115,8 +115,8 @@ void HistoryView::showHeaderMenu(const QPoint& position)
 {
     const QList<QAction*> actions = m_columnActions->actions();
     for (auto& action : actions) {
-        Q_ASSERT(static_cast<QMetaType::Type>(action->data().type()) == QMetaType::Int);
-        if (static_cast<QMetaType::Type>(action->data().type()) != QMetaType::Int) {
+        Q_ASSERT(static_cast<QMetaType::Type>(action->data().typeId()) == QMetaType::Int);
+        if (static_cast<QMetaType::Type>(action->data().typeId()) != QMetaType::Int) {
             continue;
         }
         int columnIndex = action->data().toInt();
@@ -131,8 +131,8 @@ void HistoryView::toggleColumnVisibility(QAction* action)
     // Verify action carries a column index as data. Since QVariant.toInt()
     // below will accept anything that's interpretable as int, perform a type
     // check here to make sure data actually IS int
-    Q_ASSERT(static_cast<QMetaType::Type>(action->data().type()) == QMetaType::Int);
-    if (static_cast<QMetaType::Type>(action->data().type()) != QMetaType::Int) {
+    Q_ASSERT(static_cast<QMetaType::Type>(action->data().typeId()) == QMetaType::Int);
+    if (static_cast<QMetaType::Type>(action->data().typeId()) != QMetaType::Int) {
         return;
     }
 
