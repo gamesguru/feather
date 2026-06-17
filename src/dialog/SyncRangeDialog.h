@@ -9,8 +9,6 @@
 
 #include "libwalletqt/Wallet.h"
 
-class QComboBox;
-class QSpinBox;
 class QDateEdit;
 class QLabel;
 
@@ -23,27 +21,21 @@ public:
     ~SyncRangeDialog() override = default;
 
     QDate fromDate() const;
-    QDate toDate() const;
     quint64 estimatedBlocks() const;
     quint64 estimatedSize() const;
+    quint64 estimatedStartHeight() const;
 
 private:
     void updateInfo();
-    void updateFromDate();
-    void updateToDate();
 
     Wallet *m_wallet;
 
-    // Date/Time
-    QComboBox *m_presetCombo;
-    QSpinBox *m_daysSpinBox;
     QDateEdit *m_fromDateEdit;
-    QDateEdit *m_toDateEdit;
-
     QLabel *m_infoLabel;
 
     quint64 m_estimatedBlocks = 0;
     quint64 m_estimatedSize = 0;
+    quint64 m_estimatedStartHeight = 0;
 };
 
 #endif //FEATHER_SYNCRANGEDIALOG_H

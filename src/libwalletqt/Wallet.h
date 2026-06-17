@@ -243,7 +243,8 @@ public:
     quint64 getUnlockTargetHeight() const;
     Q_INVOKABLE void skipToTip();
     Q_INVOKABLE void startSmartSync(quint64 target = 0);
-    Q_INVOKABLE void syncDateRange(const QDate &start, const QDate &end);
+    Q_INVOKABLE void rescanFromHeight(quint64 height);
+    Q_INVOKABLE bool hasUnconfirmedChange() const;
 
     void fullSync(); // Rescans from wallet creation height, not genesis block
 

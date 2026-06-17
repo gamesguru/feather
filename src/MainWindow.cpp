@@ -255,7 +255,7 @@ void MainWindow::initStatusBar() {
     QAction *skipSyncAction = new QAction(tr("Skip Sync"), this);
     m_statusLabelStatus->addAction(skipSyncAction);
 
-    QAction *syncRangeAction = new QAction(tr("Sync Date Range..."), this);
+    QAction *syncRangeAction = new QAction(tr("Rescan from Date..."), this);
     m_statusLabelStatus->addAction(syncRangeAction);
 
     QAction *scanToTipAction = new QAction(tr("Scan for missing transactions"), this);
@@ -277,6 +277,11 @@ void MainWindow::initStatusBar() {
 
     connect(skipSyncAction, &QAction::triggered, this, [this](){
         if (!m_wallet) return;
+
+        if (m_wallet->hasUnconfirmedChange()) {
+            Utils::showError(this, tr("Skip Sync"), tr("Cannot skip sync: You have pending unconfirmed transactions. Please wait for them to confirm first."));
+            return;
+        }
 
         QString msg = tr("Skip sync will set your wallet's restore height to the current network height.\n\n"
                           "Use this if you know you haven't received any transactions since your last sync.\n"
@@ -301,13 +306,13 @@ void MainWindow::initStatusBar() {
 
         SyncRangeDialog dialog(this, m_wallet);
         if (dialog.exec() == QDialog::Accepted) {
-            m_wallet->syncDateRange(dialog.fromDate(), dialog.toDate());
+            quint64 height = dialog.estimatedStartHeight();
+            m_wallet->rescanFromHeight(height);
 
-            this->setStatusText(tr("Syncing range %1 - %2 (~%3 blocks)\nEst. download size: %4")
+            this->setStatusText(tr("Rescanning from date %1 (~%2 blocks)\nEst. download size: %3")
                                 .arg(dialog.fromDate().toString("yyyy-MM-dd"))
-                                .arg(dialog.toDate().toString("yyyy-MM-dd"))
                                 .arg(QLocale().toString(dialog.estimatedBlocks()))
-                                .arg(Utils::formatBytes(dialog.estimatedSize())));
+                                .arg(Utils::formatBytes(dialog.estimatedSize())), true);
         }
     });
 

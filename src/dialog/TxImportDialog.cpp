@@ -5,16 +5,11 @@
 #include "ui_TxImportDialog.h"
 
 #include <QMessageBox>
+#include <QApplication>
+#include <QRegularExpression>
 
-#include "utils/NetworkManager.h"
 #include "utils/nodes.h"
-
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QJsonArray>
-#include <QNetworkReply>
-
-
+#include "utils/Utils.h"
 
 TxImportDialog::TxImportDialog(QWidget *parent, Wallet *wallet, Nodes *nodes)
         : WindowModalDialog(parent)
@@ -58,92 +53,21 @@ void TxImportDialog::onImport() {
         return;
     }
 
-    // Async Import: Fetch height from daemon, then Smart Sync to it.
     ui->btn_import->setEnabled(false);
-    ui->btn_import->setText("Checking...");
+    ui->btn_import->setText("Importing...");
+    QApplication::processEvents();
 
-    QString url = m_nodes->connection().toURL() + "/get_transactions";
-    QNetworkAccessManager* nam = getNetwork(url); // Use global network manager
+    bool success = m_wallet->importTransaction(txid);
 
-    QJsonObject req;
-    req["txs_hashes"] = QJsonArray({txid});
+    ui->btn_import->setEnabled(true);
+    ui->btn_import->setText("Import");
 
-    QNetworkRequest request(url);
-    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-
-    QNetworkReply* reply = nam->post(request, QJsonDocument(req).toJson());
-
-    connect(reply, &QNetworkReply::finished, this, [this, reply, txid]() {
-        reply->deleteLater();
-        ui->btn_import->setEnabled(true);
-        ui->btn_import->setText("Import");
-
-        if (reply->error() != QNetworkReply::NoError) {
-             Utils::showError(this, "Connection error", reply->errorString());
-             return;
-        }
-
-        QJsonObject json = QJsonDocument::fromJson(reply->readAll()).object();
-        QJsonObject error = json.value("error").toObject();
-        if (!error.isEmpty()) {
-             Utils::showError(this, "Node error", error.value("message").toString());
-             return;
-        }
-
-        QJsonArray txs = json.value("txs").toArray();
-        bool found = false;
-        
-        for (const auto &val : txs) {
-            QJsonObject tx = val.toObject();
-            if (tx.value("tx_hash").toString() == txid) {
-                found = true;
-                if (tx.value("in_pool").toBool()) {
-                     Utils::showInfo(this, "Transaction is in mempool", "Feather will detect it automatically in a moment.");
-                     this->accept();
-                     return;
-                }
-
-                quint64 height = tx.value("block_height").toVariant().toULongLong();
-                if (height > 0) {
-                     if (height > std::numeric_limits<quint64>::max() - 10) {
-                         Utils::showError(this, "Invalid Block Height", "Block height is too large.");
-                         return;
-                     }
-
-                     // Validate against daemon height
-                     quint64 daemonHeight = m_wallet->daemonBlockChainHeight();
-                     if (daemonHeight > 0 && height > daemonHeight + 100) {
-                         Utils::showError(this, "Invalid Block Height",
-                             QString("The node returned a block height significantly in the future (%1). Daemon height: %2.").arg(height).arg(daemonHeight));
-                         return;
-                     }
-
-                     // Check if wallet is far behind (fresh restore?)
-                     quint64 currentHeight = m_wallet->blockChainHeight();
-
-                     if (height > currentHeight + 100000) {
-                          // Jump ahead to avoid full scan
-                          quint64 restoreHeight = (height > 20000) ? height - 20000 : 0;
-                          m_wallet->setWalletCreationHeight(restoreHeight);
-                          m_wallet->rescanBlockchainAsync();
-                          Utils::showInfo(this, "Optimizing Sync", "Jumped to block " + QString::number(restoreHeight) + " to find transaction.");
-                     }
-
-                     m_wallet->startSmartSync(height + 10);
-                     Utils::showInfo(this, "Import started", "Scanning block " + QString::number(height) + " for transaction...");
-                     this->accept();
-                     return;
-                }
-            }
-        }
-        
-        if (!found) {
-            Utils::showError(this, "Transaction not found on node", "The connected node does not know this transaction.");
-        } else {
-             // Found but failed to get height? Fallback.
-             Utils::showError(this, "Failed to determine block height", "Could not read block height from node response.");
-        }
-    });
+    if (success) {
+        Utils::showInfo(this, "Success", "Transaction has been successfully imported into the wallet history.");
+        this->accept();
+    } else {
+        Utils::showError(this, "Import Failed", "Failed to import transaction. The node might not have this transaction, or there was a network error.");
+    }
 }
 
 void TxImportDialog::updateStatus(int status) {

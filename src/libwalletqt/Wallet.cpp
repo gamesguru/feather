@@ -754,12 +754,29 @@ void Wallet::startSmartSync(quint64 requestedTarget) {
     startRefresh(true);
 }
 
-void Wallet::syncDateRange(const QDate &start, const QDate &end) {
+void Wallet::rescanFromHeight(quint64 height) {
     if (!m_wallet2) return;
 
-    qInfo() << "syncDateRange: triggering standard refresh (range optimization disabled for stability)";
+    qInfo() << "rescanFromHeight: triggering rescan from height" << height;
+    {
+        QMutexLocker locker(&m_asyncMutex);
+        m_wallet2->rescan_blockchain(false, false, false);
+        m_wallet2->set_refresh_from_block_height(height);
+    }
     setConnectionStatus(ConnectionStatus_Synchronizing);
     startRefresh(true);
+}
+
+bool Wallet::hasUnconfirmedChange() const {
+    if (!m_wallet2) return false;
+    std::list<std::pair<crypto::hash, tools::wallet2::unconfirmed_transfer_details>> upayments_out;
+    m_wallet2->get_unconfirmed_payments_out(upayments_out);
+    for (const auto &p : upayments_out) {
+        if (p.second.m_state != tools::wallet2::unconfirmed_transfer_details::failed) {
+            return true;
+        }
+    }
+    return false;
 }
 
 
