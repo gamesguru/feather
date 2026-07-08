@@ -116,13 +116,16 @@ After the target is configured, `Run -> Run 'feather'` or press Shift + F10 to b
 To build Feather without an IDE:
 
 ```bash
-mkdir build
-cd build
-cmake ..
-cmake --build . -j $(nproc)
+make
 ```
 
-On platforms without `execinfo.h` use `cmake -DSTACK_TRACE:BOOL=OFF ..` instead of `cmake ..`
+To build with a different configuration, pass CMake options through `CMAKE_OPTIONS`, for example:
+
+```bash
+make BUILD_TYPE=Debug CMAKE_OPTIONS='-DWITH_SCANNER=OFF'
+```
+
+On platforms without `execinfo.h` use `make CMAKE_OPTIONS='-DSTACK_TRACE=OFF'` instead.
 
 ### CMake
 

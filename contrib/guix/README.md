@@ -95,19 +95,19 @@ sudo setenforce 1
 To build all targets using all available cores:
 
 ```bash
-$ make build
+$ make guix-build
 ```
 
 To limit the number of threads to N:
 
 ```
-$ JOBS=N make build
+$ JOBS=N make guix-build
 ```
 
 To only build the x86_64 linux target:
 
 ```
-$ HOSTS="x86_64-linux-gnu" make build
+$ HOSTS="x86_64-linux-gnu" make guix-build
 ```
 
 More recognized environment variables can be found further below.
@@ -133,7 +133,7 @@ To build Feather Wallet reproducibly with all default options, invoke the
 following from the top of a clean repository:
 
 ```sh
-make build
+make guix-build
 ```
 
 ## Cleaning intermediate work directories
@@ -146,7 +146,7 @@ directories usually take up a large amount of disk space. Therefore, a
 worktree to save disk space:
 
 ```
-make clean
+make guix-clean
 ```
 
 
@@ -156,7 +156,7 @@ After you've cloned the `feather-sigs` repository, to attest to the current
 worktree's commit/tag:
 
 ```
-make attest
+make guix-attest
 ```
 
 For a step-by-step walkthrough, see: https://paste.debian.net/plainh/dfecbbcc. Make sure to replace the version number
@@ -169,7 +169,7 @@ repository:
 
 ```
 git submodule update --recursive
-make verify
+make guix-verify
 ```
 
 
@@ -185,7 +185,7 @@ help with this situation, the `guix-build` script honours the `SOURCES_PATH`,
 depends tree so that you can do something like:
 
 ```sh
-env SOURCES_PATH="$HOME/depends-SOURCES_PATH" BASE_CACHE="$HOME/depends-BASE_CACHE" make build
+env SOURCES_PATH="$HOME/depends-SOURCES_PATH" BASE_CACHE="$HOME/depends-BASE_CACHE" make guix-build
 ```
 
 Note that the paths that these environment variables point to **must be
@@ -201,7 +201,7 @@ which case you can override the default list by setting the space-separated
 `HOSTS` environment variable:
 
 ```sh
-env HOSTS='x86_64-w64-mingw32 x86_64-apple-darwin' make build
+env HOSTS='x86_64-w64-mingw32 x86_64-apple-darwin' make guix-build
 ```
 
 See the [recognized environment variables][env-vars-list] section for more
