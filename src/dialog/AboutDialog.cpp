@@ -32,7 +32,7 @@ AboutDialog::AboutDialog(QWidget *parent)
     ui->label_moneroVersion->setText(MONERO_VERSION);
     ui->label_qtVersion->setText(QT_VERSION_STR);
     ui->label_torVersion->setText(TOR_VERSION);
-    ui->label_sslVersion->setText(QSslSocket::sslLibraryVersionString());
+    ui->label_sslVersion->setText(QSslSocket::sslLibraryBuildVersionString());
 
     this->adjustSize();
 }

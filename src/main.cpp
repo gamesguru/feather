@@ -186,7 +186,7 @@ if (AttachConsole(ATTACH_PARENT_PROCESS)) {
         info.emplace_back("Monero", MONERO_VERSION);
         info.emplace_back("Qt", QT_VERSION_STR);
         info.emplace_back("Tor", TOR_VERSION);
-        info.emplace_back("SSL", QSslSocket::sslLibraryVersionString());
+        info.emplace_back("SSL", QSslSocket::sslLibraryBuildVersionString());
         info.emplace_back("Mode", stagenet ? "Stagenet" : (testnet ? "Testnet" : "Mainnet"));
 
         for (const auto &k: info) {

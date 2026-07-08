@@ -341,6 +341,13 @@ if(STACK_TRACE AND CMAKE_C_COMPILER_ID STREQUAL "GNU")
     target_link_libraries(feather PRIVATE -rdynamic)
 endif()
 
+if(UNIX AND NOT APPLE)
+    # Feather links against static OpenSSL via the Monero subproject.
+    # Keep those archive symbols out of the executable's export table so
+    # Qt's OpenSSL backend resolves against libcrypto.so.3 instead.
+    target_link_options(feather PRIVATE "LINKER:--exclude-libs,ALL")
+endif()
+
 if(DEPENDS)
     install(TARGETS feather
             DESTINATION ${CMAKE_INSTALL_PREFIX}

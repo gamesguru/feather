@@ -53,6 +53,11 @@ set(BUILD_GUI_DEPS ON)
 set(BUILD_64 ON)
 set(USE_SINGLE_BUILDDIR ON)
 
+# Use the system OpenSSL stack. Feather should not pull in a second copy from
+# /usr/local because Qt also links against the distro-provided libssl/libcrypto.
+set(OPENSSL_ROOT_DIR "/usr" CACHE PATH "" FORCE)
+set(OPENSSL_USE_STATIC_LIBS OFF CACHE BOOL "" FORCE)
+
 if(STATIC)
     message(STATUS "Initiating static build, turning on manual submodules")
     set(MANUAL_SUBMODULES 1)
@@ -64,16 +69,6 @@ if(STATIC)
 endif()
 
 include(CMakePackageConfigHelpers)
-
-# Prefer the /usr/local OpenSSL stack when it is present. The static libraries
-# there export the legacy symbols used by this Monero snapshot.
-if(EXISTS "/usr/local/lib/libssl.a" AND EXISTS "/usr/local/lib/libcrypto.a")
-    set(OPENSSL_ROOT_DIR "/usr/local" CACHE PATH "" FORCE)
-    set(OPENSSL_INCLUDE_DIR "/usr/local/include" CACHE PATH "" FORCE)
-    set(OPENSSL_SSL_LIBRARY "/usr/local/lib/libssl.a" CACHE FILEPATH "" FORCE)
-    set(OPENSSL_CRYPTO_LIBRARY "/usr/local/lib/libcrypto.a" CACHE FILEPATH "" FORCE)
-    set(OPENSSL_USE_STATIC_LIBS ON CACHE BOOL "" FORCE)
-endif()
 
 #### Dependencies ####
 # Monero
