@@ -65,6 +65,16 @@ endif()
 
 include(CMakePackageConfigHelpers)
 
+# Prefer the /usr/local OpenSSL stack when it is present. The static libraries
+# there export the legacy symbols used by this Monero snapshot.
+if(EXISTS "/usr/local/lib/libssl.a" AND EXISTS "/usr/local/lib/libcrypto.a")
+    set(OPENSSL_ROOT_DIR "/usr/local" CACHE PATH "" FORCE)
+    set(OPENSSL_INCLUDE_DIR "/usr/local/include" CACHE PATH "" FORCE)
+    set(OPENSSL_SSL_LIBRARY "/usr/local/lib/libssl.a" CACHE FILEPATH "" FORCE)
+    set(OPENSSL_CRYPTO_LIBRARY "/usr/local/lib/libcrypto.a" CACHE FILEPATH "" FORCE)
+    set(OPENSSL_USE_STATIC_LIBS ON CACHE BOOL "" FORCE)
+endif()
+
 #### Dependencies ####
 # Monero
 if (NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/monero/CMakeLists.txt")
@@ -77,6 +87,10 @@ get_directory_property(TREZOR_DEP_LIBS DIRECTORY "monero" DEFINITION TREZOR_DEP_
 get_directory_property(OPENBSD DIRECTORY "monero" DEFINITION OPENBSD)
 get_directory_property(FREEBSD DIRECTORY "monero" DEFINITION FREEBSD)
 get_directory_property(DRAGONFLY DIRECTORY "monero" DEFINITION DRAGONFLY)
+
+if(TARGET obj_epee AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cmake/openssl_compat.h")
+    target_compile_options(obj_epee PRIVATE -include "${CMAKE_CURRENT_SOURCE_DIR}/cmake/openssl_compat.h")
+endif()
 
 # pthread
 find_package(Threads REQUIRED)
