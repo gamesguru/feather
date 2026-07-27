@@ -79,6 +79,8 @@
     <file>assets/images/status_connected_proxy.svg</file>
     <file>assets/images/status_connected.svg</file>
     <file>assets/images/status_disconnected.svg</file>
+    <file>assets/images/status_idle_proxy.svg</file>
+    <file>assets/images/status_idle.svg</file>
     <file>assets/images/status_lagging.svg</file>
     <file>assets/images/status_offline.svg</file>
     <file>assets/images/status_waiting.svg</file>

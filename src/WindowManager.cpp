@@ -47,6 +47,24 @@ WindowManager::WindowManager(QObject *parent)
     this->buildTrayMenu();
     m_tray->setVisible(conf()->get(Config::showTrayIcon).toBool());
 
+    connect(m_tray, &QSystemTrayIcon::activated, [this](QSystemTrayIcon::ActivationReason reason) {
+        if (reason == QSystemTrayIcon::Trigger) {
+            if (conf()->get(Config::trayLeftClickTogglesFocus).toBool()) {
+                for (const auto &window : m_windows) {
+                    if (window->isVisible() && window->isActiveWindow()) {
+                        window->hide();
+                    } else {
+                        window->show();
+                        window->raise();
+                        window->activateWindow();
+                    }
+                }
+            } else {
+                m_tray->contextMenu()->popup(QCursor::pos());
+            }
+        }
+    });
+
     this->initSkins();
     this->patchMacStylesheet();
 
@@ -71,9 +89,13 @@ void WindowManager::setEventFilter(EventFilter *ef) {
 
 WindowManager::~WindowManager() {
     qDebug() << "~WindowManager";
-    m_cleanupThread->quit();
-    m_cleanupThread->wait();
-    qDebug() << "WindowManager: cleanup thread done" << QThread::currentThreadId();
+    if (m_cleanupThread && m_cleanupThread->isRunning()) {
+        m_cleanupThread->quit();
+        m_cleanupThread->wait();
+        qDebug() << "WindowManager: cleanup thread done" << QThread::currentThreadId();
+    } else {
+        qDebug() << "WindowManager: cleanup thread already stopped";
+    }
 }
 
 // ######################## APPLICATION LIFECYCLE ########################
@@ -89,8 +111,42 @@ void WindowManager::quitAfterLastWindow() {
 
 void WindowManager::close() {
     qDebug() << Q_FUNC_INFO << QThread::currentThreadId();
-    for (const auto &window: m_windows) {
+
+    if (m_closing) {
+        return;
+    }
+    m_closing = true;
+
+    // Force save all wallets before attempting to close
+    // This ensures that even if the cleanup thread hangs and we _Exit(1), data is saved.
+    for (const auto &window : m_windows) {
+        if (window->m_wallet) {
+            window->m_wallet->store();
+        }
+    }
+
+    // Close all windows first to ensure they cancel their tasks/connections
+    // Iterate over a copy because close() modifies m_windows
+    auto windows = m_windows;
+    for (const auto &window: windows) {
         window->close();
+    }
+
+    // Stop all threads before application shutdown to avoid QThreadStorage warnings
+    if (m_cleanupThread && m_cleanupThread->isRunning()) {
+        m_cleanupThread->quit();
+        m_cleanupThread->wait();
+        qDebug() << "WindowManager: cleanup thread stopped in close()";
+    }
+
+    // Stop Tor manager threads
+    torManager()->stop();
+
+    // Wait for all threads in the global thread pool with timeout to prevent indefinite blocking
+    if (!QThreadPool::globalInstance()->waitForDone(15000)) {
+        qCritical() << "WindowManager: Thread pool tasks did not complete within 15s timeout. "
+                    << "Forcing exit to prevent use-after-free.";
+        std::_Exit(1);  // Fast exit without cleanup - threads may still hold resources
     }
 
     if (m_splashDialog) {
@@ -106,8 +162,6 @@ void WindowManager::close() {
         m_docsDialog->deleteLater();
     }
 
-    torManager()->stop();
-
     deleteLater();
 
     qDebug() << "Calling QApplication::quit()";
@@ -117,6 +171,7 @@ void WindowManager::close() {
 void WindowManager::closeWindow(MainWindow *window) {
     qDebug() << "WindowManager: closing Window";
     m_windows.removeOne(window);
+    this->buildTrayMenu();
 
     // Move Wallet to a different thread for cleanup, so it doesn't block GUI thread
     window->m_wallet->moveToThread(m_cleanupThread);
@@ -164,6 +219,11 @@ void WindowManager::raise() {
         m_wizard->show();
         m_wizard->raise();
         m_wizard->activateWindow();
+    }
+    else if (m_openingWallet && m_splashDialog) {
+        m_splashDialog->show();
+        m_splashDialog->raise();
+        m_splashDialog->activateWindow();
     }
     else {
         // This shouldn't happen
@@ -269,6 +329,8 @@ void WindowManager::tryOpenWallet(const QString &path, const QString &password) 
     }
 
     m_openingWallet = true;
+    m_splashDialog->setMessage("Opening wallet...");
+    m_splashDialog->show();
     m_walletManager->openWalletAsync(path, password, constants::networkType, constants::kdfRounds, Utils::ringDatabasePath());
 }
 
@@ -286,6 +348,7 @@ void WindowManager::onWalletOpened(Wallet *wallet) {
             // Don't show incorrect password when we try with empty password for the first time
             bool showIncorrectPassword = m_openWalletTriedOnce;
             m_openWalletTriedOnce = true;
+            m_splashDialog->hide();
             this->onWalletOpenPasswordRequired(showIncorrectPassword, wallet->keysPath());
             return; // Do not remove this
         }
@@ -773,7 +836,10 @@ QString WindowManager::loadStylesheet(const QString &resource) {
         return "";
     }
 
-    f.open(QFile::ReadOnly | QFile::Text);
+    if (!f.open(QFile::ReadOnly | QFile::Text)) {
+        qWarning() << "Failed to open stylesheet:" << resource;
+        return "";
+    }
     QTextStream ts(&f);
     QString data = ts.readAll();
     f.close();

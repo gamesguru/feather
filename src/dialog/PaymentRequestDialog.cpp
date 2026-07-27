@@ -118,7 +118,11 @@ void PaymentRequestDialog::saveImage() {
     }
 
     QFile file(filename);
-    file.open(QIODevice::WriteOnly);
+    if (!file.open(QIODevice::WriteOnly)) {
+        QMessageBox::warning(this, tr("Error"), tr("Could not save image to file: %1").arg(file.errorString()));
+        qWarning() << "Could not save image to file: " << file.errorString();
+        return;
+    }
     m_qrCode->toPixmap(1).scaled(500, 500, Qt::KeepAspectRatio).save(&file, "PNG");
     QMessageBox::information(this, "Information", "QR code saved to file");
 }

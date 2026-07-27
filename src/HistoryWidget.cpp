@@ -13,7 +13,13 @@
 #include "libwalletqt/WalletManager.h"
 #include "utils/config.h"
 #include "utils/Icons.h"
+#include "utils/AsyncTask.h"
 #include "WebsocketNotifier.h"
+
+#include <QClipboard>
+#include <QJsonObject>
+#include <QJsonDocument>
+#include <QJsonArray>
 
 HistoryWidget::HistoryWidget(Wallet *wallet, QWidget *parent)
         : QWidget(parent)
@@ -27,12 +33,15 @@ HistoryWidget::HistoryWidget(Wallet *wallet, QWidget *parent)
     m_contextMenu->addMenu(m_copyMenu);
     m_contextMenu->addAction(icons()->icon("info2.svg"), "Show details", this, &HistoryWidget::showTxDetails);
     m_contextMenu->addAction("View on block explorer", this, &HistoryWidget::onViewOnBlockExplorer);
+    // deleted constructor lambda
+
 
     // copy menu
     m_copyMenu->addAction("Transaction ID", this, [this]{copy(copyField::TxID);});
     m_copyMenu->addAction("Date", this, [this]{copy(copyField::Date);});
     m_copyMenu->addAction("Description", this, [this]{copy(copyField::Description);});
     m_copyMenu->addAction("Amount", this, [this]{copy(copyField::Amount);});
+    m_copyMenu->addAction("Row as JSON", this, [this]{copy(copyField::JSON);});
 
     ui->history->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(ui->history, &QTreeView::customContextMenuRequested, this, &HistoryWidget::showContextMenu);
@@ -104,6 +113,7 @@ void HistoryWidget::showContextMenu(const QPoint &point) {
     menu.addMenu(m_copyMenu);
     menu.addAction("Show details", this, &HistoryWidget::showTxDetails);
     menu.addAction("View on block explorer", this, &HistoryWidget::onViewOnBlockExplorer);
+    menu.addAction("Sync missing transactions", this, &HistoryWidget::onSyncMissingTransactions);
     menu.addAction("Create Tx Proof", this, &HistoryWidget::createTxProof);
 
     menu.exec(ui->history->viewport()->mapToGlobal(point));
@@ -129,6 +139,20 @@ void HistoryWidget::onRemoveFromHistory() {
     if (result == QMessageBox::Yes) {
         m_wallet->removeFailedTx(tx.hash);
     }
+}
+
+void HistoryWidget::onSyncMissingTransactions() {
+    AsyncTask::runThenCallback([this] {
+        return m_wallet->history()->scanMissingTransactions();
+    }, this, [this](int count) {
+        if (count < 0) {
+            QMessageBox::warning(this, "Quick Sync", "Failed to scan transactions. Check your connection to the node/daemon.");
+            return;
+        }
+
+        QString msg = count > 0 ? QString("Scanned %1 missing transactions.").arg(count) : "No missing transactions found.";
+        QMessageBox::information(this, "Quick Sync", msg);
+    });
 }
 
 void HistoryWidget::resetModel()
@@ -204,6 +228,30 @@ void HistoryWidget::copy(copyField field) {
                                                                      conf()->get(Config::timeFormat).toString()));
             case copyField::Amount:
                 return WalletManager::displayAmount(abs(tx.balanceDelta));
+            case copyField::JSON: {
+                QJsonObject obj;
+                obj.insert("txid", tx.hash);
+                obj.insert("amount", QString::number(tx.amount));
+                obj.insert("fee", QString::number(tx.fee));
+                obj.insert("height", static_cast<qint64>(tx.blockHeight));
+                obj.insert("timestamp", tx.timestamp.toSecsSinceEpoch());
+                obj.insert("direction", tx.direction == TransactionRow::Direction_In ? "in" : "out");
+                obj.insert("payment_id", tx.paymentId);
+                obj.insert("description", tx.description);
+                obj.insert("confirmations", static_cast<qint64>(tx.confirmations));
+                obj.insert("failed", tx.failed);
+                obj.insert("pending", tx.pending);
+                obj.insert("coinbase", tx.coinbase);
+                obj.insert("label", tx.label);
+
+                QJsonArray subaddrIndices;
+                for (const auto &idx : tx.subaddrIndex) subaddrIndices.append(static_cast<int>(idx));
+                obj.insert("subaddr_index", subaddrIndices);
+                obj.insert("subaddr_account", static_cast<int>(tx.subaddrAccount));
+
+                QJsonDocument doc(obj);
+                return QString::fromUtf8(doc.toJson(QJsonDocument::Indented));
+            }
             default:
                 return QString("");
         }

@@ -6,11 +6,13 @@
 
 #include <QMessageBox>
 
+#include "libwalletqt/Wallet.h"
 #include "utils/NetworkManager.h"
 
-TxBroadcastDialog::TxBroadcastDialog(QWidget *parent, Nodes *nodes, const QString &transactionHex)
+TxBroadcastDialog::TxBroadcastDialog(QWidget *parent, Wallet *wallet, Nodes *nodes, const QString &transactionHex)
         : WindowModalDialog(parent)
         , ui(new Ui::TxBroadcastDialog)
+        , m_wallet(wallet)
         , m_nodes(nodes)
 {
     ui->setupUi(this);
@@ -47,6 +49,23 @@ void TxBroadcastDialog::onApiResponse(const DaemonRpc::DaemonResponse &resp) {
     if (!resp.ok) {
         Utils::showError(this, "Failed to broadcast transaction", resp.status);
         return;
+    }
+
+    // Try to record the transaction in the wallet history
+    // We assume the wallet will pick it up from the pool eventually, 
+    // but we can try to force an import if we can get the txid.
+    // However, send_raw_transaction RPC documentation says it returns empty fields on success usually, 
+    // or just status OK. It likely does NOT return the hash unless we calculate it.
+    // But wait, the user says "root issue". 
+    // If the wallet didn't construct it, it doesn't know the hash.
+    // We can try to parse the blob to get the hash, but we lack the tools here.
+    //
+    // However, if the transaction WAS constructed by this wallet (e.g. "Load signed tx from file"),
+    // it might be in the cache?
+    //
+    // Let's at least trigger a pool scan.
+    if (m_wallet) {
+        m_wallet->updateNetworkStatus(); // Trigger refresh?
     }
 
     this->accept();

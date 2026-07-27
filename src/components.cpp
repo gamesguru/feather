@@ -75,7 +75,10 @@ ClickableLabel::ClickableLabel(QWidget* parent, Qt::WindowFlags f)
 ClickableLabel::~ClickableLabel() = default;
 
 void ClickableLabel::mousePressEvent(QMouseEvent* event) {
-    emit clicked();
+    if (event->button() == Qt::LeftButton) {
+        emit clicked();
+    }
+    QLabel::mousePressEvent(event);
 }
 
 WindowModalDialog::WindowModalDialog(QWidget *parent)

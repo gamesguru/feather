@@ -27,7 +27,9 @@ PageOpenWallet::PageOpenWallet(WalletKeysFilesModel *wallets, QWidget *parent)
     ui->walletTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     ui->walletTable->setContextMenuPolicy(Qt::CustomContextMenu);
     ui->walletTable->setModel(m_keysProxy);
-    ui->walletTable->hideColumn(WalletKeysFilesModel::NetworkType);
+    // Only show 'wallet type' column in stagenet or testnet mode
+    if (constants::networkType == NetworkType::MAINNET)
+        ui->walletTable->hideColumn(WalletKeysFilesModel::NetworkType);
     ui->walletTable->hideColumn(WalletKeysFilesModel::Path);
     ui->walletTable->hideColumn(WalletKeysFilesModel::Modified);
     ui->walletTable->header()->setSectionResizeMode(WalletKeysFilesModel::FileName, QHeaderView::Stretch);

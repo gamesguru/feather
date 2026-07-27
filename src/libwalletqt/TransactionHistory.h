@@ -33,6 +33,7 @@ public:
     bool locked() const;
 
     QString importLabelsFromCSV(const QString &fileName);
+    int scanMissingTransactions();
 
 signals:
     void refreshStarted() const;
