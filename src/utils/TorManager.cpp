@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: The Monero Project
 
 #include "utils/TorManager.h"
-
+#include <QDebug>
 #include <QCoreApplication>
 #include <QDirIterator>
 

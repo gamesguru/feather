@@ -25,7 +25,7 @@ RevuoWidget::RevuoWidget(QWidget *parent)
     ui->btn_openLink->setIcon(icons()->icon("external-link.svg"));
     connect(ui->btn_openLink, &QPushButton::clicked, this, &RevuoWidget::onOpenLink);
 
-    connect(ui->combo_issue, &QComboBox::currentIndexChanged, this, &RevuoWidget::onSelectItem);
+    connect(ui->combo_issue, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &RevuoWidget::onSelectItem);
 
     connect(websocketNotifier(), &WebsocketNotifier::dataReceived, this, [this](const QString& type, const QJsonValue& json) {
         if (type == "revuo") {

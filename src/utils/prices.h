@@ -5,6 +5,7 @@
 #define FEATHER_PRICES_H
 
 #include <QObject>
+#include <QDateTime>
 
 #include "utils/Utils.h"
 
@@ -24,6 +25,7 @@ public:
     explicit Prices(QObject *parent = nullptr);
     QMap<QString, double> rates;
     QMap<QString, marketStruct> markets;
+    QDateTime lastUpdateTime;
 
 public slots:
     void cryptoPricesReceived(const QJsonArray &data);

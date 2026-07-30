@@ -20,7 +20,13 @@ WebsocketClient::WebsocketClient(QObject *parent)
     connect(webSocket, &QWebSocket::stateChanged, this, &WebsocketClient::onStateChanged);
     connect(webSocket, &QWebSocket::connected, this, &WebsocketClient::onConnected);
     connect(webSocket, &QWebSocket::disconnected, this, &WebsocketClient::onDisconnected);
+    // one liner: for both Qt 6.4 (older) and Qt 6.5+ (newer)
+    // connect(webSocket, QOverload<QAbstractSocket::SocketError>::of(&QWebSocket::error), this, &WebsocketClient::onError);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+    connect(webSocket, &QWebSocket::errorOccurred, this, &WebsocketClient::onError);
+#else
     connect(webSocket, QOverload<QAbstractSocket::SocketError>::of(&QWebSocket::error), this, &WebsocketClient::onError);
+#endif
 
     connect(webSocket, &QWebSocket::binaryMessageReceived, this, &WebsocketClient::onbinaryMessageReceived);
 
@@ -57,6 +63,10 @@ void WebsocketClient::start() {
         return;
     }
 
+    if (conf()->get(Config::syncPaused).toBool() && conf()->get(Config::syncPausedAlsoDisconnectWebSocket).toBool()) {
+        return;
+    }
+
     // connect & reconnect on errors/close
     auto state = webSocket->state();
     if (state != QAbstractSocket::ConnectedState && state != QAbstractSocket::ConnectingState) {
@@ -73,7 +83,7 @@ void WebsocketClient::restart() {
 void WebsocketClient::stop() {
     qDebug() << Q_FUNC_INFO;
     m_stopped = true;
-    webSocket->close();
+    webSocket->abort();
     m_connectionTimeout.stop();
     m_pingTimer.stop();
 }

@@ -6,6 +6,7 @@
 #include <QDir>
 #include <QRegularExpression>
 #include <QMessageBox>
+#include <QDebug>
 
 #include "Utils.h"
 

@@ -113,6 +113,7 @@ private:
     bool m_openWalletTriedOnce = false;
     bool m_openingWallet = false;
     bool m_initialNetworkConfigured = false;
+    bool m_closing = false;
 
     QThread *m_cleanupThread;
 };

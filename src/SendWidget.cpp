@@ -15,7 +15,11 @@
 #if defined(WITH_SCANNER)
 #include "wizard/offline_tx_signing/OfflineTxSigningWizard.h"
 #include "qrcode/scanner/QrCodeScanDialog.h"
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QMediaDevices>
+#else
+#include <QCameraInfo>
+#endif
 #endif
 
 SendWidget::SendWidget(Wallet *wallet, QWidget *parent)
@@ -127,7 +131,11 @@ void SendWidget::fillAddress(const QString &address) {
 
 void SendWidget::scanClicked() {
 #if defined(WITH_SCANNER)
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     auto cameras = QMediaDevices::videoInputs();
+#else
+    const QList<QCameraInfo> cameras = QCameraInfo::availableCameras();
+#endif
     if (cameras.empty()) {
         Utils::showError(this, "Can't open QR scanner", "No available cameras found");
         return;
@@ -190,10 +198,17 @@ void SendWidget::sendClicked() {
             amounts.push_back(output.amount);
         }
 
+    #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
         QtFuture::connect(m_wallet, &Wallet::preTransactionChecksComplete)
                 .then([this, addresses, amounts, description, subtractFeeFromAmount](int feeLevel){
                     m_wallet->createTransactionMultiDest(addresses, amounts, description, feeLevel, subtractFeeFromAmount);
                 });
+    #else
+        // Qt 5 Fallback
+        connect(m_wallet, &Wallet::preTransactionChecksComplete, this, [this, addresses, amounts, description, subtractFeeFromAmount](int feeLevel){
+            m_wallet->createTransactionMultiDest(addresses, amounts, description, feeLevel, subtractFeeFromAmount);
+        });
+    #endif
 
         m_wallet->preTransactionChecks(ui->combo_feePriority->currentIndex());
 
@@ -249,10 +264,17 @@ void SendWidget::sendClicked() {
         #endif
     }
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     QtFuture::connect(m_wallet, &Wallet::preTransactionChecksComplete)
-            .then([this, recipient, amount, description, sendAll, subtractFeeFromAmount](int feeLevel){
-                m_wallet->createTransaction(recipient, amount, description, sendAll, feeLevel, subtractFeeFromAmount);
-            });
+        .then([this, recipient, amount, description, sendAll, subtractFeeFromAmount](int feeLevel){
+            m_wallet->createTransaction(recipient, amount, description, sendAll, feeLevel, subtractFeeFromAmount);
+        });
+#else
+    // Qt 5 Fallback
+    connect(m_wallet, &Wallet::preTransactionChecksComplete, this, [this, recipient, amount, description, sendAll, subtractFeeFromAmount](int feeLevel){
+        m_wallet->createTransaction(recipient, amount, description, sendAll, feeLevel, subtractFeeFromAmount);
+    });
+#endif
 
     m_wallet->preTransactionChecks(ui->combo_feePriority->currentIndex());
 }

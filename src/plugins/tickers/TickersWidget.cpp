@@ -23,6 +23,7 @@ TickersWidget::TickersWidget(QWidget *parent, Wallet *wallet)
            this->setup();
        }
     });
+    connect(windowManager(), &WindowManager::websocketStatusChanged, this, &TickersWidget::updateDisplay);
     this->updateBalance();
 }
 

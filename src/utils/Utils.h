@@ -14,6 +14,8 @@
 #include "networktype.h"
 
 class SubaddressIndex;
+class Wallet;
+class Nodes;
 
 namespace Utils
 {
@@ -96,6 +98,7 @@ namespace Utils
 
     QFont getMonospaceFont();
     QFont relativeFont(int delta);
+    QString timeAgo(const QDateTime &dt);
 
     void applicationLogHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg);
     QString barrayToString(const QByteArray &data);
@@ -118,10 +121,14 @@ namespace Utils
     QWindow* windowForQObject(QObject* object);
     void clearLayout(QLayout *layout, bool deleteWidgets = true);
 
+    quint64 blocksBehind(quint64 height, quint64 target);
     QString formatSyncStatus(quint64 height, quint64 target, bool daemonSync = false);
+    QString formatSyncTimeEstimate(quint64 blocks);
+    quint64 estimateSyncDataSize(quint64 blocks);
     QString formatRestoreHeight(quint64 height);
 
     QString getVersion();
+    QString getRestoreHeightFilename(NetworkType::Type nettype);
 }
 
 #endif //FEATHER_UTILS_H

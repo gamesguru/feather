@@ -4,6 +4,8 @@
 #include "TxFiatHistory.h"
 
 #include <QJsonObject>
+#include <QDebug> // For Qt5 compatibility
+#include <QSet>  // For Qt5 compatibility
 
 #include "utils/Utils.h"
 

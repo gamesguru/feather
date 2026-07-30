@@ -26,7 +26,7 @@ void AddressBook::refresh()
         else
             address = get_account_address_as_str(m_wallet2->nettype(), row.m_is_subaddress, row.m_address);
 
-        m_rows.emplaceBack(QString::fromStdString(address), QString::fromStdString(row.m_description));
+        m_rows.push_back(ContactRow(QString::fromStdString(address), QString::fromStdString(row.m_description)));
     }
 
     emit refreshFinished();

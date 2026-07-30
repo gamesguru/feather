@@ -23,7 +23,7 @@ TickersConfigAddDialog::TickersConfigAddDialog(QWidget *parent)
     ui->comboRatio1->addItems(cryptoCurrencies);
     ui->comboRatio2->addItems(cryptoCurrencies);
 
-    connect(ui->combo_type, &QComboBox::currentIndexChanged, [this](int index) {
+    connect(ui->combo_type, QOverload<int>::of(&QComboBox::currentIndexChanged), [this](int index) {
         ui->stackedWidget->setCurrentIndex(index);
     });
 

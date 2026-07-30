@@ -7,6 +7,7 @@
 #include <QMutex>
 #include <QPointer>
 #include <QWaitCondition>
+#include <optional>  // For Qt5 compatibility
 
 /**
  * Implements component responsible for showing entry prompt to the user,

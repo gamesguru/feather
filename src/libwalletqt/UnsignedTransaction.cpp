@@ -97,7 +97,7 @@ void UnsignedTransaction::refresh()
 
     m_pimpl->refresh();
     for (const auto i : m_pimpl->getAll()) {
-        m_construction_info.emplace_back(i);
+        m_construction_info.push_back(ConstructionInfo(i));
     }
 }
 

@@ -26,9 +26,9 @@ PageOTS_ExportOutputs::PageOTS_ExportOutputs(QWidget *parent, Wallet *wallet)
     m_check_exportAll->setText("Export all outputs");
     ui->layout_extra->addWidget(m_check_exportAll);
     connect(m_check_exportAll, &QCheckBox::toggled, this, &PageOTS_ExportOutputs::setupUR);
-    
+
     connect(ui->btn_export, &QPushButton::clicked, this, &PageOTS_ExportOutputs::exportOutputs);
-    connect(ui->combo_method, &QComboBox::currentIndexChanged, [this](int index){
+    connect(ui->combo_method, QOverload<int>::of(&QComboBox::currentIndexChanged), [this](int index){
         conf()->set(Config::offlineTxSigningMethod, index);
         ui->stackedWidget->setCurrentIndex(index);
     });

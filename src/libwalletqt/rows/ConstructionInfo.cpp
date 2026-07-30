@@ -10,12 +10,12 @@ ConstructionInfo::ConstructionInfo(const Monero::TransactionConstructionInfo *pi
 {
     for (auto const &i : pimpl->inputs())
     {
-        inputs.emplace_back(i.amount, QString::fromStdString(i.pubkey));
+        inputs.push_back(Input(i.amount, QString::fromStdString(i.pubkey)));
     }
 
     for (auto const &o : pimpl->outputs())
     {
-        outputs.emplace_back(o.amount, QString::fromStdString(o.address));
+        outputs.push_back(Output(o.amount, QString::fromStdString(o.address)));
     }
     for (uint32_t i : pimpl->subaddressIndices())
     {

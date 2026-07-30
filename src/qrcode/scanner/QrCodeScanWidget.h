@@ -6,10 +6,12 @@
 
 #include <QWidget>
 #include <QCamera>
-#include <QScopedPointer>
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QMediaCaptureSession>
-#include <QTimer>
 #include <QVideoSink>
+#else
+#include <QVideoProbe>
+#endif
 
 #include <bcur/ur-decoder.hpp>
 
@@ -54,8 +56,14 @@ private:
     bool m_scan_ur = false;
     QrScanThread *m_thread;
     QScopedPointer<QCamera> m_camera;
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     QMediaCaptureSession m_captureSession;
     QVideoSink m_sink;
+#else
+    QVideoProbe *m_probe = nullptr;
+#endif
+
     ur::URDecoder m_decoder;
     bool m_done = false;
     bool m_handleFrames = true;

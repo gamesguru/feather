@@ -12,26 +12,46 @@ set(QT_COMPONENTS
         Network
         Svg
         WebSockets
-        SvgWidgets
 )
+
+# Qt6 has SvgWidgets separate, Qt5 includes it in Svg
+set(QT6_COMPONENTS ${QT_COMPONENTS} SvgWidgets)
 
 if (WITH_SCANNER)
     list(APPEND QT_COMPONENTS
             Multimedia
             MultimediaWidgets)
+    list(APPEND QT6_COMPONENTS Multimedia MultimediaWidgets)
 endif()
 
-IF (UNIX AND NOT APPLE)
-    list(APPEND QT_COMPONENTS WaylandClient)
+if (UNIX AND NOT APPLE)
+    list(APPEND QT6_COMPONENTS WaylandClient)
 endif()
 
-find_package(Qt6 REQUIRED COMPONENTS ${QT_COMPONENTS})
+# 1. Try to find complete Qt 6 (Quietly)
+find_package(Qt6 COMPONENTS ${QT6_COMPONENTS} QUIET)
+
+if (Qt6_FOUND)
+    message(STATUS "Qt 6 found! Building with Qt ${Qt6_VERSION}")
+    set(QT_MAJOR_VERSION 6)
+    set(QT_NAMESPACE "Qt6")
+else()
+    # 2. Fallback to Qt 5
+    message(STATUS "Qt 6 not found (or missing modules). Falling back to Qt 5...")
+    set(QT_MAJOR_VERSION 5)
+    set(QT_NAMESPACE "Qt5")
+    find_package(Qt5 REQUIRED COMPONENTS ${QT_COMPONENTS})
+endif()
 
 if (CHECK_UPDATES)
     add_subdirectory(openpgp)
 endif()
 
-qt_add_resources(RESOURCES assets.qrc assets_tor.qrc assets_docs.qrc)
+if (QT_MAJOR_VERSION EQUAL 6)
+    qt_add_resources(RESOURCES assets.qrc assets_tor.qrc assets_docs.qrc)
+else()
+    qt5_add_resources(RESOURCES assets.qrc assets_tor.qrc assets_docs.qrc)
+endif()
 
 # Compile source files (.h/.cpp)
 file(GLOB SOURCE_FILES
@@ -182,10 +202,10 @@ target_include_directories(feather PUBLIC
         ${LIBZIP_INCLUDE_DIRS}
         ${ZLIB_INCLUDE_DIRS}
         ${POLYSEED_INCLUDE_DIR}
-        ${BCUR_INCLUDE_DIR}
+
 )
 
-target_compile_definitions(feather PRIVATE FEATHER_VERSION="${PROJECT_VERSION}")
+target_compile_definitions(feather PRIVATE FEATHER_VERSION="${DETECTED_FEATHER_VERSION}")
 target_compile_definitions(feather PRIVATE FEATHER_TARGET_TRIPLET="${FEATHER_TARGET_TRIPLET}")
 target_compile_definitions(feather PRIVATE TOR_VERSION="${TOR_VERSION}")
 
@@ -194,6 +214,7 @@ if(WITH_SCANNER)
             ${QtMultimedia_INCLUDE_DIRS}
             ${QtMultimediaWidgets_INCLUDE_DIRS}
             ${ZXING_INCLUDE_DIRS}
+            ${BCUR_INCLUDE_DIR}
     )
 endif()
 
@@ -276,21 +297,24 @@ target_link_libraries(feather PRIVATE
         ${Boost_LIBRARIES}
         ${OPENSSL_LIBRARIES}
         ${EXTRA_LIBRARIES}
-        Qt::Core
-        Qt::Widgets
-        Qt::Gui
-        Qt::Network
-        Qt::Svg
-        Qt::WebSockets
-        Qt::SvgWidgets
+        ${QT_NAMESPACE}::Core
+        ${QT_NAMESPACE}::Widgets
+        ${QT_NAMESPACE}::Gui
+        ${QT_NAMESPACE}::Network
+        ${QT_NAMESPACE}::Svg
+        ${QT_NAMESPACE}::WebSockets
         Threads::Threads
         ${QRENCODE_LIBRARY}
         ${POLYSEED_LIBRARY}
         ${ICU_LIBRARIES}
         ${LIBZIP_LIBRARIES}
         ${ZLIB_LIBRARIES}
-        ${BCUR_LIBRARY}
 )
+
+# Qt6 separates SvgWidgets; Qt5 bundles it. Link explicitly if Qt6.
+if (QT_MAJOR_VERSION EQUAL 6)
+    target_link_libraries(feather PRIVATE Qt6::SvgWidgets)
+endif()
 
 if(CHECK_UPDATES)
     target_link_libraries(feather PRIVATE openpgp)
@@ -305,22 +329,41 @@ if(DEVICE_TREZOR_READY)
 endif()
 
 if (WITH_SCANNER)
+    include(CheckCXXSourceCompiles)
+    set(CMAKE_REQUIRED_LIBRARIES ${ZXING_LIBRARIES})
+    set(CMAKE_REQUIRED_INCLUDES ${ZXING_INCLUDE_DIRS})
+
+    check_cxx_source_compiles("
+    #include <ZXing/ReadBarcode.h>
+    int main() {
+        auto fmt = ZXing::ImageFormat::BGRA;
+        return 0;
+    }
+    " HAVE_ZXING_BGRA)
+
+    if (HAVE_ZXING_BGRA)
+        target_compile_definitions(feather PRIVATE HAVE_ZXING_BGRA)
+    endif()
+
     target_link_libraries(feather PRIVATE
-            Qt::Multimedia
-            Qt::MultimediaWidgets
+            ${QT_NAMESPACE}::Multimedia
+            ${QT_NAMESPACE}::MultimediaWidgets
             ${ZXING_LIBRARIES}
+            ${BCUR_LIBRARY}
     )
 endif()
 
 if(UNIX AND NOT APPLE)
-    target_link_libraries(feather PRIVATE Qt::WaylandClient)
+    if (QT_MAJOR_VERSION EQUAL 6)
+        target_link_libraries(feather PRIVATE Qt6::WaylandClient)
+    endif()
 endif()
 
-if(STATIC AND APPLE)
+if(STATIC AND APPLE AND QT_MAJOR_VERSION EQUAL 6)
     target_link_libraries(feather PRIVATE Qt6::QDarwinCameraPermissionPlugin)
 endif()
 
-if(STATIC AND UNIX AND NOT APPLE)
+if(STATIC AND UNIX AND NOT APPLE AND QT_MAJOR_VERSION EQUAL 6)
     target_link_libraries(feather PRIVATE Qt6::QComposePlatformInputContextPlugin)
     target_link_libraries(feather PRIVATE Qt6::QWaylandIntegrationPlugin)
 endif()
@@ -359,6 +402,14 @@ else()
         install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/assets/images/appicons/128x128.png DESTINATION ${CMAKE_INSTALL_PREFIX}/share/icons/hicolor/128x128/apps RENAME "feather.png")
         install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/assets/images/appicons/256x256.png DESTINATION ${CMAKE_INSTALL_PREFIX}/share/icons/hicolor/256x256/apps RENAME "feather.png")
         install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/assets/images/appicons/512x512.png DESTINATION ${CMAKE_INSTALL_PREFIX}/share/icons/hicolor/512x512/apps RENAME "feather.png")
+
+        install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/assets/images/appicons/32x32.png DESTINATION ${CMAKE_INSTALL_PREFIX}/share/icons/hicolor/32x32/apps RENAME "FeatherWallet.png")
+        install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/assets/images/appicons/48x48.png DESTINATION ${CMAKE_INSTALL_PREFIX}/share/icons/hicolor/48x48/apps RENAME "FeatherWallet.png")
+        install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/assets/images/appicons/64x64.png DESTINATION ${CMAKE_INSTALL_PREFIX}/share/icons/hicolor/64x64/apps RENAME "FeatherWallet.png")
+        install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/assets/images/appicons/96x96.png DESTINATION ${CMAKE_INSTALL_PREFIX}/share/icons/hicolor/96x96/apps RENAME "FeatherWallet.png")
+        install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/assets/images/appicons/128x128.png DESTINATION ${CMAKE_INSTALL_PREFIX}/share/icons/hicolor/128x128/apps RENAME "FeatherWallet.png")
+        install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/assets/images/appicons/256x256.png DESTINATION ${CMAKE_INSTALL_PREFIX}/share/icons/hicolor/256x256/apps RENAME "FeatherWallet.png")
+        install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/assets/images/appicons/512x512.png DESTINATION ${CMAKE_INSTALL_PREFIX}/share/icons/hicolor/512x512/apps RENAME "FeatherWallet.png")
     endif()
 endif()
 
@@ -375,4 +426,6 @@ if(APPLE)
     file(COPY "${CMAKE_SOURCE_DIR}/src/assets/images/appicons/appicon.icns" DESTINATION "${CMAKE_SOURCE_DIR}/installed/feather.app/Contents/Resources/" )
 endif()
 
-qt_finalize_executable(feather)
+if (COMMAND qt_finalize_executable)
+    qt_finalize_executable(feather)
+endif()

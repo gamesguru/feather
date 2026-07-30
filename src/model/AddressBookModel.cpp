@@ -3,6 +3,8 @@
 
 #include "AddressBookModel.h"
 #include "AddressBook.h"
+#include <QDebug>
+#include <QTextStream>
 #include "utils/Icons.h"
 #include "utils/Utils.h"
 

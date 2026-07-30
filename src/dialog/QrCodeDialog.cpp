@@ -40,7 +40,10 @@ void QrCodeDialog::saveImage() {
     }
 
     QFile file(filename);
-    file.open(QIODevice::WriteOnly);
+    if (!file.open(QIODevice::WriteOnly)) {
+        QMessageBox::critical(this, "Error", "Could not open file for writing.");
+        return;
+    }
     m_pixmap.save(&file, "PNG");
     QMessageBox::information(this, "Information", "QR code saved to file");
 }

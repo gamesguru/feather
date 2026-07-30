@@ -162,7 +162,11 @@ bool PageWalletRestoreSeed::validatePage() {
     seed = seed.replace("\n", " ").replace("\r", "").trimmed();
 
     auto errStyle = "QTextEdit{border: 1px solid red;}";
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
     QStringList seedSplit = seed.split(" ", Qt::SkipEmptyParts);
+#else
+    QStringList seedSplit = seed.split(" ", QString::SkipEmptyParts);
+#endif
 
     if (seedSplit.length() != m_mode->length) {
         if (!(m_mode->type == Seed::Type::MONERO && seedSplit.length() == 24)) {

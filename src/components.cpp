@@ -52,7 +52,11 @@ void HelpLabel::mouseReleaseEvent(QMouseEvent *event)
     Utils::showInfo(this, m_text, m_informativeText, {}, m_doc);
 }
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 void HelpLabel::enterEvent(QEnterEvent *event)
+#else
+void HelpLabel::enterEvent(QEvent *event)
+#endif
 {
    font.setUnderline(true);
    setFont(font);
@@ -75,7 +79,10 @@ ClickableLabel::ClickableLabel(QWidget* parent, Qt::WindowFlags f)
 ClickableLabel::~ClickableLabel() = default;
 
 void ClickableLabel::mousePressEvent(QMouseEvent* event) {
-    emit clicked();
+    if (event->button() == Qt::LeftButton) {
+        emit clicked();
+    }
+    QLabel::mousePressEvent(event);
 }
 
 WindowModalDialog::WindowModalDialog(QWidget *parent)
@@ -103,7 +110,11 @@ InfoFrame::InfoFrame(QWidget *parent)
 
   m_infoLabel = new QLabel(this);
   m_infoLabel->setWordWrap(true);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
   m_infoLabel->setTextFormat(Qt::MarkdownText);
+#else
+  m_infoLabel->setTextFormat(Qt::AutoText); // Fallback for Qt 5.12 (Ubuntu 20.04)
+#endif
   m_infoLabel->setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::LinksAccessibleByMouse);
   layout->addWidget(m_infoLabel);
 }

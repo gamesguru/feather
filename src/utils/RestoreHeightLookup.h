@@ -11,6 +11,7 @@
 
 #include "networktype.h"
 #include "utils/Utils.h"
+#include <QDateTime>
 
 struct RestoreHeightLookup {
     NetworkType::Type type;
